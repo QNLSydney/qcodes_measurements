@@ -100,5 +100,5 @@ ENV/
 # mypy
 .mypy_cache/
 
-#Ignore qde_wrappers (on Jana's laptop)
-qdev-wrappers/
+#Ignore qde_wrappers (on Jana's laptop), renamed to sation_configurator
+station_configurator/
