@@ -3,27 +3,62 @@ import qcodes as qc
 from qcodes.dataset.measurements import Measurement
 
 
+def _flush_buffers(*params):
+    """
+    If possible, flush the VISA buffer of the instrument of the
+    provided parameters. The params can be instruments as well.
+
+    Supposed to be called inside doNd like so:
+    _flush_buffers(inst_set, *inst_meas)
+    """
+
+    for param in params:
+        if hasattr(param, '_instrument'):
+            inst = param._instrument
+            if hasattr(inst, 'visa_handle'):
+                status_code = inst.visa_handle.clear()
+                if status_code is not None:
+                    log.warning("Cleared visa buffer on "
+                                "{} with status code {}".format(inst.name,
+                                                                status_code))
+        elif isinstance(param, VisaInstrument):
+            inst = param
+            status_code = inst.visa_handle.clear()
+            if status_code is not None:
+                log.warning("Cleared visa buffer on "
+                            "{} with status code {}".format(inst.name,
+                                                            status_code))
+
+
 def linear1d(param_set, start, stop, num_points, delay, *param_meas):
     """
     """
-    meas = Measurement()
-    # register the first independent parameter
-    meas.register_parameter(param_set)
-    output = []
-    param_set.post_delay = delay
+    try:
+        param_meas = list(param_meas)
+        _flush_buffers(*param_meas)
 
-    for parameter in param_meas:
-        meas.register_parameter(parameter, setpoints=(param_set,))
-        output.append([parameter, None])
+        meas = Measurement()
+        # register the first independent parameter
+        meas.register_parameter(param_set)
+        output = []
+        param_set.post_delay = delay
 
-    with meas.run() as datasaver:
-        for set_point in np.linspace(start, stop, num_points):
-            param_set.set(set_point)
-            for i, parameter in enumerate(param_meas):
-                output[i][1] = parameter.get()
-            datasaver.add_result((param_set, set_point),
-                                 *output)
-    dataid = datasaver.run_id
+        for parameter in param_meas:
+            meas.register_parameter(parameter, setpoints=(param_set,))
+            output.append([parameter, None])
+
+        with meas.run() as datasaver:
+            for set_point in np.linspace(start, stop, num_points):
+                param_set.set(set_point)
+                for i, parameter in enumerate(param_meas):
+                    output[i][1] = parameter.get()
+                datasaver.add_result((param_set, set_point),
+                                    *output)
+        dataid = datasaver.run_id
+    except:
+        log.exception("Exception in linear1d.")
+        raise
+
     return dataid  # can use plot_by_id(dataid)
 
 
