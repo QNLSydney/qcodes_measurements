@@ -18,17 +18,17 @@ instruments:
     # constant arguments passed to the init function
     # init:
 
-     # new parameters, that get created and attached to the instrument
+    # new parameters, that get created and attached to the instrument
     # new_parameter:
-      # ex: DC current
-      DC:
-        # source specifies which getter and setter should be used
-        source: # e.g channel
-        # label and unit change these attributes of the parameter
-        label:
-        unit: #
-        limits:
-        monitor: true
+    # ex: DC current
+    DC:
+      # source specifies which getter and setter should be used
+      source: # e.g channel
+      # label and unit change these attributes of the parameter
+      label:
+      unit: #
+      limits:
+      monitor: true
 #
 # Setting up existing parameters e.g creating aliases:
 
