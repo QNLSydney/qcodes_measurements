@@ -1,0 +1,16 @@
+{
+    "gui": {
+        "pyqtmaxplots": 20,
+        "notebook": true,
+        "plotlib": "all"
+    },
+    "core": {
+        "default_fmt": "data/{date}/#{counter}_{name}_{time}",
+        "loglevel": "WARNING"
+    },
+    "user": {
+        "scriptfolder": "C:\\Users\\Administrator\\Documents\\Experiments\\Scripts",
+        "mainfolder": "C:\\Users\\Administrator\\Documents\\Experiments",
+        "auto_reconnect_instrument": false
+    }
+}
