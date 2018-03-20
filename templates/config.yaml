@@ -22,7 +22,7 @@ instruments:
         source: ch02.v
         # label and unit change these attributes of the parameter
         label: Magnetic Field X-Component
-        unit: T
+        mdac
         scale: 28
         delay: 0
         step: 0.01

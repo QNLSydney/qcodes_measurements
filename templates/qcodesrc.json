@@ -1,16 +1,20 @@
 {
-    "gui": {
-        "pyqtmaxplots": 20,
-        "notebook": true,
-        "plotlib": "all"
-    },
-    "core": {
+    "core":{
+        "loglevel": "DEBUG",
         "default_fmt": "data/{date}/#{counter}_{name}_{time}",
-        "loglevel": "WARNING"
+        "register_magic": true,
+        "db_location": "C:\\Users\\Administrator\\Documents\\Experiments/experiments.db",
+        "db_debug": false
+    },
+    "gui" :{
+        "notebook": true,
+        "plotlib": "all",
+        "pyqtmaxplots": 100,
+        "defaultcolormap": "hot"
     },
     "user": {
-        "scriptfolder": "C:\\Users\\Administrator\\Documents\\Experiments\\Scripts",
+        "scriptfolder": "C:\\Users\\Administrator\\Documents\\Experiments",
         "mainfolder": "C:\\Users\\Administrator\\Documents\\Experiments",
-        "auto_reconnect_instrument": false
+        "auto_reconnect_instrument": true
     }
 }

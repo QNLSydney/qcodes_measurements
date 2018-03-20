@@ -1,71 +1,82 @@
 {
-    "type": "object",
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "properties": {
-        "gui": {
-            "type": "object",
-            "properties": {
-                "pyqtmaxplots": {
-                    "type": "integer",
-                    "default": 100,
-                    "description": "Maximum number of PyQtPlots to automatically keep in memory"
-                },
-                "notebook": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Use notebook frontend"
-                },
-                "plotlib": {
-                    "type": [
-                        "string",
-                        "null"
-                    ],
-                    "default": "all",
-                    "description": "Plotting library set to null to run without plotting",
-                    "enum": [
-                        "QT",
-                        "matplotlib",
-                        "all",
-                        null
-                    ]
-                }
-            },
-            "description": "controls gui of qcodes",
-            "required": [
-                "notebook",
-                "plotlib",
-                "pyqtmaxplots"
-            ]
-        },
-        "core": {
-            "type": "object",
-            "properties": {
+    "type" : "object",
+    "description": "schema for a qcodes config file",
+    "properties":{
+        "core" : {
+            "description": "controls core settings of qcodes",
+            "type" : "object",
+            "properties" : {
                 "default_fmt": {
-                    "type": "string",
-                    "default": "data/{date}/#{counter}_{name}_{time}",
-                    "description": "default location formatter"
+                    "type" : "string",
+                    "description": "default location formatter",
+                    "default": "data/{date}/#{counter}_{name}_{time}"
                 },
-                "loglevel": {
-                    "type": "string",
-                    "default": "DEBUG",
+                "loglevel" :{
+                    "type" : "string",
                     "description": "control logging  level",
-                    "enum": [
+                    "default": "DEBUG",
+                    "enum" : [
                         "CRITICAL",
                         "ERROR",
                         "WARNING",
                         "INFO",
                         "DEBUG"
                     ]
+                },
+                "register_magic" : {
+                    "description": "Register QCoDeS magic when in iPython. Can be set to True, False, or a list of magic commands to be registered",
+                    "anyOf" : [
+                        {"type": "boolean"},
+                        {"type": "array"}
+                    ],
+                    "default": true
+                },
+                "db_debug": {
+                    "description": "Use debugging mode in sqlite ",
+                    "type" : "boolean",
+                    "default": false
+                },
+                "db_location": {
+                    "type": "string",
+                    "description": "location of the database",
+                    "default": "./experiments.db"
                 }
             },
-            "description": "controls core settings of qcodes",
-            "required": [
-                "loglevel"
-            ]
+            "required":["loglevel", "db_location"]
         },
-        "user": {
-            "type": "object",
-            "properties": {
+        "gui" : {
+            "type" : "object",
+            "description": "controls gui of qcodes",
+            "properties" : {
+                "notebook": {
+                    "description": "Use notebook frontend",
+                    "type" : "boolean",
+                    "default": true
+                },
+                "plotlib": {
+                    "description": "Plotting library set to null to run without plotting",
+                    "type": ["string", "null"],
+                    "enum": ["QT", "matplotlib", "all", null],
+                    "default": "all"
+                },
+                "pyqtmaxplots": {
+                    "description": "Maximum number of PyQtPlots to automatically keep in memory",
+                    "type": "integer",
+                    "default": 100
+                },
+                "defaultcolormap":{
+                    "description": "Default colormap to use for Heatmaps with both Matplotlib and PyQtGraph",
+                    "type": "string",
+                    "default": "hot"
+                }
+            },
+            "required":[ "notebook", "plotlib", "pyqtmaxplots" ]
+        },
+        "user":{
+            "type" : "object",
+            "description": "controls user settings of qcodes",
+            "properties" : {
                 "scriptfolder": {
                     "type": "string",
                     "default": "/",
@@ -81,14 +92,8 @@
                     "default": false,
                     "description": "if set to true, on instantiation of an existing instrument, the existing will be disconnected."
                 }
-            },
-            "description": "controls user settings of qcodes"
+            }
         }
-    },
-    "description": "schema for a qcodes config file",
-    "required": [
-        "gui",
-        "core",
-        "user"
-    ]
+       },
+    "required":[ "gui", "core" , "user"]
 }
