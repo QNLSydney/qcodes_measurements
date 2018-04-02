@@ -1,5 +1,6 @@
 import time
 import os
+import json
 import numpy as np
 import logging as log
 from qcodes.dataset.measurements import Measurement
@@ -10,6 +11,10 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 def ramp_mdac(channel_voltage, voltage, rate=0.05, max_jump=0.002):
+    """
+    # TO DO: Use post_delay instead time.sleep() 
+    """
+
     curr_v = channel_voltage()
     diff_v = abs(curr_v - voltage)
     
@@ -39,6 +44,7 @@ def linear1d_ramp(mdac_channel_voltage, start, stop, num_points, delay, *param_m
         ramp_mdac(mdac_channel_voltage, start)
 
     try:
+        elapsed_time = time.time()
         param_meas = list(param_meas)
         _flush_buffers(*param_meas)
 
@@ -60,6 +66,8 @@ def linear1d_ramp(mdac_channel_voltage, start, stop, num_points, delay, *param_m
                 datasaver.add_result((mdac_channel_voltage, set_point),
                                     *output)
         dataid = datasaver.run_id
+        elapsed_time = time.time() - elapsed_time
+        print("Elapsed time in s: ", elapsed_time)
     except:
         log.exception("Exception in linear1d_ramp")
         raise
@@ -76,6 +84,7 @@ def linear2d_ramp(mdac_channel_v1, start1, stop1, num_points1, delay1,
     if abs(mdac_channel_v2() - start2) > 1e-6:
         ramp_mdac(mdac_channel_v2, start2)
     try:
+        elapsed_time = time.time()
         param_meas = list(param_meas)
         _flush_buffers(*param_meas)
 
@@ -102,25 +111,38 @@ def linear2d_ramp(mdac_channel_v1, start1, stop1, num_points1, delay1,
                                         (mdac_channel_v2, set_point2),
                                         *output)
         dataid = datasaver.run_id
+        elapsed_time = time.time() - elapsed_time
+        print("Elapsed time in s: ", elapsed_time)
     except:
         log.exception("Exception in linear2d_ramp")
 
     return dataid
 
-def plot_Wtext(dataid, mdac, fontsize=10, textcolor='black', textweight='normal'):
+def plot_Wtext(dataid, mdac, fontsize=10, textcolor='black', textweight='normal', fig_folder=None):
     """
     """
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax, cax = plot_by_id(dataid, ax)
-
     fig.suptitle('ID: {}'.format(dataid))
+    
+    ds = load_by_id(dataid)
+    json_meta = json.loads(ds.get_metadata('snapshot'))
+    sub_dict = json_meta['station']['instruments']['mdac']['submodules']
+    
     y_coord = 0.4
-    for channel in mdac.channels:
-        if abs(channel.voltage()) > 1e-5:
-            fig.text(0.4,y_coord,'{}: {}'.format(channel.voltage.label, channel.voltage() ),
+    
+    for ch in range(1, len(mdac.channels)+1):
+        ch_str = 'ch{num:02d}'.format(num=ch)
+        v_value = sub_dict[ch_str]['parameters']['voltage']['value']
+        if abs(v_value) > 1e-6:
+            label = sub_dict[ch_str]['parameters']['voltage']['label']
+            fig.text(0.4,y_coord,'{}: {}'.format(label, v_value ),
                      fontsize=fontsize, color=textcolor, weight=textweight)
             y_coord -= 0.05
+    if fig_folder is None:
+        fig_folder = os.getcwd()
+
     fig.savefig(os.path.join(os.getcwd(),'figures', '{}.png'.format(dataid)))
 
 def change_filter_all(mdac):
