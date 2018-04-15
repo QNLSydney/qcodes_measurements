@@ -6,6 +6,7 @@ import logging as log
 from qcodes.dataset.measurements import Measurement
 from . measure import _flush_buffers
 from qcodes.dataset.plotting import plot_by_id
+from qcodes.dataset.experiment_container import load_by_id
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -33,9 +34,8 @@ def ramp_mdac(channel_voltage, voltage, rate=0.05, max_jump=0.002):
         else:
             channel_voltage(voltage)
             # print("MDAC channel is not at desired voltage.")
-            
     else:
-        pass
+        channel_voltage(voltage)
 
 def linear1d_ramp(mdac_channel_voltage, start, stop, num_points, delay, *param_meas):
     """
@@ -52,7 +52,10 @@ def linear1d_ramp(mdac_channel_voltage, start, stop, num_points, delay, *param_m
         # register the first independent parameter
         meas.register_parameter(mdac_channel_voltage)
         output = []
-        mdac_channel_voltage.post_delay = delay
+
+        voltages = []
+
+        # mdac_channel_voltage.post_delay = delay
 
         for parameter in param_meas:
             meas.register_parameter(parameter, setpoints=(mdac_channel_voltage,))
@@ -61,6 +64,8 @@ def linear1d_ramp(mdac_channel_voltage, start, stop, num_points, delay, *param_m
         with meas.run() as datasaver:
             for set_point in np.linspace(start, stop, num_points):
                 ramp_mdac(mdac_channel_voltage, set_point)
+                # mdac_channel_voltage(set_point)
+                time.sleep(delay)
                 for i, parameter in enumerate(param_meas):
                     output[i][1] = parameter.get()
                 datasaver.add_result((mdac_channel_voltage, set_point),
@@ -72,7 +77,7 @@ def linear1d_ramp(mdac_channel_voltage, start, stop, num_points, delay, *param_m
         log.exception("Exception in linear1d_ramp")
         raise
 
-    return dataid  # can use plot_by_id(dataid)
+    return dataid # can use plot_by_id(dataid)
 
 def linear2d_ramp(mdac_channel_v1, start1, stop1, num_points1, delay1,
              mdac_channel_v2, start2, stop2, num_points2, delay2,
@@ -130,16 +135,19 @@ def plot_Wtext(dataid, mdac, fontsize=10, textcolor='black', textweight='normal'
     json_meta = json.loads(ds.get_metadata('snapshot'))
     sub_dict = json_meta['station']['instruments']['mdac']['submodules']
     
-    y_coord = 0.4
+    y_coord = 0.85
     
     for ch in range(1, len(mdac.channels)+1):
         ch_str = 'ch{num:02d}'.format(num=ch)
         v_value = sub_dict[ch_str]['parameters']['voltage']['value']
         if abs(v_value) > 1e-6:
             label = sub_dict[ch_str]['parameters']['voltage']['label']
-            fig.text(0.4,y_coord,'{}: {}'.format(label, v_value ),
-                     fontsize=fontsize, color=textcolor, weight=textweight)
+            fig.text(0.77, y_coord,'{}: {:+.4f}'.format(label, v_value ),
+                     fontsize=fontsize, color=textcolor, weight=textweight,
+                     transform=plt.gcf().transFigure)
             y_coord -= 0.05
+    fig.subplots_adjust(right=0.75)
+    
     if fig_folder is None:
         fig_folder = os.getcwd()
 
@@ -172,3 +180,9 @@ def all_to_microd(mdac, command='close'):
 def all_to_zero(mdac):
     for channel in mdac.channels:
         ramp_mdac(channel.voltage, 0)
+
+def ground_all(mdac):
+    for ch in mdac.channels:
+        ramp_mdac(channel.voltage, 0)
+        ch.dac_output('open')
+        ch.gnd('close')

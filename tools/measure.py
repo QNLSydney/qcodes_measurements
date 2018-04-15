@@ -1,6 +1,8 @@
 import qcodes as qc
 import logging as log
 import numpy as np
+
+from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
 
 
