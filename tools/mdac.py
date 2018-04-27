@@ -174,7 +174,7 @@ def all_to_microd(mdac, command='close'):
     """
     print("Setting all voltages to zero.")
     for channel in mdac.channels:
-        channel.voltage(0)
+        ramp_mdac(channel.voltage, 0)
         channel.microd(command)
 
 def all_to_zero(mdac):
@@ -183,6 +183,6 @@ def all_to_zero(mdac):
 
 def ground_all(mdac):
     for ch in mdac.channels:
-        ramp_mdac(channel.voltage, 0)
+        ramp_mdac(ch.voltage, 0)
         ch.dac_output('open')
         ch.gnd('close')
