@@ -1,0 +1,296 @@
+instruments:
+  # intrument name = identifier
+  # this is what is looked up by the add_instrument method of StationConfig
+
+  mdac:
+    driver: qcodes.instrument_drivers.qnl.MDAC
+    type: MDAC
+    address: ASRL5::INSTR
+    # if true any existing connection will be closed when instatiated
+    # default (if left out) is false
+    auto_reconnect: true
+
+    parameters:
+      # Can use first one as sort of template or basis settings
+      # and use them for other channels
+      # chXX.voltage: # &base
+      #   # new way of calling it in python: instrument.alias
+      #   alias: myalias
+      #   # label appearing on plots or monitor
+      #   label: mylabel
+      #   # software limits of values we want it to set
+      #   limits: -2.5,0.25
+      #   # rate: 0.005
+      #   monitor: true
+
+      ch26.voltage:
+        alias: L_QPC_top
+        label: L_QPC_top
+        limits: -2.5,0.25
+        monitor: true
+
+      ch38.voltage:
+        alias: L_QPC_mid
+        label: L_QPC_mid
+        limits: -2.5,0.25
+        monitor: true
+
+      ch27.voltage:
+        alias: L_QPC_bot 
+        label: L_QPC_bot
+        limits: -2.5,0.25
+        monitor: true
+
+      ch47.voltage:
+        alias: LW1
+        label: LW1
+        limits: -2.5,0.25
+        monitor: true
+
+      ch31.voltage:
+        alias: LP1
+        label: LP1
+        limits: -2.5,0.25
+        monitor: true
+
+      ch11.voltage:
+        alias: C1
+        label: C1
+        limits: -2.5,0.25
+        monitor: true
+
+      ch32.voltage:
+        alias: RP1
+        label: RP1
+        limits: -2.5,0.25
+        monitor: true
+
+      ch35.voltage:
+        alias: RW1
+        label: RW1
+        limits: -2.5,0.25
+        monitor: true
+
+      ch25.voltage:
+        alias: N1
+        label: N1
+        limits: -2.5,0.25
+        monitor: true
+
+      ch23.voltage:
+        alias: IP1
+        label: IP1
+        limits: -2.5,0.25
+        monitor: true
+
+      ch22.voltage:
+        alias: IP2
+        label: IP2
+        limits: -2.5,0.25
+        monitor: true
+
+      ch09.voltage:
+        alias: LW2
+        label: LW2
+        limits: -2.5,0.25
+        monitor: true
+
+      ch42.voltage:
+        alias: LP2
+        label: LP2
+        limits: -2.5,0.25
+        monitor: true
+
+      ch08.voltage:
+        alias: C2
+        label: C2
+        limits: -2.5,0.25
+        monitor: true
+
+      ch20.voltage:
+        alias: RP2
+        label: RP2
+        limits: -2.5,0.25
+        monitor: true
+
+      ch07.voltage:
+        alias: RW2
+        label: RW2
+        limits: -2.5,0.25
+        monitor: true
+
+      ch18.voltage:
+        alias: R_QPC_top
+        label: R_QPC_top
+        limits: -2.5,0.25
+        monitor: true
+
+      ch17.voltage:
+        alias: R_QPC_mid 
+        label: R_QPC_mid
+        limits: -2.5,0.25
+        monitor: true
+
+      ch06.voltage:
+        alias: R_QPC_bot
+        label: R_QPC_bot
+        limits: -2.5,0.25
+        monitor: true
+
+      ch04.voltage:
+        alias: N2
+        label: N2
+        limits: -2.5,0.25
+        monitor: true
+
+      ch01.voltage:
+        alias: T
+        label: T
+        limits: -2.5,0.25
+        monitor: true
+
+      ch15.voltage:
+        alias: IN1
+        label: IN1
+        limits: -2.5,0.25
+        monitor: true
+
+      ch14.voltage:
+          alias: IN2
+          label: IN2
+          limits: -2.5,0.25
+          monitor: true
+
+      ch60.voltage:
+          alias: bias
+          label: bias
+          limits: -2.5,0.25
+          scale: 2.48
+          monitor: true
+      
+      temperature:
+        label: MDAC temperature
+        monitor: true
+
+  ats9360:
+    driver: qcodes.instrument_drivers.AlazarTech.ATS9360
+    type: AlazarTech_ATS9360
+    name: ats9360
+
+    # The parameters below have to be set in notebook manually 
+    # unless pull request 1003 has been merged
+    # clock_source: INTERNAL_CLOCK
+    # sample_rate: 1_000_000_000
+    # clock_edge: CLOCK_EDGE_RISING
+    # decimation: 1
+    # coupling: ['DC','DC']
+    # channel_range: [.4,.4]
+    # impedance: [50,50]
+    # trigger_operation: TRIG_ENGINE_OP_J
+    # trigger_engine1: TRIG_ENGINE_J
+    # trigger_source1: EXTERNAL
+    # trigger_slope1: TRIG_SLOPE_POSITIVE
+    # trigger_level1: 160
+    # trigger_engine2: TRIG_ENGINE_K
+    # trigger_source2: DISABLE
+    # trigger_slope2: TRIG_SLOPE_POSITIVE
+    # trigger_level2: 128
+    # external_trigger_coupling: DC
+    # external_trigger_range: ETR_2V5
+    # trigger_delay: 0
+    # timeout_ticks: 0
+    # aux_io_mode: AUX_IN_AUXILIARY  # AUX_IN_TRIGGER_ENABLE for seq mode on
+    # aux_io_param: NONE # TRIG_SLOPE_POSITIVE for seq mode on
+
+    auto_reconnect: true
+
+  ats_channel_controller:
+    driver: qdev_wrappers.alazar_controllers.ATSChannelController
+    type: ATSChannelController
+    init:
+      alazar_name: ats9360
+
+  # alazar_channel:
+  #   driver: qdev_wrappers.alazar_controllers.alazar_channel
+  #   type: AlazarChannel
+  #   init:
+  #     # parent: ats_ctrl
+  #     name: atschannel
+  #     demod: False
+  #     integrate_samples: False
+
+  sr860:
+    # class of the instrument
+    driver: qcodes.instrument_drivers.stanford_research.SR860
+    type: SR860
+    # visa address
+    address: TCPIP0::10.66.41.10::inst0::INSTR
+    # all following fields are optional:
+    # init:
+      # Use this to simulate an instrument if you don't have 
+      # a physical copy at hand
+      # visalib: 'lockin.yaml@sim'
+    parameters:
+      time_constant:
+        label: lockin tc
+        monitor: True
+      sensitivity:
+        label: lockin sensitivity
+        monitor: True
+      amplitude:
+        label: excitation
+        monitor: True
+    add_parameters:
+      divider_amplitude:
+        source: amplitude
+        label: lockin divider amplitude
+        scale: 2.52 # accounting for the voltage divider
+        monitor: True
+    
+    auto_reconnect: true
+
+  sgs100A_1:
+    driver: qcodes.instrument_drivers.rohde_schwarz.SGS100A
+    type: RohdeSchwarz_SGS100A
+    address: TCPIP0::vlan1366-a31-10-66-41-94::inst0::INSTR
+    parameters:
+        frequency:
+          label: rf frequency 1
+          monitor: True
+        power:
+          label: rf power 1
+          monitor: True
+
+    auto_reconnect: true
+
+  sgs100A_2:
+    driver: qcodes.instrument_drivers.rohde_schwarz.SGS100A
+    type: RohdeSchwarz_SGS100A
+    address: TCPIP0::vlan1366-a31-10-66-41-182::inst0::INSTR
+    parameters:
+        frequency:
+          label: rf frequency 2
+          monitor: True
+        power:
+          label: rf power 2
+          monitor: True
+
+    auto_reconnect: true
+
+    # # new parameters, that get created and attached to the instrument
+    # new_parameter:
+    # # ex: DC current
+    # DC:
+    #   # source specifies which getter and setter should be used
+    #   source: # e.g channel
+    #   # label and unit change these attributes of the parameter
+    #   label:
+    #   unit: #
+    #   limits:
+    #   monitor: true
+#
+#
+# Alternative way of specifying parameters:
+# parameters:
+#   ch01.v: {alias: gate1, label: cutter right}
+
