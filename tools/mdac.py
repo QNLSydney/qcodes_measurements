@@ -48,9 +48,14 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas):
     """
     Pull out the ramp parameter from the mdac and do a 1d sweep
     """
-    if isinstance(mdac_channel, Parameter) and mdac_channel.name == "ramp":
+    if isinstance(mdac_channel, Parameter) and mdac_channel.name == "voltage":
+        voltage = mdac_channel
+        ramp = mdac_channel._instrument.ramp
+    elif isinstance(mdac_channel, Parameter) and mdac_channel.name == "ramp":
+        voltage = mdac_channel._instrument.voltage
         ramp = mdac_channel
     elif isinstance(mdac_channel, MDACChannel):
+        voltage = mdac_channel.voltage
         ramp = mdac_channel.ramp
     else:
         log.exception("Can't do an MDAC 1d sweep on something that isnt an"
@@ -58,25 +63,37 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas):
         raise TypeError("Trying to ramp a not MDAC channel")
     
     ramp(start)
-    return linear1d(ramp, start, stop, num_points, delay, *param_meas)
+    while not np.isclose(start, voltage(), 1e-3):
+        time.sleep(0.01)
+    return linear1d(voltage, start, stop, num_points, delay, *param_meas)
 
 def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              mdac_channel2, start2, stop2, num_points2, delay2,
              *param_meas):
     
-    if isinstance(mdac_channel1, Parameter) and mdac_channel1.name == "ramp":
+    if isinstance(mdac_channel1, Parameter) and mdac_channel1.name == "voltage":
+        voltage1 = mdac_channel1
+        ramp1 = mdac_channel1._instrument.ramp
+    elif isinstance(mdac_channel1, Parameter) and mdac_channel1.name == "ramp":
+        voltage1 = mdac_channel1._instrument.voltage
         ramp1 = mdac_channel1
     elif isinstance(mdac_channel1, MDACChannel):
-        ramp1 = mdac_channel1.ramp1
+        voltage1 = mdac_channel1.voltage
+        ramp1 = mdac_channel1.ramp
     else:
         log.exception("Can't do an MDAC 2d sweep on something that isnt an"
                       " MDAC channel")
         raise TypeError("Trying to ramp a not MDAC channel")
         
-    if isinstance(mdac_channel2, Parameter) and mdac_channel2.name == "ramp":
+    if isinstance(mdac_channel2, Parameter) and mdac_channel2.name == "voltage":
+        voltage2 = mdac_channel2
+        ramp2 = mdac_channel2._instrument.ramp
+    elif isinstance(mdac_channel2, Parameter) and mdac_channel2.name == "ramp":
+        voltage2 = mdac_channel2._instrument.voltage
         ramp2 = mdac_channel2
-    elif isinstance(mdac_channel1, MDACChannel):
-        ramp2 = mdac_channel1.ramp2
+    elif isinstance(mdac_channel2, MDACChannel):
+        voltage2 = mdac_channel2.voltage
+        ramp2 = mdac_channel2.ramp
     else:
         log.exception("Can't do an MDAC 2d sweep on something that isnt an"
                       " MDAC channel")
@@ -84,8 +101,12 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
 
     ramp1(start1)
     ramp2(start2)
-    return linear2d(ramp1, start1, stop1, num_points1, delay1,
-                    ramp2, start2, stop2, num_points2, delay2,
+    while not np.isclose(start1, voltage1(), 1e-3):
+        time.sleep(0.01)
+    while not np.isclose(start2, voltage2(), 1e-3):
+        time.sleep(0.01)
+    return linear2d(voltage1, start1, stop1, num_points1, delay1,
+                    voltage2, start2, stop2, num_points2, delay2,
                     *param_meas)
 
 

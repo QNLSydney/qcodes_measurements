@@ -5,6 +5,13 @@ import numpy as np
 from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
 
+import matplotlib
+import matplotlib.pyplot as plt
+
+import pyqtgraph as pg
+import pyqtgraph.multiprocess as mp
+
+from .. import pyplot
 
 def _flush_buffers(*params):
     """
@@ -36,25 +43,46 @@ def _flush_buffers(*params):
 def linear1d(param_set, start, stop, num_points, delay, *param_meas):
     """
     """
+    global pyplot
     try:
         param_meas = list(param_meas)
         _flush_buffers(*param_meas)
+        
+        # Set up a plotting window
+
+        win = pyplot.rpg.GraphicsLayoutWidget()
+        win.show()
+        win.resize(1000,600)
+        win.setWindowTitle('Sweeping %s' % param_set.full_name)
+        pyplot.windows.append(win)
 
         meas = Measurement()
         # register the first independent parameter
         meas.register_parameter(param_set)
         output = []
         param_set.post_delay = delay
+        
+        # Calculate setpoints, and keep track of data (data_set has an inconvenient format)
+        set_points = np.linspace(start, stop, num_points)
+        rset_points = pyplot.proc.transfer(set_points)
+        data = np.full((len(param_meas), num_points), np.nan)
+        plots = []
 
-        for parameter in param_meas:
+        for p, parameter in enumerate(param_meas):
             meas.register_parameter(parameter, setpoints=(param_set,))
             output.append([parameter, None])
+            plot = win.addPlot(title="%s v %s" % (param_set.full_name, parameter.full_name))
+            plotdata = plot.plot(x=set_points, y=data[p,:], pen=(255,0,0), name=parameter.name)
+            plots.append(plotdata)
 
         with meas.run() as datasaver:
-            for set_point in np.linspace(start, stop, num_points):
+            for i, set_point in enumerate(set_points):
                 param_set.set(set_point)
-                for i, parameter in enumerate(param_meas):
-                    output[i][1] = parameter.get()
+                for p, parameter in enumerate(param_meas):
+                    output[p][1] = parameter.get()
+                    data[p,i] = output[p][1]
+                    rdata = pyplot.proc.transfer(data[p,:])
+                    plots[p].setData(x=rset_points, y=rdata)
                 datasaver.add_result((param_set, set_point),
                                     *output)
         dataid = datasaver.run_id
