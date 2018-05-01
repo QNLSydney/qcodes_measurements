@@ -43,8 +43,27 @@ def setup(ohmics, gates, shorts):
     shorts.gnd('close')
     shorts.dac_output('open')
     shorts.smc('close')
+    
+def ramp(mdac_channel, to):
+    if isinstance(mdac_channel, Parameter) and mdac_channel.name == "voltage":
+        voltage = mdac_channel
+        ramp = mdac_channel._instrument.ramp
+    elif isinstance(mdac_channel, Parameter) and mdac_channel.name == "ramp":
+        voltage = mdac_channel._instrument.voltage
+        ramp = mdac_channel
+    elif isinstance(mdac_channel, MDACChannel):
+        voltage = mdac_channel.voltage
+        ramp = mdac_channel.ramp
+    else:
+        log.exception("Can't ramp on something that isnt an MDAC channel")
+        raise TypeError("Trying to ramp a not MDAC channel")
+    
+    ramp(to)
+    while not np.isclose(to, voltage(), 1e-3):
+        time.sleep(0.01)
 
-def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas):
+def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas, 
+                  rampback=False):
     """
     Pull out the ramp parameter from the mdac and do a 1d sweep
     """
@@ -65,7 +84,14 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas):
     ramp(start)
     while not np.isclose(start, voltage(), 1e-3):
         time.sleep(0.01)
-    return linear1d(voltage, start, stop, num_points, delay, *param_meas)
+    trace_id = linear1d(voltage, start, stop, num_points, delay, *param_meas)
+    
+    if rampback:
+        ramp(start)
+        while not np.isclose(start, voltage(), 1e-3):
+            time.sleep(0.01)
+    
+    return trace_id
 
 def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              mdac_channel2, start2, stop2, num_points2, delay2,
