@@ -3,10 +3,12 @@ import os
 import json
 import numpy as np
 import logging as log
+from qcodes.instrument.parameter import Parameter
 from qcodes.dataset.measurements import Measurement
-from . measure import _flush_buffers
+from .measure import _flush_buffers, linear1d, linear2d
 from qcodes.dataset.plotting import plot_by_id
 from qcodes.dataset.experiment_container import load_by_id
+from qcodes.instrument_drivers.qnl.MDAC import MDACChannel
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -44,85 +46,48 @@ def setup(ohmics, gates, shorts):
 
 def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas):
     """
+    Pull out the ramp parameter from the mdac and do a 1d sweep
     """
-    if abs(mdac_channel.voltage() - start) > 1e-6:
-        mdac_channel.ramp(start)
-
-    try:
-        elapsed_time = time.time()
-        param_meas = list(param_meas)
-        _flush_buffers(*param_meas)
-
-        meas = Measurement()
-        # register the first independent parameter
-        meas.register_parameter(mdac_channel.voltage)
-        output = []
-
-        voltages = []
-
-        mdac_channel.voltage.post_delay = delay
-
-        for parameter in param_meas:
-            meas.register_parameter(parameter, setpoints=(mdac_channel.voltage,))
-            output.append([parameter, None])
-
-        with meas.run() as datasaver:
-            for set_point in np.linspace(start, stop, num_points):
-                mdac_channel.ramp(set_point)
-                for i, parameter in enumerate(param_meas):
-                    output[i][1] = parameter.get()
-                datasaver.add_result((mdac_channel.voltage, set_point),
-                                    *output)
-        dataid = datasaver.run_id
-        elapsed_time = time.time() - elapsed_time
-        print("Elapsed time in s: ", elapsed_time)
-    except:
-        log.exception("Exception in linear1d_ramp")
-        raise
-
-    return dataid # can use plot_by_id(dataid)
+    if isinstance(mdac_channel, Parameter) and mdac_channel.name == "ramp":
+        ramp = mdac_channel
+    elif isinstance(mdac_channel, MDACChannel):
+        ramp = mdac_channel.ramp
+    else:
+        log.exception("Can't do an MDAC 1d sweep on something that isnt an"
+                      " MDAC channel")
+        raise TypeError("Trying to ramp a not MDAC channel")
+    
+    ramp(start)
+    return linear1d(ramp, start, stop, num_points, delay, *param_meas)
 
 def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              mdac_channel2, start2, stop2, num_points2, delay2,
              *param_meas):
+    
+    if isinstance(mdac_channel1, Parameter) and mdac_channel1.name == "ramp":
+        ramp1 = mdac_channel1
+    elif isinstance(mdac_channel1, MDACChannel):
+        ramp1 = mdac_channel1.ramp1
+    else:
+        log.exception("Can't do an MDAC 2d sweep on something that isnt an"
+                      " MDAC channel")
+        raise TypeError("Trying to ramp a not MDAC channel")
+        
+    if isinstance(mdac_channel2, Parameter) and mdac_channel2.name == "ramp":
+        ramp2 = mdac_channel2
+    elif isinstance(mdac_channel1, MDACChannel):
+        ramp2 = mdac_channel1.ramp2
+    else:
+        log.exception("Can't do an MDAC 2d sweep on something that isnt an"
+                      " MDAC channel")
+        raise TypeError("Trying to ramp a not MDAC channel")
 
-    if abs(mdac_channel1.voltage() - start1) > 1e-6:
-        mdac_channel1.ramp(start1)
+    ramp1(start1)
+    ramp2(start2)
+    return linear2d(ramp1, start1, stop1, num_points1, delay1,
+                    ramp2, start2, stop2, num_points2, delay2,
+                    *param_meas)
 
-    if abs(mdac_channel2.voltage() - start2) > 1e-6:
-        mdac_channel2.ramp(start2)
-    try:
-        elapsed_time = time.time()
-        param_meas = list(param_meas)
-        _flush_buffers(*param_meas)
-
-        meas = Measurement()
-        meas.register_parameter(mdac_channel1.voltage)
-        mdac_channel1.voltage.post_delay = delay1
-        meas.register_parameter(mdac_channel2.voltage)
-        mdac_channel2.voltage.post_delay = delay2
-        output = []
-        for parameter in param_meas:
-            meas.register_parameter(parameter, setpoints=(mdac_channel1.voltage, mdac_channel2.voltage))
-            output.append([parameter, None])
-
-        with meas.run() as datasaver:
-            for set_point1 in np.linspace(start1, stop1, num_points1):
-                mdac_channel1.ramp(set_point1)
-                for set_point2 in np.linspace(start2, stop2, num_points2):
-                    mdac_channel2.ramp(set_point1)
-                    for i, parameter in enumerate(param_meas):
-                        output[i][1] = parameter.get()
-                    datasaver.add_result((mdac_channel1.voltage, set_point1),
-                                        (mdac_channel2.voltage, set_point2),
-                                        *output)
-        dataid = datasaver.run_id
-        elapsed_time = time.time() - elapsed_time
-        print("Elapsed time in s: ", elapsed_time)
-    except:
-        log.exception("Exception in linear2d_ramp")
-
-    return dataid
 
 def plot_Wtext(dataid, mdac, fontsize=10, textcolor='black', textweight='normal', fig_folder=None):
     """
