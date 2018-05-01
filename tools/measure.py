@@ -96,24 +96,75 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
 def linear2d(param_set1, start1, stop1, num_points1, delay1,
              param_set2, start2, stop2, num_points2, delay2,
              *param_meas):
-
+    
+    # Set up a plotting window
+    win = pyplot.rpg.GraphicsLayoutWidget()
+    win.show()
+    win.resize(800,800)
+    win.setWindowTitle('Sweeping %s, %s' % 
+                       (param_set1.full_name, param_set2.full_name))
+    pyplot.windows.append(win)
+    
     meas = Measurement()
     meas.register_parameter(param_set1)
     param_set1.post_delay = delay1
+    set_points1 = np.linspace(start1, stop1, num_points1)
     meas.register_parameter(param_set2)
-    param_set1.post_delay = delay2
+    param_set2.post_delay = delay2
+    set_points2 = np.linspace(start2, stop2, num_points2)
+    
     output = []
-    for parameter in param_meas:
+    data = np.full((len(param_meas), num_points1, num_points2), np.nan)
+    plots = []
+    for p, parameter in enumerate(param_meas):
         meas.register_parameter(parameter, setpoints=(param_set1, param_set2))
         output.append([parameter, None])
+        
+        # Add Plot item
+        plot = win.addPlot()
+        implot = pyplot.rpg.ImageItem()
+        plot.addItem(implot)
+        
+        # Set scaling
+        implot.scale(abs((stop1-start1)/num_points1), 
+                     abs((stop2-start2)/num_points2))
+        implot.translate((stop1-start1)/2,
+                         (stop2-start2)/2)
+        
+        # Add histogram
+        hist = pyplot.rpg.HistogramLUTItem()
+        hist.setImageItem(implot)
+        hist.axis.setLabel(parameter.label, parameter.unit)
+        win.addItem(hist)
+        
+        plots.append({
+                'plot': plot,
+                'img': implot,
+                'hist': hist})
 
     with meas.run() as datasaver:
-        for set_point1 in np.linspace(start1, stop1, num_points1):
+        for i, set_point1 in enumerate(set_points1):
             param_set1.set(set_point1)
-            for set_point2 in np.linspace(start2, stop2, num_points2):
+            for j, set_point2 in enumerate(set_points2):
                 param_set2.set(set_point2)
-                for i, parameter in enumerate(param_meas):
-                    output[i][1] = parameter.get()
+                for p, parameter in enumerate(param_meas):
+                    output[p][1] = parameter.get()
+                    data[p, i, j] = output[p][1]
+                    
+                    # Calculate z-range of data, and remove NaN's
+                    z_range = (np.nanmin(data[p,:,:]), np.nanmax(data[p,:,:]))
+                    fdata = data[p,:,:]
+                    fdata[np.where(np.isnan(fdata))] = z_range[0]
+                    rdata = pyplot.proc.transfer(fdata)
+                    
+                    # Retrieve plot items
+                    implot = plots[p]['img']
+                    hist = plots[p]['hist']
+                    
+                    # Update plot
+                    implot.setImage(rdata)
+                    hist.setLevels(*z_range)
+
                 datasaver.add_result((param_set1, set_point1),
                                      (param_set2, set_point2),
                                      *output)

@@ -5,4 +5,5 @@ import pyqtgraph.multiprocess as mp
 
 proc = mp.QtProcess()
 rpg = proc._import('pyqtgraph')
+rpg.setConfigOptions(antialias=True)
 windows = []
