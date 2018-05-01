@@ -11,6 +11,37 @@ from qcodes.dataset.experiment_container import load_by_id
 import matplotlib
 import matplotlib.pyplot as plt
 
+def setup(ohmics, gates, shorts):
+    """
+    Set all gates to correct states in MDAC. Note, assume that we are connected
+    to the device through Micro-D's
+    
+    Ohmics, Gates, Shorts are all ChannelLists
+    """
+    
+    # Check that all gates are in a safe state
+    assert(all(gate.voltage() == 0 for gate in gates))
+    assert(all(ohmic.voltage() == 0 for ohmic in ohmics))
+    assert(all(short.voltage() == 0 for short in shorts))
+    
+    # Connect all pins to MicroD
+    gates.microd('close')
+    ohmics.microd('close')
+    shorts.microd('close')
+    
+    # Set gates to dac_output
+    gates.dac_output('close')
+    gates.smc('open')
+    gates.gnd('open')
+    
+    # Set ohmics/shorts to grounded and SMC
+    ohmics.gnd('close')
+    ohmics.dac_output('open')
+    ohmics.smc('close')
+    shorts.gnd('close')
+    shorts.dac_output('open')
+    shorts.smc('close')
+
 def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas):
     """
     """
@@ -128,34 +159,28 @@ def plot_Wtext(dataid, mdac, fontsize=10, textcolor='black', textweight='normal'
 
 def change_filter_all(mdac, filter):
     """
+    filter is 1 for a 1kHz filter, 2 for a 10Hz filter
     """
-    print("Setting all voltages to zero.")
-    for channel in mdac.channels:
-        channel.ramp(0)
-        channel.filter(2)
+    mdac.channels.filter(filter)
 
 def all_to_smc(mdac, command='close'):
     """
     """
     print("Setting all voltages to zero.")
-    for channel in mdac.channels:
-        channel.ramp(0)
-        channel.smc(command)
+    mdac.channels.ramp(0)
+    mdac.channels.smc(command)
 
 def all_to_microd(mdac, command='close'):
     """
     """
     print("Setting all voltages to zero.")
-    for channel in mdac.channels:
-        channel.ramp(0)
-        channel.microd(command)
+    mdac.channels.ramp(0)
+    mdac.channels.microd(command)
 
 def all_to_zero(mdac):
-    for channel in mdac.channels:
-        channel.ramp(0)
+    mdac.channels.ramp(0)
 
 def ground_all(mdac):
-    for ch in mdac.channels:
-        channel.ramp(0)
-        ch.dac_output('open')
-        ch.gnd('close')
+    mdac.channels.ramp(0)
+    mdac.channels.gnd('close')
+    mdac.channels.dac_output('open')
