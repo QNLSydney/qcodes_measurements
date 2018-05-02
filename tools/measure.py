@@ -126,15 +126,17 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         plot.addItem(implot)
         
         # Set scaling
-        implot.scale(abs((stop1-start1)/num_points1), 
-                     abs((stop2-start2)/num_points2))
-        implot.translate((stop1-start1)/2,
-                         (stop2-start2)/2)
+        step1 = (stop1-start1)/num_points1
+        step2 = (stop2-start2)/num_points2
+        implot.translate(start1, start2)
+        implot.scale(step1, step2)
         
         # Add histogram
         hist = pyplot.rpg.HistogramLUTItem()
         hist.setImageItem(implot)
         hist.axis.setLabel(parameter.label, parameter.unit)
+        gradient = hist.gradient
+        gradient.setColorMap(pyplot.rcmap)
         win.addItem(hist)
         
         plots.append({
@@ -144,6 +146,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
 
     with meas.run() as datasaver:
         for i, set_point1 in enumerate(set_points1):
+            param_set2.set(start2)
             param_set1.set(set_point1)
             for j, set_point2 in enumerate(set_points2):
                 param_set2.set(set_point2)
@@ -152,8 +155,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                     data[p, i, j] = output[p][1]
                     
                     # Calculate z-range of data, and remove NaN's
-                    z_range = (np.nanmin(data[p,:,:]), np.nanmax(data[p,:,:]))
-                    fdata = data[p,:,:]
+                    fdata = data[p,:,:].copy()
+                    z_range = (np.nanmin(fdata), np.nanmax(fdata))
                     fdata[np.where(np.isnan(fdata))] = z_range[0]
                     rdata = pyplot.proc.transfer(fdata)
                     
