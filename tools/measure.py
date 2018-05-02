@@ -71,9 +71,21 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
         for p, parameter in enumerate(param_meas):
             meas.register_parameter(parameter, setpoints=(param_set,))
             output.append([parameter, None])
-            plot = win.addPlot(title="%s v %s" % (param_set.full_name, parameter.full_name))
+            
+            # Create plot window
+            plot = win.addPlot(title="%s (%s) v. %s (%s)" % 
+                               (param_set.full_name, param_set.label, 
+                                parameter.full_name, parameter.label))
             plotdata = plot.plot(x=set_points, y=data[p,:], pen=(255,0,0), name=parameter.name)
-            plots.append(plotdata)
+            
+            # Label Axes
+            botAxis = plot.getAxis('bottom')
+            leftAxis = plot.getAxis('left')
+            botAxis.setLabel(param_set.label, param_set.unit)
+            leftAxis.setLabel(parameter.label, parameter.unit)
+            
+            plots.append({'plotdata':plotdata,
+                          'plot': plot})
 
         with meas.run() as datasaver:
             for i, set_point in enumerate(set_points):
@@ -81,8 +93,11 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
                 for p, parameter in enumerate(param_meas):
                     output[p][1] = parameter.get()
                     data[p,i] = output[p][1]
-                    rdata = pyplot.proc.transfer(data[p,:])
-                    plots[p].setData(x=rset_points, y=rdata)
+                    plots[p]['plotdata'].setData(x=rset_points, y=data[p,:])
+                    if i == 1:
+                        plot = plots[p]['plot']
+                        plot.setTitle(plot.titleLabel.text + 
+                                      " (id: %d)" % datasaver.run_id)
                 datasaver.add_result((param_set, set_point),
                                     *output)
         dataid = datasaver.run_id
@@ -121,7 +136,9 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         output.append([parameter, None])
         
         # Add Plot item
-        plot = win.addPlot()
+        plot = win.addPlot(title="%s (%s) v. %s (%s)" % 
+                               (param_set1.full_name, param_set1.label,
+                                param_set2.full_name, param_set2.label))
         implot = pyplot.rpg.ImageItem()
         plot.addItem(implot)
         
@@ -139,6 +156,12 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         gradient.setColorMap(pyplot.rcmap)
         win.addItem(hist)
         
+        # Label Axes
+        botAxis = plot.getAxis('bottom')
+        leftAxis = plot.getAxis('left')
+        botAxis.setLabel(param_set1.label, param_set1.unit)
+        leftAxis.setLabel(param_set2.label, param_set2.unit)
+        
         plots.append({
                 'plot': plot,
                 'img': implot,
@@ -154,19 +177,31 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                     output[p][1] = parameter.get()
                     data[p, i, j] = output[p][1]
                     
-                    # Calculate z-range of data, and remove NaN's
-                    fdata = data[p,:,:].copy()
-                    z_range = (np.nanmin(fdata), np.nanmax(fdata))
-                    fdata[np.where(np.isnan(fdata))] = z_range[0]
-                    rdata = pyplot.proc.transfer(fdata)
+                    # Calculate z-range of data, and remove NaN's from first column
+                    # This sets zero point for rest of data
+                    fdata = data[p,:,:]
+                    # Range of completed columns
+                    if i == 0:
+                        z_range = (np.nanmin(fdata[i,:j+1]), np.nanmax(fdata[i,:j+1]))
+                        fdata[0,j+1:] = z_range[0]
+                        fdata[1:,:] = z_range[0]
+                    else:
+                        z_range = (np.min((np.nanmin(fdata[:i,:]), np.nanmin(fdata[i,:j+1]))),
+                                   np.max((np.nanmax(fdata[:i,:]), np.nanmax(fdata[i,:j+1]))))
                     
                     # Retrieve plot items
                     implot = plots[p]['img']
                     hist = plots[p]['hist']
                     
                     # Update plot
-                    implot.setImage(rdata)
+                    implot.setImage(fdata)
                     hist.setLevels(*z_range)
+                    
+                    # Update title if first point
+                    if i == 0 and j == 0:
+                        plot = plots[p]['plot']
+                        plot.setTitle(plot.titleLabel.text + 
+                                      " (id: %d)" % datasaver.run_id)
 
                 datasaver.add_result((param_set1, set_point1),
                                      (param_set2, set_point2),

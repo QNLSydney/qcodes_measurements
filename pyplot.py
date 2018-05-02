@@ -269,6 +269,6 @@ rpg.setConfigOptions(antialias=True)
 windows = []
 
 # Transfer color scale to remote process
-rviridis_data = proc.transfer(_viridis_data)
-rcmap_scale = proc.transfer(linspace(0.0, 1.0, len(_viridis_data)))
+rviridis_data = proc.transfer(_viridis_data[::16])
+rcmap_scale = proc.transfer(linspace(0.0, 1.0, len(_viridis_data[::16])))
 rcmap = rpg.ColorMap(pos=rcmap_scale, color=rviridis_data)
