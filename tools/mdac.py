@@ -95,17 +95,20 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
 
 def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              mdac_channel2, start2, stop2, num_points2, delay2,
-             *param_meas):
+             *param_meas, rampback=False):
     
     if isinstance(mdac_channel1, Parameter) and mdac_channel1.name == "voltage":
         voltage1 = mdac_channel1
         ramp1 = mdac_channel1._instrument.ramp
+        rate1 = mdac_channel1._instrument.rate()
     elif isinstance(mdac_channel1, Parameter) and mdac_channel1.name == "ramp":
         voltage1 = mdac_channel1._instrument.voltage
         ramp1 = mdac_channel1
+        rate1 = mdac_channel1._instrument.rate()
     elif isinstance(mdac_channel1, MDACChannel):
         voltage1 = mdac_channel1.voltage
         ramp1 = mdac_channel1.ramp
+        rate1 = mdac_channel1.rate()
     else:
         log.exception("Can't do an MDAC 2d sweep on something that isnt an"
                       " MDAC channel")
@@ -114,12 +117,15 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
     if isinstance(mdac_channel2, Parameter) and mdac_channel2.name == "voltage":
         voltage2 = mdac_channel2
         ramp2 = mdac_channel2._instrument.ramp
+        rate2 = mdac_channel2._instrument.rate()
     elif isinstance(mdac_channel2, Parameter) and mdac_channel2.name == "ramp":
         voltage2 = mdac_channel2._instrument.voltage
         ramp2 = mdac_channel2
+        rate2 = mdac_channel2._instrument.rate()
     elif isinstance(mdac_channel2, MDACChannel):
         voltage2 = mdac_channel2.voltage
         ramp2 = mdac_channel2.ramp
+        rate2 = mdac_channel2.rate()
     else:
         log.exception("Can't do an MDAC 2d sweep on something that isnt an"
                       " MDAC channel")
@@ -131,9 +137,21 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
         time.sleep(0.01)
     while not np.isclose(start2, voltage2(), 1e-3):
         time.sleep(0.01)
-    return linear2d(voltage1, start1, stop1, num_points1, delay1,
-                    voltage2, start2, stop2, num_points2, delay2,
-                    *param_meas)
+    range2 = abs(start2 - stop2)
+    step2 = range2/num_points2
+    trace_id = linear2d(voltage1, start1, stop1, num_points1, delay1 + range2/rate2,
+                        ramp2, start2, stop2, num_points2, delay2 + step2/rate2,
+                        *param_meas)
+    
+    if rampback:
+        ramp1(start1)
+        ramp2(start2)
+        while not np.isclose(start1, voltage1(), 1e-3):
+            time.sleep(0.01)
+        while not np.isclose(start2, voltage2(), 1e-3):
+            time.sleep(0.01)
+    
+    return trace_id
 
 
 def plot_Wtext(dataid, mdac, fontsize=10, textcolor='black', textweight='normal', fig_folder=None):
