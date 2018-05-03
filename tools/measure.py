@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import pyqtgraph as pg
 import pyqtgraph.multiprocess as mp
 
-from .. import pyplot
+from ..plot import pyplot
 
 def _flush_buffers(*params):
     """
