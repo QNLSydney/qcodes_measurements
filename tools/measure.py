@@ -49,12 +49,9 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
         _flush_buffers(*param_meas)
         
         # Set up a plotting window
-
-        win = pyplot.rpg.GraphicsLayoutWidget()
-        win.show()
+        win = pyplot.PlotWindow()
+        win.win_title = 'Sweeping %s' % param_set.full_name
         win.resize(1000,600)
-        win.setWindowTitle('Sweeping %s' % param_set.full_name)
-        pyplot.windows.append(win)
 
         meas = Measurement()
         # register the first independent parameter
@@ -64,7 +61,6 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
         
         # Calculate setpoints, and keep track of data (data_set has an inconvenient format)
         set_points = np.linspace(start, stop, num_points)
-        rset_points = pyplot.proc.transfer(set_points)
         data = np.full((len(param_meas), num_points), np.nan)
         plots = []
 
@@ -76,16 +72,18 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
             plot = win.addPlot(title="%s (%s) v.<br>%s (%s)" % 
                                (param_set.full_name, param_set.label, 
                                 parameter.full_name, parameter.label))
-            plotdata = plot.plot(x=set_points, y=data[p,:], pen=(255,0,0), name=parameter.name)
+            plotdata = pyplot.PlotData.getPlot(setpoint_x=set_points, 
+                                               pen=(255,0,0), 
+                                               name=parameter.name)
+            plot.addItem(plotdata)
             
             # Label Axes
-            botAxis = plot.getAxis('bottom')
-            leftAxis = plot.getAxis('left')
-            botAxis.setLabel(param_set.label, param_set.unit)
-            leftAxis.setLabel(parameter.label, parameter.unit)
+            plot.left_axis.label = param_set.label
+            plot.left_axis.units = param_set.unit
+            plot.bot_axis.label = parameter.label
+            plot.bot_axis.units = parameter.unit
             
-            plots.append({'plotdata':plotdata,
-                          'plot': plot})
+            plots.append(plot)
 
         with meas.run() as datasaver:
             for i, set_point in enumerate(set_points):
@@ -93,11 +91,9 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
                 for p, parameter in enumerate(param_meas):
                     output[p][1] = parameter.get()
                     data[p,i] = output[p][1]
-                    plots[p]['plotdata'].setData(x=rset_points, y=data[p,:])
+                    plots[p].traces[0].update(data[p,:])
                     if i == 1:
-                        plot = plots[p]['plot']
-                        plot.setTitle(plot.titleLabel.text + 
-                                      " (id: %d)" % datasaver.run_id)
+                        plots[p].plot_title += " (id: %d)" % datasaver.run_id
                 datasaver.add_result((param_set, set_point),
                                     *output)
         dataid = datasaver.run_id
@@ -113,17 +109,17 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
              *param_meas):
     
     # Set up a plotting window
-    win = pyplot.rpg.GraphicsLayoutWidget()
-    win.show()
+    win = pyplot.PlotWindow()
+    win.win_title = 'Sweeping %s, %s' % (param_set1.full_name, 
+                                         param_set2.full_name)
     win.resize(800,800)
-    win.setWindowTitle('Sweeping %s, %s' % 
-                       (param_set1.full_name, param_set2.full_name))
-    pyplot.windows.append(win)
     
     meas = Measurement()
+    # Step Axis
     meas.register_parameter(param_set1)
     param_set1.post_delay = delay1
     set_points1 = np.linspace(start1, stop1, num_points1)
+    # Sweep Axis
     meas.register_parameter(param_set2)
     param_set2.post_delay = delay2
     set_points2 = np.linspace(start2, stop2, num_points2)
