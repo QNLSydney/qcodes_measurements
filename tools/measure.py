@@ -73,7 +73,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
             output.append([parameter, None])
             
             # Create plot window
-            plot = win.addPlot(title="%s (%s) v. %s (%s)" % 
+            plot = win.addPlot(title="%s (%s) v.<br>%s (%s)" % 
                                (param_set.full_name, param_set.label, 
                                 parameter.full_name, parameter.label))
             plotdata = plot.plot(x=set_points, y=data[p,:], pen=(255,0,0), name=parameter.name)
@@ -136,7 +136,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         output.append([parameter, None])
         
         # Add Plot item
-        plot = win.addPlot(title="%s (%s) v. %s (%s)" % 
+        plot = win.addPlot(title="%s (%s) v.<br>%s (%s)" % 
                                (param_set1.full_name, param_set1.label,
                                 param_set2.full_name, param_set2.label))
         implot = pyplot.rpg.ImageItem()
@@ -183,8 +183,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                     # Range of completed columns
                     if i == 0:
                         z_range = (np.nanmin(fdata[i,:j+1]), np.nanmax(fdata[i,:j+1]))
-                        fdata[0,j+1:] = z_range[0]
-                        fdata[1:,:] = z_range[0]
+                        fdata[0,j+1:] = (z_range[0] + z_range[1])/2
+                        fdata[1:,:] = (z_range[0] + z_range[1])/2
                     else:
                         z_range = (np.min((np.nanmin(fdata[:i,:]), np.nanmin(fdata[i,:j+1]))),
                                    np.max((np.nanmax(fdata[:i,:]), np.nanmax(fdata[i,:j+1]))))
