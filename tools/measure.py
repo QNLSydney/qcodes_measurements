@@ -135,14 +135,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         plot = win.addPlot(title="%s (%s) v.<br>%s (%s)" % 
                                (param_set1.full_name, param_set1.label,
                                 param_set2.full_name, param_set2.label))
-        implot = pyplot.rpg.ImageItem()
+        implot = pyplot.PlotData.ImageItem(set_points1, set_points2)
         plot.addItem(implot)
-        
-        # Set scaling
-        step1 = (stop1-start1)/num_points1
-        step2 = (stop2-start2)/num_points2
-        implot.translate(start1, start2)
-        implot.scale(step1, step2)
         
         # Add histogram
         hist = pyplot.rpg.HistogramLUTItem()

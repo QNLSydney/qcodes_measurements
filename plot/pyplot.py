@@ -224,6 +224,16 @@ class PlotData(RPGWrappedBase):
         """
         raise NotImplementedError("Can't update this")
 
+class HistogramLUTItem(RPGWrappedBase):
+    _base = rpg.HistogramLUTItem
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @property
+    def axis(self):
+        return RPGWrappedBase.autoWrap(super().__getattr__('axis'))
+
 class PlotDataItem(PlotData):
     _base = rpg.PlotDataItem
 
@@ -256,3 +266,68 @@ class ImageItem(PlotData):
         self.__dict__['setpoint_x'] = setpoint_x
         self.__dict__['setpoint_y'] = setpoint_y
         super().__init__(*args, **kwargs)
+
+        # Set axis scales correctly
+        self._force_rescale()
+
+    def __wrap__(self, *args, **kwargs):
+        if 'setpoint_x' in kwargs and 'setpoint_y' in kwargs:
+            # If we are given the scalings, use them
+            self.__dict__['setpoint_x'] = kwargs['setpoint_x']
+            self.__dict__['setpoint_y'] = kwargs['setpoint_y']
+        elif 'setpoint_x' in kwargs or 'setpoint_y' in kwargs:
+            # If we are only given one, that must be an error
+            raise TypeError('setpoint_x or _y given without the other. Both or neither are necessary')
+        else:
+            # Otherwise try to figure it out
+            image = self.image
+            if image is None:
+                # There is no data here, let's just set some random scales
+                self.__dict__['setpoint_x'] = (0, 1)
+                self.__dict__['setpoint_y'] = (0, 1)
+            else:
+                image = image._getValue()
+                x_len, y_len = image.shape
+
+                # And then query the translation
+                offs = self.scenePos()._getValue()
+                x_offs, y_offs = offs.x(), offs.y()
+
+                # And then the scaling
+                x_scale, y_scale = im.sceneTransform().map(1.0, 1.0)
+                x_scale, y_scale = x_scale - x_offs, y_scale - y_offs
+
+                # And then calculate the points
+                self.__dict__['setpoint_x'] = linspace(x_offs, x_offs+x_scale*x_len, x_len)
+                self.__dict__['setpoint_y'] = linspace(y_offs, y_offs+y_scale*y_len, y_len)
+        # Finally reset the scale to make sure we are consistent
+        self._force_rescale()
+
+    def _force_rescale(self):
+        step_x = (self.setpoint_x[1] - self.setpoint_x[0])/len(setpoint_x)
+        step_y = (self.setpoint_y[1] - self.setpoint_y[0])/len(setpoint_y)
+
+        self.resetTransform()
+        self.translate(self.setpoint_x[0], self.setpoint_y[0])
+        self.scale(step_x, step_y)
+
+    def update(data, *args, **kwargs):
+        self.setImage(data, autoLevels=True)
+
+class ImageItemWithHistogram(ImageItem):
+    def __init__(self, setpoint_x, setpoint_y, colormap, *args, **kwargs):
+        super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
+
+        # Add the histogram
+        hist = HistogramLUTItem()
+        hist.setImageItem(self._base_inst)
+        self.__dict__['hist'] = hist
+
+    @property
+    def histogram(self):
+        return self._hist
+
+    @property
+    def colormap(self):
+        #TODO: This is where I LEFT OFF
+        pass
