@@ -109,10 +109,13 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             super().__setattr__(name, value)
 
     def __getattr__(self, name):
-        if name in self.__class__.__dict__ or name in self.__dict__:
-            attr = object.__getattr__(name)
-        else:
-            attr = super().__getattr__(name)
+        # if name in self.__class__.__dict__:
+        #     attr = self.__class__.__dict__[name]
+        # elif name in self.__dict__:
+        #     attr = self.__dict__[name]
+        # else:
+        attr = super().__getattr__(name)
+            
         if name.startswith("add") and callable(attr):
             return self.wrapAdders(attr)
         elif name.startswith("get") and callable(attr):
@@ -329,7 +332,7 @@ class PlotDataItem(PlotData):
         if self.set_data is None:
             # Cache update function so we don't have to request it each time we update
             self.set_data = self.setData
-            self.set_data._setProxyOptions('callSync', 'off')
+            self.set_data._setProxyOptions(callSync='off')
         self.set_data(x=self.setpoint_x, y=data, *args, **kwargs)
 
 class ImageItem(PlotData):
