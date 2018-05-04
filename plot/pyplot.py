@@ -12,7 +12,7 @@ from ..plot import colors
 proc = mp.QtProcess()
 rpg = proc._import('pyqtgraph')
 rpg.setConfigOptions(antialias=True)
-rpg._setProxyOptions(deferGetattr=True)
+#rpg._setProxyOptions(deferGetattr=True)
 windows = []
 
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
@@ -116,7 +116,7 @@ class PlotWindow(RPGWrappedBase):
         """
         Create a new remote plot window, with title and size given
         """
-        super().__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.show()
 
         # Keep track of all windows globally
@@ -163,6 +163,7 @@ class PlotItem(RPGWrappedBase):
         Create a new plot. This has to be embedded inside 
         a plot window to actually be visible
         """
+        super().__init__()
         # Keep track of traces that are plotted
         self.__dict__['_traces'] = []
     
@@ -252,16 +253,16 @@ class ColorMap(RPGWrappedBase):
     def name(self):
         return self._name
     
-# Transfer color scales to remote process, truncating steps to 16 if necessary
-rcmaps = {}
-for color in colors.__data__.keys():
-    data = colors.__data__[color]
-    step = ceil(len(data) / 16)
-    rcmap = ColorMap(name=color, 
-                     pos=linspace(0.0, 1.0, len(data[::step])), 
-                     color=data[::step])
-    rcmaps[color] = rcmap
-rcmap = rcmaps['viridis']
+## Transfer color scales to remote process, truncating steps to 16 if necessary
+#rcmaps = {}
+#for color in colors.__data__.keys():
+#    data = colors.__data__[color]
+#    step = ceil(len(data) / 16)
+#    rcmap = ColorMap(name=color, 
+#                     pos=linspace(0.0, 1.0, len(data[::step])), 
+#                     color=data[::step])
+#    rcmaps[color] = rcmap
+#rcmap = rcmaps['viridis']
 
 class PlotDataItem(PlotData):
     _base = rpg.PlotDataItem
@@ -344,7 +345,7 @@ class ImageItem(PlotData):
         self.setImage(data, autoLevels=True)
 
 class ImageItemWithHistogram(ImageItem):
-    def __init__(self, setpoint_x, setpoint_y, colormap=rcmap, *args, **kwargs):
+    def __init__(self, setpoint_x, setpoint_y, colormap, *args, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
         # Add instance variables
         self.__dict__['_hist'] = None
