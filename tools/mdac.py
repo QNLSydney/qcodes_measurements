@@ -140,7 +140,7 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
     range2 = abs(start2 - stop2)
     step2 = range2/num_points2
     trace_id = linear2d(voltage1, start1, stop1, num_points1, delay1 + range2/rate2,
-                        ramp2, start2, stop2, num_points2, delay2 + step2/rate2,
+                        ramp2, start2, stop2, num_points2, delay2,
                         *param_meas)
     
     if rampback:
