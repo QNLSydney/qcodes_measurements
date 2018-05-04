@@ -85,7 +85,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
             assert(isinstance(shape, int))
             
             # Create data array
-            data.append(np.full((num_points, shape), 0))
+            data.append(np.full((num_points, shape), 0.0))
             
             # And label our axes
             plot.left_axis.label = names
