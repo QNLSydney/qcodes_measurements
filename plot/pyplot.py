@@ -12,25 +12,14 @@ from ..plot import colors
 proc = mp.QtProcess()
 rpg = proc._import('pyqtgraph')
 rpg.setConfigOptions(antialias=True)
+rpg._setProxyOptions(deferGetattr=True)
 windows = []
-
-# Transfer color scales to remote process, truncating steps to 16 if necessary
-rcmaps = {}
-for color in colors.__all__:
-    data = getattr(colors, "_%s_data" % color)
-    step = ceil(len(data) / 16)
-    rcmap = rpg.ColorMap(pos=linspace(0.0, 1.0, 
-                         len(data[::step])), color=data[::step])
-    rcmaps[color] = rcmap
-
-# Set the default color scale to viridis
-rcmap = rcmaps["viridis"]
 
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
     def __init__(self, *args, **kwargs):
         self.__dict__['_items'] = []
         if '_base' in self.__class__.__dict__:
-            base = self.__class__.__dict__['_base']()
+            base = self.__class__.__dict__['_base'](*args, **kwargs)
             self.__dict__['_base_inst'] = base
             self.__dict__ = {**base.__dict__, **self.__dict__}
             
@@ -75,11 +64,17 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         return inst
 
     def wrapAdders(self, f):
-        def save(*args, **kwargs):
-            res = f(*args, **kwargs)
+        def save(item, *args, **kwargs):
+            res = f(item, *args, **kwargs)
             res = RPGWrappedBase.autoWrap(res)
             if res is not None and isinstance(res, mp.remoteproxy.ObjectProxy):
+                # Keep track of all objects that are added to a window, since
+                # we can't get them back from the remote later
                 self._items.append(res)
+            if res is not None and isinstance(res, RPGWrappedBase):
+                # If we are a managed object, notify that we were added so that items can keep track
+                # of which windows they are in.
+                res._notifyAdded(self)
             return res
         return save
 
@@ -108,6 +103,10 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
 
     def __repr__(self):
         return "<%s for %s >" % (self.__class__.__name__, super().__repr__())
+
+    def _notifyAdded(self, parent):
+        # Allow objects to keep track of which window they are in if they need to
+        pass
 
 class PlotWindow(RPGWrappedBase):
     _base = rpg.GraphicsLayoutWidget
@@ -152,7 +151,7 @@ class PlotAxis(RPGWrappedBase):
     @property
     def units(self):
         return self.labelUnits
-    @label.setter
+    @units.setter
     def units(self, units):
         self.setLabel(units=units)
 
@@ -216,7 +215,7 @@ class PlotData(RPGWrappedBase):
     def getPlot(setpoint_x, setpoint_y=None, *args, **kwargs):
         if setpoint_y is None:
             return PlotDataItem(setpoint_x, *args, **kwargs)
-        return ImageItem(setpoint_x, setpoint_y, *args, **kwargs)
+        return ImageItemWithHistogram(setpoint_x, setpoint_y, *args, **kwargs)
 
     def update(self, data, *args, **kwargs):
         """
@@ -227,12 +226,42 @@ class PlotData(RPGWrappedBase):
 class HistogramLUTItem(RPGWrappedBase):
     _base = rpg.HistogramLUTItem
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, allowAdd=False, **kwargs):
         super().__init__(*args, **kwargs)
+        self.allowAdd = allowAdd
 
     @property
     def axis(self):
         return RPGWrappedBase.autoWrap(super().__getattr__('axis'))
+
+    @property
+    def allowAdd(self):
+        return self.gradient.allowAdd
+    @allowAdd.setter
+    def allowAdd(self, val):
+        self.gradient.allowAdd = bool(val)
+
+class ColorMap(RPGWrappedBase):
+    _base = rpg.ColorMap
+
+    def __init__(self, name, *args, **kwargs):
+        self.__dict__['_name'] = name
+        super().__init__(*args, **kwargs)
+
+    @property
+    def name(self):
+        return self._name
+    
+# Transfer color scales to remote process, truncating steps to 16 if necessary
+rcmaps = {}
+for color in colors.__data__.keys():
+    data = colors.__data__[color]
+    step = ceil(len(data) / 16)
+    rcmap = ColorMap(name=color, 
+                     pos=linspace(0.0, 1.0, len(data[::step])), 
+                     color=data[::step])
+    rcmaps[color] = rcmap
+rcmap = rcmaps['viridis']
 
 class PlotDataItem(PlotData):
     _base = rpg.PlotDataItem
@@ -256,7 +285,7 @@ class PlotDataItem(PlotData):
             except AttributeError:
                 self.__dict__['setpoint_x'] = None
 
-    def update(data, *args, **kwargs):
+    def update(self, data, *args, **kwargs):
         self.setData(x=data, y=self.setpoint_x, *args, **kwargs)
 
 class ImageItem(PlotData):
@@ -282,7 +311,7 @@ class ImageItem(PlotData):
             # Otherwise try to figure it out
             image = self.image
             if image is None:
-                # There is no data here, let's just set some random scales
+                # There is no data here, let's just set some scaling to the identity
                 self.__dict__['setpoint_x'] = (0, 1)
                 self.__dict__['setpoint_y'] = (0, 1)
             else:
@@ -294,7 +323,7 @@ class ImageItem(PlotData):
                 x_offs, y_offs = offs.x(), offs.y()
 
                 # And then the scaling
-                x_scale, y_scale = im.sceneTransform().map(1.0, 1.0)
+                x_scale, y_scale = self.sceneTransform().map(1.0, 1.0)
                 x_scale, y_scale = x_scale - x_offs, y_scale - y_offs
 
                 # And then calculate the points
@@ -311,17 +340,31 @@ class ImageItem(PlotData):
         self.translate(self.setpoint_x[0], self.setpoint_y[0])
         self.scale(step_x, step_y)
 
-    def update(data, *args, **kwargs):
+    def update(self, data, *args, **kwargs):
         self.setImage(data, autoLevels=True)
 
 class ImageItemWithHistogram(ImageItem):
-    def __init__(self, setpoint_x, setpoint_y, colormap, *args, **kwargs):
+    def __init__(self, setpoint_x, setpoint_y, colormap=rcmap, *args, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
+        # Add instance variables
+        self.__dict__['_hist'] = None
+        self.__dict__['_cmap'] = None
+        self.__dict__['_parent'] = None
 
         # Add the histogram
-        hist = HistogramLUTItem()
-        hist.setImageItem(self._base_inst)
-        self.__dict__['hist'] = hist
+        self.hist = HistogramLUTItem()
+        self.hist.setImageItem(self._base_inst)
+        self.hist.colormap = colormap
+        self.hist.autoHistogramRange() # enable autoscaling
+
+    def _notifyAdded(self, parent):
+        # We need to keep track of out parent window, since histograms exist
+        # outside of the ImageItem view
+        # TODO: Should this be wrapped up into a new gridlayout? That would allow us
+        # to not keep track of parent items?
+        self._parent = parent
+        if self._hist is not None:
+            parent.addItem(self._hist)
 
     @property
     def histogram(self):
@@ -329,5 +372,11 @@ class ImageItemWithHistogram(ImageItem):
 
     @property
     def colormap(self):
-        #TODO: This is where I LEFT OFF
-        pass
+        return self._cmap._getValue()
+
+    @colormap.setter
+    def colormap(self, cmap):
+        if not isinstance(cmap, ColorMap):
+            raise TypeError("cmap must be a color map")
+        self.histogram.gradient.setColorMap(cmap._base_inst)
+        self._cmap = cmap

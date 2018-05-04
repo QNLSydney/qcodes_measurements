@@ -56,10 +56,10 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
         meas = Measurement()
         # register the first independent parameter
         meas.register_parameter(param_set)
-        output = []
         param_set.post_delay = delay
         
         # Calculate setpoints, and keep track of data (data_set has an inconvenient format)
+        output = []
         set_points = np.linspace(start, stop, num_points)
         data = np.full((len(param_meas), num_points), np.nan)
         plots = []
@@ -127,6 +127,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     output = []
     data = np.full((len(param_meas), num_points1, num_points2), np.nan)
     plots = []
+    
     for p, parameter in enumerate(param_meas):
         meas.register_parameter(parameter, setpoints=(param_set1, param_set2))
         output.append([parameter, None])
@@ -135,16 +136,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         plot = win.addPlot(title="%s (%s) v.<br>%s (%s)" % 
                                (param_set1.full_name, param_set1.label,
                                 param_set2.full_name, param_set2.label))
-        implot = pyplot.PlotData.ImageItem(set_points1, set_points2)
-        plot.addItem(implot)
-        
-        # Add histogram
-        hist = pyplot.rpg.HistogramLUTItem()
-        hist.setImageItem(implot)
-        hist.axis.setLabel(parameter.label, parameter.unit)
-        gradient = hist.gradient
-        gradient.setColorMap(pyplot.rcmap)
-        win.addItem(hist)
+        plotdata = pyplot.PlotData.getPlot(set_points1, set_points2)
+        plot.addItem(plotdata)
         
         # Label Axes
         botAxis = plot.getAxis('bottom')
@@ -152,10 +145,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         botAxis.setLabel(param_set1.label, param_set1.unit)
         leftAxis.setLabel(param_set2.label, param_set2.unit)
         
-        plots.append({
-                'plot': plot,
-                'img': implot,
-                'hist': hist})
+        plots.append(plot)
 
     with meas.run() as datasaver:
         for i, set_point1 in enumerate(set_points1):
@@ -180,18 +170,11 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                                    np.max((np.nanmax(fdata[:i,:]), np.nanmax(fdata[i,:j+1]))))
                     
                     # Retrieve plot items
-                    implot = plots[p]['img']
-                    hist = plots[p]['hist']
+                    plots[p].traces[0].update(data[p,:])
                     
-                    # Update plot
-                    implot.setImage(fdata)
-                    hist.setLevels(*z_range)
-                    
-                    # Update title if first point
+                    # Update title to include sweep id if first point
                     if i == 0 and j == 0:
-                        plot = plots[p]['plot']
-                        plot.setTitle(plot.titleLabel.text + 
-                                      " (id: %d)" % datasaver.run_id)
+                        plots[p].plot_title += " (id: %d)" % datasaver.run_id
 
                 datasaver.add_result((param_set1, set_point1),
                                      (param_set2, set_point2),
