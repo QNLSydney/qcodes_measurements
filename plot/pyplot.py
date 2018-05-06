@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 
 from math import ceil
+import warnings
 
 import pyqtgraph as pg
 import pyqtgraph.multiprocess as mp
 
-from numpy import linspace, min, max
+from numpy import linspace, min, max, ndarray
+
+from qcodes.instrument.parameter import _BaseParameter
 
 from ..plot import colors
 
 proc = mp.QtProcess()
 rpg = proc._import('pyqtgraph')
 rpg.setConfigOptions(antialias=True)
-#rpg._setProxyOptions(deferGetattr=True)
 windows = []
 
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
@@ -23,6 +25,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             base = self.__class__.__dict__['_base'](*args, **kwargs)
             self.__dict__['_base_inst'] = base
             self.__dict__ = {**base.__dict__, **self.__dict__}
+        self.append_no_proxy_types(ndarray)
             
     def __wrap__(self):
         # We still want to keep track of new items in wrapped objects
@@ -50,7 +53,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         return base_inst
 
     @staticmethod
-    def autoWrap(inst):
+    def autowrap(inst):
         # Figure out the types that we know how to autowrap
         subclass_types = {}
         for t in RPGWrappedBase.__subclasses__():
@@ -70,7 +73,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         # Otherwise, just return the bare instance
         return inst
 
-    def wrapAdders(self, f):
+    def wrap_adders(self, f):
         def save(*args, **kwargs):
             res = f(*args, **kwargs)
             # If the adder doesn't return the newly added item, we can assume the added item
@@ -81,23 +84,23 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
                 else:
                     return
             # Try to translate to one of the friendly names
-            res = RPGWrappedBase.autoWrap(res)
+            res = RPGWrappedBase.autowrap(res)
             # Add the result to the items list if returned
-            if res is not None and isinstance(res, mp.remoteproxy.ObjectProxy):
+            if isinstance(res, mp.remoteproxy.ObjectProxy):
                 # Keep track of all objects that are added to a window, since
                 # we can't get them back from the remote later
                 self._items.append(res)
-            if res is not None and isinstance(res, RPGWrappedBase):
+            if isinstance(res, RPGWrappedBase):
                 # If we are a managed object, notify that we were added so that items can keep track
                 # of which windows they are in.
-                res._notifyAdded(self)
+                res._notify_added(self)
             return res
         return save
 
-    def wrapGetters(self, f):
+    def wrap_getters(self, f):
         def wrapper(*args, **kwargs):
             res = f(*args, **kwargs)
-            return RPGWrappedBase.autoWrap(res)
+            return RPGWrappedBase.autowrap(res)
         return wrapper
 
     def __setattr__(self, name, value):
@@ -109,26 +112,29 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             super().__setattr__(name, value)
 
     def __getattr__(self, name):
-        # if name in self.__class__.__dict__:
-        #     attr = self.__class__.__dict__[name]
-        # elif name in self.__dict__:
-        #     attr = self.__dict__[name]
-        # else:
         attr = super().__getattr__(name)
             
         if name.startswith("add") and callable(attr):
-            return self.wrapAdders(attr)
+            return self.wrap_adders(attr)
         elif name.startswith("get") and callable(attr):
-            return self.wrapGetters(attr)
+            return self.wrap_getters(attr)
 
         return attr
 
     def __repr__(self):
         return "<%s for %s >" % (self.__class__.__name__, super().__repr__())
 
-    def _notifyAdded(self, parent):
+    def _notify_added(self, parent):
         # Allow objects to keep track of which window they are in if they need to
         self._parent = parent
+
+
+    def append_no_proxy_types(self, new_type):
+        if not isinstance(new_type, type):
+            raise TypeError('New no proxy type must be a type')
+        noProxyTypes = self._getProxyOption('noProxyTypes')
+        noProxyTypes.append(new_type)
+        self._setProxyOptions(noProxyTypes=noProxyTypes[:])
 
     @property
     def items(self):
@@ -198,28 +204,63 @@ class PlotItem(RPGWrappedBase):
         # Keep track of traces that are plotted
         self.__dict__['_traces'] = []
 
-    def wrapAdders(self, f):
+    def plot(self, setpoint_x, setpoint_y=None, data=None, **kwargs):
+        """
+        Add some plotdata to this plot
+        """
+        # Create a plot, 1d if we have a single setpoint, 2d if we have 2 setpoints
+        if setpoint_y is None:
+            plotdata = PlotDataItem(setpoint_x, **kwargs)
+        else:
+            plotdata = ImageItemWithHistogram(setpoint_x, setpoint_y, **kwargs)
+        self.addItem(plotdata)
+
+        # if there is data, plot it
+        if data is not None:
+            plotdata.update(data)
+
+        return plotdata
+
+    def wrap_adders(self, f):
         # Wrap to save into items first
-        f = super().wrapAdders(f)
+        f = super().wrap_adders(f)
         def save(*args, **kwargs):
             res = f(*args, **kwargs)
-            # In addition to this, if we return PlotData, save it to the list of traces
-            # in the plot as well
+            # If we add a PlotData object, add it to traces too
             if isinstance(res, PlotData):
                 self._traces.append(res)
             return res
         return save
 
-    def plot(self, *args, **kwargs):
-        plotitem = PlotDataItem.wrap(super().__getattr__('plot')(*args, **kwargs))
-        self._items.append(plotitem)
-        self._traces.append(plotitem)
-        return plotitem
+    def update_axes(self, param_x, param_y,
+                    param_x_setpoint=False, param_y_setpoint=False):
+        """
+        Update axis labels, using param_x, param_y to pull labels
+        If left or bottom axis is from an ArrayParameter, set param_x_setpoint
+        or param_y_setpoint to true
+        """
+        print(param_x, param_y)
+        if not isinstance(param_x, _BaseParameter):
+            raise TypeError("param_x must be a qcodes parameter")
+        if not isinstance(param_y, _BaseParameter):
+            raise TypeError("param_y must be a qcodes parameter")
+
+        if param_x_setpoint:
+            self.bot_axis.label = param_x.setpoint_labels[0]
+            self.bot_axis.units = param_x.setpoint_units[0]
+        else:
+            self.bot_axis.label = param_x.label
+            self.bot_axis.units = param_x.unit
+        if param_y_setpoint:
+            self.left_axis.label = param_y.setpoint_labels[0]
+            self.left_axis.units = param_y.setpoint_units[0]
+        else:
+            self.left_axis.label = param_y.label
+            self.left_axis.units = param_y.unit
 
     @property
     def plot_title(self):
         return self.titleLabel.text
-
     @plot_title.setter
     def plot_title(self, title):
         self.setTitle(title)
@@ -236,21 +277,6 @@ class PlotItem(RPGWrappedBase):
     def traces(self):
         return self._traces[:]
 
-class PlotData(RPGWrappedBase):
-    pass
-
-    @staticmethod
-    def getPlot(setpoint_x, setpoint_y=None, *args, **kwargs):
-        if setpoint_y is None:
-            return PlotDataItem(setpoint_x, *args, **kwargs)
-        return ImageItemWithHistogram(setpoint_x, setpoint_y, *args, **kwargs)
-
-    def update(self, data, *args, **kwargs):
-        """
-        Define a common way of updating plots for 1D and 2D plots
-        """
-        raise NotImplementedError("Can't update this")
-
 class HistogramLUTItem(RPGWrappedBase):
     _base = rpg.HistogramLUTItem
 
@@ -261,7 +287,7 @@ class HistogramLUTItem(RPGWrappedBase):
 
     @property
     def axis(self):
-        return RPGWrappedBase.autoWrap(super().__getattr__('axis'))
+        return RPGWrappedBase.autowrap(super().__getattr__('axis'))
 
     @property
     def allowAdd(self):
@@ -284,25 +310,67 @@ class HistogramLUTItem(RPGWrappedBase):
 
 class ColorMap(RPGWrappedBase):
     _base = rpg.ColorMap
+    _all_colors = {}
+    _remote_list = rpg.graphicsItems.GradientEditorItem.__getattr__('Gradients', 
+                                                                    _returnType="proxy")
 
-    def __init__(self, name, *args, **kwargs):
+    def __init__(self, name, pos, color, *args, **kwargs):
         self.__dict__['_name'] = name
-        super().__init__(*args, **kwargs)
+        super().__init__(pos, color, *args, **kwargs)
+
+        # Keep track of all color maps, and add them to the list of available colormaps
+        ColorMap._all_colors[name] = self
+        # And add each of our colors to the new list
+        ColorMap._remote_list[name] = {
+            'ticks': list(zip(pos, (tuple(int(y*255) for y in x) + (255,) for x in color))),
+            'mode': 'rgb'
+        }
+
+
+    @classmethod
+    def get_color_map(cls, name):
+        return cls._all_colors[name]
+    @classmethod
+    def color_maps(cls):
+        return cls._all_colors
 
     @property
     def name(self):
         return self._name
     
 ## Transfer color scales to remote process, truncating steps to 16 if necessary
-rcmaps = {}
+maps = ColorMap._remote_list._getValue()
+ColorMap._remote_list.clear()
+# for name, vals in maps.items():
+#     data = vals['ticks']
+#     mode = vals['mode']
+#     rcmap = ColorMap(name=name,
+#                      pos=tuple(x[0] for x in data),
+#                      color=tuple(x[1] for x in data))
 for color in colors.__data__.keys():
    data = colors.__data__[color]
    step = ceil(len(data) / 16)
    rcmap = ColorMap(name=color, 
                     pos=linspace(0.0, 1.0, len(data[::step])), 
                     color=data[::step])
-   rcmaps[color] = rcmap
-rcmap = rcmaps['viridis']
+rcmap = ColorMap.get_color_map('viridis')
+
+class PlotData(RPGWrappedBase):
+    """
+    Base class for trace-like objects (1d or 2d plots)
+    """
+    def update(self, data, *args, **kwargs):
+        """
+        Define a common way of updating plots for 1D and 2D plots
+        """
+        raise NotImplementedError("Can't update this")
+
+    @property
+    def data(self):
+        """
+        Return the data underlying this plot
+        """
+        raise NotImplementedError("This should be implemented by the actual plot item")
 
 class PlotDataItem(PlotData):
     _base = rpg.PlotDataItem
@@ -334,6 +402,13 @@ class PlotDataItem(PlotData):
             self.set_data = self.setData
             self.set_data._setProxyOptions(callSync='off')
         self.set_data(x=self.setpoint_x, y=data, *args, **kwargs)
+
+    @property
+    def data(self):
+        """
+        Return the data underlying this trace
+        """
+        return (self.xData, self.yData)
 
 class ImageItem(PlotData):
     _base = rpg.ImageItem
@@ -395,6 +470,13 @@ class ImageItem(PlotData):
             self.set_image._setProxyOptions(callSync='off')
         self.set_image(data, autoLevels=True)
 
+    @property
+    def data(self):
+        """
+        Return the data underlying this trace
+        """
+        return self.image
+
 class ImageItemWithHistogram(ImageItem):
     _base = rpg.ImageItem
 
@@ -410,12 +492,16 @@ class ImageItemWithHistogram(ImageItem):
         self._hist.colormap = colormap
         self._hist.autoHistogramRange() # enable autoscaling
 
-    def _notifyAdded(self, parent):
-        # We need to keep track of out parent window, since histograms exist
-        # outside of the ImageItem view
-        # TODO: Should this be wrapped up into a new gridlayout? That would allow us
-        # to not keep track of parent items?
-        super()._notifyAdded(parent)
+    def _notify_added(self, parent):
+        """
+        We need to keep track of out parent window, since histograms exist
+        outside of the ImageItem view
+        Each time we are added to a window, add the histogram item as well
+
+        TODO: Should this be wrapped up into a new gridlayout? That would allow us
+        to not keep track of parent items?
+        """
+        super()._notify_added(parent)
         if self._hist is not None:
             parent._parent.addItem(self._hist)
 
@@ -427,6 +513,15 @@ class ImageItemWithHistogram(ImageItem):
             self.set_levels = self.histogram.setLevels
             self.set_levels._setProxyOptions(callSync='off')
         self.set_levels(*z_range)
+
+    def update_histogram_axis(self, param_z):
+        """
+        Update histogram axis labels
+        """
+        if not isinstance(param_z, _BaseParameter):
+            raise TypeError("param_z must be a qcodes parameter")
+        self.histogram.axis.label = param_z.label
+        self.histogram.axis.units = param_z.unit
 
     @property
     def histogram(self):
