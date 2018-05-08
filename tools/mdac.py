@@ -43,8 +43,12 @@ def setup(ohmics, gates, shorts):
     shorts.gnd('close')
     shorts.dac_output('open')
     shorts.smc('close')
-    
-def ramp(mdac_channel, to):
+
+def ensure_channel(mdac_channel):
+    """
+    Ensure that the parameter refers to the base mdac channel,
+    rather than a parameter
+    """
     if isinstance(mdac_channel, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
         channel = mdac_channel._instrument
     elif isinstance(mdac_channel, MDACChannel):
@@ -53,7 +57,10 @@ def ramp(mdac_channel, to):
         log.exception("Can't do an MDAC 1d sweep on something that isnt an"
                       " MDAC channel")
         raise TypeError("Trying to ramp a not MDAC channel")
+    return channel
     
+def ramp(mdac_channel, to):
+    mdac_channel = ensure_channel(mdac_channel)
     mdac_channel.ramp(to)
     while not np.isclose(to, mdac_channel.voltage(), 1e-3):
         time.sleep(0.01)
@@ -63,21 +70,14 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
     """
     Pull out the ramp parameter from the mdac and do a 1d sweep
     """
-    if isinstance(mdac_channel, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
-        channel = mdac_channel._instrument
-    elif isinstance(mdac_channel, MDACChannel):
-        channel = mdac_channel
-    else:
-        log.exception("Channel is not an mdac channel")
-        raise TypeError("Trying to ramp a not MDAC channel")
-
+    mdac_channel = ensure_channel(mdac_channel)
     # Set labels correctly
     old_label = mdac_channel.ramp.label
     mdac_channel.ramp.label = mdac_channel.voltage.label
 
     try:
         ramp(mdac_channel, start)
-        trace_id = linear1d(voltage, start, stop, num_points, delay, *param_meas)
+        trace_id = linear1d(mdac_channel.voltage, start, stop, num_points, delay, *param_meas)
     finally:
         # Restore label
         mdac_channel.ramp.label = old_label
@@ -93,21 +93,8 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              *param_meas, rampback=False):
     
     # Pull out MDAC chanels
-    if isinstance(mdac_channel1, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
-        channel1 = mdac_channel1._instrument
-    elif isinstance(mdac_channel, MDACChannel):
-        channel1 = mdac_channel1
-    else:
-        log.exception("Channel 1 is not an MDAC channel")
-        raise TypeError("Channel 1 is not an MDAC channel")
-        
-    if isinstance(mdac_channel1, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
-        channel2 = mdac_channel2._instrument
-    elif isinstance(mdac_channel, MDACChannel):
-        channel2 = mdac_channel2
-    else:
-        log.exception("Channel 2 is not an MDAC channel")
-        raise TypeError("Channel 2 is not an MDAC channel")
+    mdac_channel1 = ensure_channel(mdac_channel1)
+    mdac_channel2 = ensure_channel(mdac_channel2)
 
     # Set labels correctly
     old_label = (mdac_channel1.ramp.label, mdac_channel2.ramp.label)
@@ -119,8 +106,8 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
         ramp2(mdac_channel2, start2)
         range2 = abs(start2 - stop2)
         step2 = range2/num_points2
-        trace_id = linear2d(voltage1, start1, stop1, num_points1, delay1 + range2/rate2,
-                            ramp2, start2, stop2, num_points2, delay2,
+        trace_id = linear2d(mdac_channel1.voltage, start1, stop1, num_points1, delay1 + range2/rate2,
+                            mdac_channel2.ramp, start2, stop2, num_points2, delay2,
                             *param_meas)
     finally:
         # Restore labels
