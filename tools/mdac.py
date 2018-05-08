@@ -45,21 +45,17 @@ def setup(ohmics, gates, shorts):
     shorts.smc('close')
     
 def ramp(mdac_channel, to):
-    if isinstance(mdac_channel, Parameter) and mdac_channel.name == "voltage":
-        voltage = mdac_channel
-        ramp = mdac_channel._instrument.ramp
-    elif isinstance(mdac_channel, Parameter) and mdac_channel.name == "ramp":
-        voltage = mdac_channel._instrument.voltage
-        ramp = mdac_channel
+    if isinstance(mdac_channel, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
+        channel = mdac_channel._instrument
     elif isinstance(mdac_channel, MDACChannel):
-        voltage = mdac_channel.voltage
-        ramp = mdac_channel.ramp
+        channel = mdac_channel
     else:
-        log.exception("Can't ramp on something that isnt an MDAC channel")
+        log.exception("Can't do an MDAC 1d sweep on something that isnt an"
+                      " MDAC channel")
         raise TypeError("Trying to ramp a not MDAC channel")
     
-    ramp(to)
-    while not np.isclose(to, voltage(), 1e-3):
+    mdac_channel.ramp(to)
+    while not np.isclose(to, mdac_channel.voltage(), 1e-3):
         time.sleep(0.01)
 
 def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas, 
@@ -67,29 +63,28 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
     """
     Pull out the ramp parameter from the mdac and do a 1d sweep
     """
-    if isinstance(mdac_channel, Parameter) and mdac_channel.name == "voltage":
-        voltage = mdac_channel
-        ramp = mdac_channel._instrument.ramp
-    elif isinstance(mdac_channel, Parameter) and mdac_channel.name == "ramp":
-        voltage = mdac_channel._instrument.voltage
-        ramp = mdac_channel
+    if isinstance(mdac_channel, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
+        channel = mdac_channel._instrument
     elif isinstance(mdac_channel, MDACChannel):
-        voltage = mdac_channel.voltage
-        ramp = mdac_channel.ramp
+        channel = mdac_channel
     else:
-        log.exception("Can't do an MDAC 1d sweep on something that isnt an"
-                      " MDAC channel")
+        log.exception("Channel is not an mdac channel")
         raise TypeError("Trying to ramp a not MDAC channel")
+
+    # Set labels correctly
+    old_label = mdac_channel.ramp.label
+    mdac_channel.ramp.label = mdac_channel.voltage.label
+
+    try:
+        ramp(mdac_channel, start)
+        trace_id = linear1d(voltage, start, stop, num_points, delay, *param_meas)
+    finally:
+        # Restore label
+        mdac_channel.ramp.label = old_label
     
-    ramp(start)
-    while not np.isclose(start, voltage(), 1e-3):
-        time.sleep(0.01)
-    trace_id = linear1d(voltage, start, stop, num_points, delay, *param_meas)
-    
+    # Rampback if requested
     if rampback:
-        ramp(start)
-        while not np.isclose(start, voltage(), 1e-3):
-            time.sleep(0.01)
+        ramp(mdac_channel, start)
     
     return trace_id
 
@@ -97,59 +92,45 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              mdac_channel2, start2, stop2, num_points2, delay2,
              *param_meas, rampback=False):
     
-    if isinstance(mdac_channel1, Parameter) and mdac_channel1.name == "voltage":
-        voltage1 = mdac_channel1
-        ramp1 = mdac_channel1._instrument.ramp
-        rate1 = mdac_channel1._instrument.rate()
-    elif isinstance(mdac_channel1, Parameter) and mdac_channel1.name == "ramp":
-        voltage1 = mdac_channel1._instrument.voltage
-        ramp1 = mdac_channel1
-        rate1 = mdac_channel1._instrument.rate()
-    elif isinstance(mdac_channel1, MDACChannel):
-        voltage1 = mdac_channel1.voltage
-        ramp1 = mdac_channel1.ramp
-        rate1 = mdac_channel1.rate()
+    # Pull out MDAC chanels
+    if isinstance(mdac_channel1, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
+        channel1 = mdac_channel1._instrument
+    elif isinstance(mdac_channel, MDACChannel):
+        channel1 = mdac_channel1
     else:
-        log.exception("Can't do an MDAC 2d sweep on something that isnt an"
-                      " MDAC channel")
-        raise TypeError("Trying to ramp a not MDAC channel")
+        log.exception("Channel 1 is not an MDAC channel")
+        raise TypeError("Channel 1 is not an MDAC channel")
         
-    if isinstance(mdac_channel2, Parameter) and mdac_channel2.name == "voltage":
-        voltage2 = mdac_channel2
-        ramp2 = mdac_channel2._instrument.ramp
-        rate2 = mdac_channel2._instrument.rate()
-    elif isinstance(mdac_channel2, Parameter) and mdac_channel2.name == "ramp":
-        voltage2 = mdac_channel2._instrument.voltage
-        ramp2 = mdac_channel2
-        rate2 = mdac_channel2._instrument.rate()
-    elif isinstance(mdac_channel2, MDACChannel):
-        voltage2 = mdac_channel2.voltage
-        ramp2 = mdac_channel2.ramp
-        rate2 = mdac_channel2.rate()
+    if isinstance(mdac_channel1, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
+        channel2 = mdac_channel2._instrument
+    elif isinstance(mdac_channel, MDACChannel):
+        channel2 = mdac_channel2
     else:
-        log.exception("Can't do an MDAC 2d sweep on something that isnt an"
-                      " MDAC channel")
-        raise TypeError("Trying to ramp a not MDAC channel")
+        log.exception("Channel 2 is not an MDAC channel")
+        raise TypeError("Channel 2 is not an MDAC channel")
 
-    ramp1(start1)
-    ramp2(start2)
-    while not np.isclose(start1, voltage1(), 1e-3):
-        time.sleep(0.01)
-    while not np.isclose(start2, voltage2(), 1e-3):
-        time.sleep(0.01)
-    range2 = abs(start2 - stop2)
-    step2 = range2/num_points2
-    trace_id = linear2d(voltage1, start1, stop1, num_points1, delay1 + range2/rate2,
-                        ramp2, start2, stop2, num_points2, delay2,
-                        *param_meas)
+    # Set labels correctly
+    old_label = (mdac_channel1.ramp.label, mdac_channel2.ramp.label)
+    mdac_channel1.ramp.label = mdac_channel1.voltage.label
+    mdac_channel2.ramp.label = mdac_channel2.voltage.label
+
+    try:
+        ramp1(mdac_channel1, start1)
+        ramp2(mdac_channel2, start2)
+        range2 = abs(start2 - stop2)
+        step2 = range2/num_points2
+        trace_id = linear2d(voltage1, start1, stop1, num_points1, delay1 + range2/rate2,
+                            ramp2, start2, stop2, num_points2, delay2,
+                            *param_meas)
+    finally:
+        # Restore labels
+        mdac_channel1.ramp.label = old_label[0]
+        mdac_channel2.ramp.label = old_label[1]
     
+    # Rampback if requested
     if rampback:
-        ramp1(start1)
-        ramp2(start2)
-        while not np.isclose(start1, voltage1(), 1e-3):
-            time.sleep(0.01)
-        while not np.isclose(start2, voltage2(), 1e-3):
-            time.sleep(0.01)
+        ramp1(mdac_channel1, start1)
+        ramp2(mdac_channel2, start2)
     
     return trace_id
 
