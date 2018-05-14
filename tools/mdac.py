@@ -3,15 +3,16 @@ import os
 import json
 import numpy as np
 import logging as log
+
 from qcodes.instrument.parameter import Parameter
 from qcodes.dataset.measurements import Measurement
 from .measure import _flush_buffers, linear1d, linear2d
 from qcodes.dataset.plotting import plot_by_id
 from qcodes.dataset.experiment_container import load_by_id
+from qcodes.dataset.data_export import get_data_by_id, get_shaped_data_by_runid
 from qcodes.instrument_drivers.qnl.MDAC import MDACChannel
 
-import matplotlib
-import matplotlib.pyplot as plt
+from ..plot import pyplot
 
 def setup(ohmics, gates, shorts):
     """
@@ -60,13 +61,15 @@ def ensure_channel(mdac_channel):
     return channel
     
 def ramp(mdac_channel, to):
+    if (to > 0 or to < -1.5):
+        raise ValueError("{} is pretty big. Are you sure?".format(to))
     mdac_channel = ensure_channel(mdac_channel)
     mdac_channel.ramp(to)
     while not np.isclose(to, mdac_channel.voltage(), 1e-3):
         time.sleep(0.01)
 
 def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas, 
-                  rampback=False):
+                  rampback=False, **kwargs):
     """
     Pull out the ramp parameter from the mdac and do a 1d sweep
     """
@@ -77,10 +80,15 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
 
     try:
         ramp(mdac_channel, start)
-        trace_id = linear1d(mdac_channel.voltage, start, stop, num_points, delay, *param_meas)
+        trace_id = linear1d(mdac_channel.voltage, start, stop, num_points, delay, *param_meas, **kwargs)
     finally:
         # Restore label
         mdac_channel.ramp.label = old_label
+
+    # Add gate labels
+    run_id, win = trace_id
+    add_gate_label(win, run_id)
+    save_figure(win, run_id)
     
     # Rampback if requested
     if rampback:
@@ -90,7 +98,7 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
 
 def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              mdac_channel2, start2, stop2, num_points2, delay2,
-             *param_meas, rampback=False):
+             *param_meas, rampback=False, **kwargs):
     
     # Pull out MDAC chanels
     mdac_channel1 = ensure_channel(mdac_channel1)
@@ -102,58 +110,136 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
     mdac_channel2.ramp.label = mdac_channel2.voltage.label
 
     try:
-        ramp1(mdac_channel1, start1)
-        ramp2(mdac_channel2, start2)
+        ramp(mdac_channel1, start1)
+        ramp(mdac_channel2, start2)
         range2 = abs(start2 - stop2)
-        step2 = range2/num_points2
-        trace_id = linear2d(mdac_channel1.voltage, start1, stop1, num_points1, delay1 + range2/rate2,
+        delay1 += range2/mdac_channel2.rate()
+        trace_id = linear2d(mdac_channel1.voltage, start1, stop1, num_points1, delay1,
                             mdac_channel2.ramp, start2, stop2, num_points2, delay2,
-                            *param_meas)
+                            *param_meas, **kwargs)
     finally:
         # Restore labels
         mdac_channel1.ramp.label = old_label[0]
         mdac_channel2.ramp.label = old_label[1]
+
+    # Add gate labels
+    run_id, win = trace_id
+    add_gate_label(win, run_id)
+    save_figure(win, run_id)
     
     # Rampback if requested
     if rampback:
-        ramp1(mdac_channel1, start1)
-        ramp2(mdac_channel2, start2)
+        ramp(mdac_channel1, start1)
+        ramp(mdac_channel2, start2)
     
     return trace_id
 
-
-def plot_Wtext(dataid, mdac, fontsize=10, textcolor='black', textweight='normal', fig_folder=None):
-    """
-    """
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax, cax = plot_by_id(dataid, ax)
-    fig.suptitle('ID: {}'.format(dataid))
-    
-    ds = load_by_id(dataid)
+def add_gate_label(plots, id):
+    ds = load_by_id(id)
     json_meta = json.loads(ds.get_metadata('snapshot'))
     sub_dict = json_meta['station']['instruments']['mdac']['submodules']
-    
-    y_coord = 0.85
-    
-    for ch in range(1, len(mdac.channels)+1):
+
+    label_txt = []
+    for ch in range(1, 65):
         ch_str = 'ch{num:02d}'.format(num=ch)
+        label = sub_dict[ch_str]['parameters']['voltage']['label']
         v_value = sub_dict[ch_str]['parameters']['voltage']['value']
         if abs(v_value) > 1e-6:
-            label = sub_dict[ch_str]['parameters']['voltage']['label']
-            fig.text(0.77, y_coord,'{}: {:+.4f}'.format(label, v_value ),
-                     fontsize=fontsize, color=textcolor, weight=textweight,
-                     transform=plt.gcf().transFigure)
-            y_coord -= 0.05
-    fig.subplots_adjust(right=0.75)
-    
+            label_txt.append('{}: {:+.4f}'.format(label, v_value))
+
+    if isinstance(plots, pyplot.PlotWindow):
+        plots = plots.items
+    elif isinstance(plots, pyplot.PlotData):
+        plots = (plots,)
+
+    for item in plots:
+        if isinstance(item, pyplot.PlotItem):
+            txt = item.textbox('<br>'.join(label_txt))
+            txt.anchor('br')
+            txt.offset = (-10, -50)
+        else:
+            print("Item is a {}".format(type(item)))
+
+def save_figure(plot, id, fig_folder=None):
     if fig_folder is None:
         fig_folder = os.path.join(os.getcwd(), 'figures')
 
     if not os.path.exists(fig_folder):
         os.makedirs(fig_folder)
 
-    fig.savefig(os.path.join(fig_folder, '{}.png'.format(dataid)))
+    path = os.path.join(fig_folder, '{}.png'.format(id))
+    print("Saving to: {}".format(path))
+    plot.export(path)
+    time.sleep(1)
+
+def plot_Wtext_by_run(exp, kt, save_fig=False, fig_folder=None):
+    ds = exp.data_set(kt)
+    return plot_Wtext(ds.run_id, save_fig, fig_folder)
+
+def plot_Wtext(id, save_fig=False, fig_folder=None):
+    """
+    """
+    win = pyplot.PlotWindow(title='ID: {}'.format(id))
+    data = get_shaped_data_by_runid(id)
+
+    for data_num, plot_data in enumerate(data):
+        plot = win.addPlot()
+
+        if len(plot_data) == 2:
+            plot.plot_title = "{} (id: {})".format(plot_data[0]['label'], id)
+            setpoint_x = plot_data[0]['data']
+            data = plot_data[1]['data']
+            if np.all(np.isnan(data)):
+                continue
+            plot.plot(setpoint_x=setpoint_x, data=data, pen='r')
+            plot.left_axis.label=plot_data[1]['label']
+            plot.left_axis.units=plot_data[1]['unit']
+            plot.bot_axis.label=plot_data[0]['label']
+            plot.bot_axis.units=plot_data[0]['unit']
+        elif len(plot_data) == 3:
+            plot.plot_title = "{} v {} (id: {})".format(plot_data[0]['label'],
+                                                        plot_data[1]['label'],
+                                                        id)
+            setpoint_x = plot_data[0]['data']
+            setpoint_y = plot_data[1]['data']
+            data = plot_data[2]['data']
+            if np.all(np.isnan(data)):
+                continue
+            data = np.nan_to_num(data).T
+
+            implot = plot.plot(setpoint_x=setpoint_x, setpoint_y=setpoint_y, data=data)
+
+            plot.left_axis.label=plot_data[1]['label']
+            plot.left_axis.units=plot_data[1]['unit']
+            plot.bot_axis.label=plot_data[0]['label']
+            plot.bot_axis.units=plot_data[0]['unit']
+            implot.histogram.label=plot_data[2]['label']
+            implot.histogram.units=plot_data[2]['unit'] 
+        else:
+            raise ValueError("Invalid number of datas")
+
+    add_gate_label(win, id)
+
+    if save_fig:
+        save_figure(win, id, fig_folder)
+        
+    return win
+
+def append_by_id(win, id):
+    data = get_shaped_data_by_runid(id)
+    
+    if len(data) != 1:
+        raise ValueError("Can only append a single parameter")
+    if len(data[0]) != 2:
+        raise ValueError("Currently only works on scatter plots")
+    setpoint_x = data[0][0]['data']
+    data = data[0][1]['data']
+    
+    plot = win.items[0]
+    plot.plot(setpoint_x=setpoint_x, data=data, pen='r')
+
+    win.win_title += ", {}".format(id)
+    plot.plot_title += " (id: {})".format(id)
 
 def change_filter_all(mdac, filter):
     """

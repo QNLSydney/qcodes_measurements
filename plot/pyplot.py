@@ -2,6 +2,7 @@
 
 from math import ceil
 import warnings
+import re
 
 import pyqtgraph as pg
 import pyqtgraph.multiprocess as mp
@@ -10,13 +11,26 @@ from numpy import linspace, min, max, ndarray
 
 from qcodes.instrument.parameter import _BaseParameter
 
-from ..plot import colors
+from ..plot import ChildProcessImportError, colors
 
-proc = mp.QtProcess()
-rpg = proc._import('pyqtgraph')
-rpg.setConfigOptions(antialias=True)
-windows = []
-
+if len(mp.QtProcess.handlers) == 0:
+    proc = mp.QtProcess()
+    rpg = proc._import('qcodes_measurements.plot.rpyplot')
+else:
+    proc = next(iter(mp.QtProcess.handlers.values()))
+    # Check whether it is closed
+    if isinstance(proc, mp.QtProcess):
+        try:
+            rpg = proc._import('qcodes_measurements.plot.rpyplot')
+        except mp.ClosedError:
+            mp.QtProcess.handlers.clear()
+            proc = mp.QtProcess()
+            rpg = proc._import('qcodes_measurements.plot.rpyplot')
+            rpg.setConfigOptions(antialias=True)
+    else:
+        print(type(proc))
+        raise ChildProcessImportError("Importing pyplot from child process")
+    
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
     def __init__(self, *args, **kwargs):
         self.__dict__['_items'] = []
@@ -104,7 +118,10 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         return wrapper
 
     def __setattr__(self, name, value):
-        if name in self.__class__.__dict__ or name in self.__dict__:
+        for cls in self.__class__.__mro__:
+            if name in cls.__dict__:
+                return object.__setattr__(self, name, value)
+        if name in self.__dict__:
             object.__setattr__(self, name, value)
         elif name == "__dict__":
             object.__setattr__(self, name, value)
@@ -140,11 +157,11 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
     def items(self):
         return self._items[:]
 
-class PlotWindow(RPGWrappedBase):
+class BasePlotWindow(RPGWrappedBase):
     _base = rpg.GraphicsLayoutWidget
     _windows = []
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, title=None, *args, **kwargs):
         """
         Create a new remote plot window, with title and size given
         """
@@ -152,15 +169,35 @@ class PlotWindow(RPGWrappedBase):
         self.show()
 
         # Keep track of all windows globally
-        PlotWindow._windows.append(self)
+        BasePlotWindow._windows.append(self)
+
+        # Change plot title if given
+        if title is not None:
+            self.win_title = title
 
     def __del__(self):
-        PlotWindow._windows.remove(self)
+        try:
+            BasePlotWindow._windows.remove(self)
+        except ValueError:
+            pass
+    
+    @classmethod
+    def find_by_id(cls, id):
+        i = 0
+        while i < len(cls._windows):
+            window = cls._windows[i]
+            try:
+                if window.items[0].plot_title.endswith("(id: {})".format(id)):
+                    return window
+            except:
+                cls._windows.pop(i)
+                continue
+            i += 1
+        return None
 
     @property
     def win_title(self):
         return self.windowTitle()
-
     @win_title.setter
     def win_title(self, title):
         self.setWindowTitle(str(title))
@@ -169,6 +206,23 @@ class PlotWindow(RPGWrappedBase):
     def size(self):
         rsize = self._base_inst.size()
         return (rsize.width(), rsize.height())
+
+    def addPlot(self, row=None, col=None, rowspan=1, colspan=1, **kargs):
+        """
+        Create a PlotItem and place it in the next available cell (or in the cell specified)
+        All extra keyword arguments are passed to :func:`PlotItem.__init__ <pyqtgraph.PlotItem.__init__>`
+        Returns the created item.
+        """
+        plot = ExtendedPlotItem(**kargs)
+        self.addItem(plot, row, col, rowspan, colspan)
+        return plot
+
+class PlotWindow(BasePlotWindow):
+    _base = rpg.ExtendedPlotWindow
+    _windows = BasePlotWindow._windows
+
+    def export(self, fname, export_type="image"):
+        return super().__getattr__("export")(fname, export_type)
 
 class PlotAxis(RPGWrappedBase):
     _base = rpg.AxisItem
@@ -190,7 +244,7 @@ class PlotAxis(RPGWrappedBase):
 class PlotItem(RPGWrappedBase):
     _base = rpg.PlotItem
 
-    def __init__(self, plot_title=None):
+    def __init__(self, title=None):
         """
         Create a new plot. This has to be embedded inside 
         a plot window to actually be visible
@@ -198,6 +252,10 @@ class PlotItem(RPGWrappedBase):
         super().__init__()
         # Keep track of traces that are plotted
         self.__dict__['_traces'] = []
+        
+        # Update title if requested
+        if title is not None:
+            self.plot_title = title
     
     def __wrap__(self):
         super().__wrap__()
@@ -220,6 +278,14 @@ class PlotItem(RPGWrappedBase):
             plotdata.update(data)
 
         return plotdata
+
+    def textbox(self, text):
+        """
+        Add a text box to this plot
+        """
+        textbox_item = TextItem(text=str(text))
+        textbox_item.setParentItem(self)
+        return textbox_item
 
     def wrap_adders(self, f):
         # Wrap to save into items first
@@ -276,6 +342,56 @@ class PlotItem(RPGWrappedBase):
     @property
     def traces(self):
         return self._traces[:]
+
+class ExtendedPlotItem(PlotItem):
+    _base = rpg.ExtendedPlotItem
+
+    def export(self, fname, export_type="image"):
+        return super().__getattr__("export")(fname, export_type)
+
+class TextItem(RPGWrappedBase):
+    _base = rpg.DraggableTextItem
+    _ANCHORS = {'tl': (0,0),
+                'tr': (1,0),
+                'bl': (0,1),
+                'br': (1,1)}
+
+    def setParentItem(self, p):
+        super().__getattr__("setParentItem")(p)
+        if isinstance(p, RPGWrappedBase):
+            p._items.append(self)
+
+    def anchor(self, anchor):
+        """
+        Put this text box in a position relative to
+        (tl, tr, bl, br)
+        """
+        anchor_point = TextItem._ANCHORS[anchor]
+        super().__getattr__("anchor")(itemPos=anchor_point,
+                                      parentPos=anchor_point,
+                                      offset=(0,0))
+
+    @property
+    def offset(self):
+        pos = self.getOffset()
+        return pos
+    @offset.setter
+    def offset(self, offs):
+        if not isinstance(offs, tuple) or len(offs) != 2:
+            raise ValueError("Must be a tuple (x, y)")
+        self.setOffset(offs)
+
+    @property
+    def text(self):
+        text = self.getText().replace("<br>", "\n")
+        return text
+    @text.setter
+    def text(self, text):
+        # Replace new lines with HTML line breaks
+        text = text.replace("\r\n", "\n")
+        text = text.replace("\r", "\n")
+        text = text.replace("\n", "<br>")
+        self.setText(str(text))
 
 class HistogramLUTItem(RPGWrappedBase):
     _base = rpg.HistogramLUTItem
@@ -468,7 +584,9 @@ class ImageItem(PlotData):
             # Cache update function so we don't have to request it each time we update
             self.set_image = self.setImage
             self.set_image._setProxyOptions(callSync='off')
-        self.set_image(data, autoLevels=True)
+        #assert(data.shape == (self.setpoint_y.shape[0], self.setpoint_x.shape[0]))
+
+        self.set_image(data)
 
     @property
     def data(self):
@@ -485,6 +603,7 @@ class ImageItemWithHistogram(ImageItem):
         # Add instance variables
         self.__dict__['_hist'] = None
         self.__dict__['set_levels'] = None
+        self.__dict__['update_histogram'] = None
 
         # Add the histogram
         self._hist = HistogramLUTItem()
@@ -505,14 +624,32 @@ class ImageItemWithHistogram(ImageItem):
         if self._hist is not None:
             parent._parent.addItem(self._hist)
 
+    def pause_update(self):
+        """
+        Pause histogram autoupdates while a sweep is running.
+        """
+        self._base_inst.sigImageChanged.disconnect()
+
+    def resume_update(self):
+        """
+        Resume histogram autoupdate
+        """
+        self._base_inst.sigImageChanged.connect(self.histogram.imageChanged)
+
     def update(self, data, *args, **kwargs):
         super().update(data, *args, **kwargs)
-        z_range = (min(data), max(data))
-        if self.set_levels is None:
-            # Cache update function so we don't have to request it each time we update
-            self.set_levels = self.histogram.setLevels
-            self.set_levels._setProxyOptions(callSync='off')
-        self.set_levels(*z_range)
+        # Only update the range if requested
+        if kwargs.get('update_range', False):
+            z_range = (min(data), max(data))
+            if self.set_levels is None:
+                # Cache update function so we don't have to request it each time we update
+                self.set_levels = self.histogram.setLevels
+                self.set_levels._setProxyOptions(callSync='off')
+            if self.update_histogram is None:
+                self.update_histogram = self.histogram.imageChanged
+                self.update_histogram._setProxyOptions(callSync='off')
+            self.update_histogram()
+            self.set_levels(*z_range)
 
     def update_histogram_axis(self, param_z):
         """

@@ -4,7 +4,7 @@ import numpy as np
 from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
 
-from ..plot import pyplot
+from .. import pyplot
 
 def _flush_buffers(*params):
     """
@@ -32,16 +32,26 @@ def _flush_buffers(*params):
                                                             status_code))
 
 
-def linear1d(param_set, start, stop, num_points, delay, *param_meas):
+def linear1d(param_set, start, stop, num_points, delay, *param_meas, append=None):
     """
     """
 
     _flush_buffers(*param_meas)
     # Set up a plotting window
-    win = pyplot.PlotWindow()
-    win.win_title = 'Sweeping %s' % param_set.full_name
-    win.resize(1000,600)
-
+    if append is None or not append:
+        win = pyplot.PlotWindow()
+        win.win_title = 'Sweeping %s' % param_set.full_name
+        win.resize(1000,600)
+    elif isinstance(append, pyplot.PlotWindow):
+        # Append to the given window
+        win = append
+    elif isinstance(append, bool):
+        # Append to the last trace if true
+        win = pyplot.PlotWindow._windows[-1]
+    else:
+        raise ValueError("Unknown argument to append. Either give a plot window"
+                         " or true to append to the last plot")
+        
     # Register setpoints
     meas = Measurement()
     meas.register_parameter(param_set)
@@ -59,9 +69,12 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
         output.append([parameter, None])
         
         # Create plot window
-        plot = win.addPlot(title="%s (%s) v.<br>%s (%s)" % 
-                           (param_set.full_name, param_set.label, 
-                            parameter.full_name, parameter.label))
+        if append is not None and append:
+            plot = win.items[0]
+        else:
+            plot = win.addPlot(title="%s (%s) v.<br>%s (%s)" % 
+                               (param_set.full_name, param_set.label, 
+                                parameter.full_name, parameter.label))
         
         # Figure out if we have 1d or 2d data
         if getattr(parameter, 'shape', None):
@@ -91,6 +104,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
 
     with meas.run() as datasaver:
         # Update plot titles
+        win.win_title = "ID: {}".format(datasaver.run_id)
         for i in range(len(param_meas)):
             plots[p].plot_title += " (id: %d)" % datasaver.run_id
         
@@ -108,7 +122,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas):
                     data[p][i] = output[p][1] # Update 1D data
                 
                 # Update live plots
-                plots[p].traces[0].update(data[p])
+                plots[p].traces[-1].update(data[p])
             # Save data
             datasaver.add_result((param_set, set_point),
                                 *output)
@@ -157,9 +171,11 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
 
     with meas.run() as datasaver:
         # Update plot titles
+        win.win_title = "ID: {}".format(datasaver.run_id)
         for i in range(len(param_meas)):
             plots[p].plot_title += " (id: %d)" % datasaver.run_id
-            
+            plots[p].traces[0].pause_update()
+        
         for i, set_point1 in enumerate(set_points1):
             param_set2.set(start2)
             param_set1.set(set_point1)
@@ -177,12 +193,18 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                         fdata[0,j+1:] = (z_range[0] + z_range[1])/2
                         fdata[1:,:] = (z_range[0] + z_range[1])/2
                     
-                    # Update plot items
-                    plots[p].traces[0].update(fdata)
+                    # Update plot items, and update range every 10 points
+                    if (num_points1*num_points2) < 1000 or (j%20) == 0:
+                        plots[p].traces[0].update(fdata, update_range=((j%100) == 0))
 
                 # Save data
                 datasaver.add_result((param_set1, set_point1),
                                      (param_set2, set_point2),
                                      *output)
+        
+        for i in range(len(param_meas)):
+            fdata = data[i]
+            plots[p].traces[0].update(fdata, True)
+            plots[p].traces[0].resume_update()
 
     return (datasaver.run_id, win)
