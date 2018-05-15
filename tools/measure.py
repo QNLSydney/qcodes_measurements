@@ -1,10 +1,11 @@
 import logging as log
 import numpy as np
+import os, time
 
 from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
 
-from .. import pyplot
+from .. import pyplot, plot_tools
 
 def _flush_buffers(*params):
     """
@@ -32,7 +33,8 @@ def _flush_buffers(*params):
                                                             status_code))
 
 
-def linear1d(param_set, start, stop, num_points, delay, *param_meas, append=None):
+def linear1d(param_set, start, stop, num_points, delay, *param_meas, 
+             append=None, save=True):
     """
     """
 
@@ -127,11 +129,13 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas, append=None
             datasaver.add_result((param_set, set_point),
                                 *output)
 
+    if save:
+        plot_tools.save_figure(win, datasaver.run_id)
     return (datasaver.run_id, win)  # can use plot_by_id(dataid)
 
 def linear2d(param_set1, start1, stop1, num_points1, delay1,
              param_set2, start2, stop2, num_points2, delay2,
-             *param_meas):
+             *param_meas, save=True):
     
     _flush_buffers(*param_meas)
     # Set up a plotting window
@@ -207,4 +211,6 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             plots[p].traces[0].update(fdata, True)
             plots[p].traces[0].resume_update()
 
+    if save:
+        plot_tools.save_figure(win, datasaver.run_id)
     return (datasaver.run_id, win)
