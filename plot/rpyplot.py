@@ -5,6 +5,9 @@ import warnings
 
 from pyqtgraph import *
 from pyqtgraph.exporters import *
+import pyqtgraph.multiprocess as mp
+
+from PyQt5.QtWidgets import QApplication, QMessageBox, QMainWindow, QAction
 
 from numpy import linspace, min, max, ndarray
 
@@ -86,7 +89,21 @@ class ExtendedPlotItem(PlotItem):
         exporter.export(fname)
         del exporter
 
+    def listDataItems(self):
+        """
+        Create a picklable list of data items
+        """
+        data_items = super().listDataItems()
+        data_items = [mp.proxy(item) for item in data_items]
+        return data_items
+
+
 class ExtendedPlotWindow(GraphicsLayoutWidget):
+    _windows = []
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._windows.append(self)
+
     def export(self, fname, export_type="image"):
         """
         Save the item as an image
@@ -97,3 +114,12 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
             exporter = SVGExporter(self.scene())
         exporter.export(fname)
         del exporter
+
+    def closeEvent(self, event):
+        self._windows.remove(self)
+        event.accept()
+
+    @classmethod
+    def getWindows(cls):
+        windows = [mp.proxy(item) for item in cls._windows]
+        return windows

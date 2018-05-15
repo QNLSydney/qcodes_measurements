@@ -70,12 +70,15 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
     def autowrap(inst):
         # Figure out the types that we know how to autowrap
         subclass_types = {}
-        for t in RPGWrappedBase.__subclasses__():
-            base = getattr(t, '_base', None)
-            if base is None:
-                continue
-            typestr = base._typeStr.split()[1].strip('\'>').split('.')[-1]
-            subclass_types[typestr] = t
+        def append_subclasses(d, cls):
+            for t in cls.__subclasses__():
+                append_subclasses(d, t)
+                base = getattr(t, '_base', None)
+                if base is None:
+                    continue
+                typestr = base._typeStr.split()[1].strip('\'>').split('.')[-1]
+                d[typestr] = t
+        append_subclasses(subclass_types, RPGWrappedBase)
 
         # Then, if we have an object proxy, wrap it if it is in the list of wrappable types
         if isinstance(inst, mp.remoteproxy.ObjectProxy):
@@ -129,7 +132,10 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             super().__setattr__(name, value)
 
     def __getattr__(self, name):
-        attr = super().__getattr__(name)
+        try:
+            attr = object.__getattribute__(self, name)
+        except:
+            attr = super().__getattr__(name)
             
         if name.startswith("add") and callable(attr):
             return self.wrap_adders(attr)
@@ -145,12 +151,12 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         # Allow objects to keep track of which window they are in if they need to
         self._parent = parent
 
-
     def append_no_proxy_types(self, new_type):
         if not isinstance(new_type, type):
             raise TypeError('New no proxy type must be a type')
         noProxyTypes = self._getProxyOption('noProxyTypes')
-        noProxyTypes.append(new_type)
+        if new_type not in noProxyTypes:
+            noProxyTypes.append(new_type)
         self._setProxyOptions(noProxyTypes=noProxyTypes[:])
 
     @property
@@ -159,7 +165,6 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
 
 class BasePlotWindow(RPGWrappedBase):
     _base = rpg.GraphicsLayoutWidget
-    _windows = []
 
     def __init__(self, title=None, *args, **kwargs):
         """
@@ -168,18 +173,9 @@ class BasePlotWindow(RPGWrappedBase):
         super().__init__(*args, **kwargs)
         self.show()
 
-        # Keep track of all windows globally
-        BasePlotWindow._windows.append(self)
-
         # Change plot title if given
         if title is not None:
             self.win_title = title
-
-    def __del__(self):
-        try:
-            BasePlotWindow._windows.remove(self)
-        except ValueError:
-            pass
     
     @classmethod
     def find_by_id(cls, id):
@@ -217,12 +213,24 @@ class BasePlotWindow(RPGWrappedBase):
         self.addItem(plot, row, col, rowspan, colspan)
         return plot
 
+    @property
+    def windows(self):
+        raise NotImplementedError("Can't do this on a base plot window")
+
 class PlotWindow(BasePlotWindow):
     _base = rpg.ExtendedPlotWindow
-    _windows = BasePlotWindow._windows
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def export(self, fname, export_type="image"):
         return super().__getattr__("export")(fname, export_type)
+
+    @property
+    def windows(self):
+        open_windows = super().__getattr__("getWindows")()
+        open_windows = [RPGWrappedBase.autowrap(item) for item in open_windows]
+        return open_windows
 
 class PlotAxis(RPGWrappedBase):
     _base = rpg.AxisItem
@@ -250,17 +258,10 @@ class PlotItem(RPGWrappedBase):
         a plot window to actually be visible
         """
         super().__init__()
-        # Keep track of traces that are plotted
-        self.__dict__['_traces'] = []
         
         # Update title if requested
         if title is not None:
             self.plot_title = title
-    
-    def __wrap__(self):
-        super().__wrap__()
-        # Keep track of traces that are plotted
-        self.__dict__['_traces'] = []
 
     def plot(self, setpoint_x, setpoint_y=None, data=None, **kwargs):
         """
@@ -286,17 +287,6 @@ class PlotItem(RPGWrappedBase):
         textbox_item = TextItem(text=str(text))
         textbox_item.setParentItem(self)
         return textbox_item
-
-    def wrap_adders(self, f):
-        # Wrap to save into items first
-        f = super().wrap_adders(f)
-        def save(*args, **kwargs):
-            res = f(*args, **kwargs)
-            # If we add a PlotData object, add it to traces too
-            if isinstance(res, PlotData):
-                self._traces.append(res)
-            return res
-        return save
 
     def update_axes(self, param_x, param_y,
                     param_x_setpoint=False, param_y_setpoint=False):
@@ -334,20 +324,26 @@ class PlotItem(RPGWrappedBase):
     @property
     def left_axis(self):
         return self.getAxis('left')
-
     @property
     def bot_axis(self):
         return self.getAxis('bottom')
 
     @property
     def traces(self):
-        return self._traces[:]
+        raise NotImplementedError("Can't get a list of traces from a non-extended plot_item")
+    
 
 class ExtendedPlotItem(PlotItem):
     _base = rpg.ExtendedPlotItem
 
     def export(self, fname, export_type="image"):
         return super().__getattr__("export")(fname, export_type)
+
+    @property
+    def traces(self):
+        data_items = self.listDataItems()
+        data_items = [RPGWrappedBase.autowrap(item) for item in data_items]
+        return data_items
 
 class TextItem(RPGWrappedBase):
     _base = rpg.DraggableTextItem
