@@ -89,9 +89,17 @@ class ExtendedPlotItem(PlotItem):
         exporter.export(fname)
         del exporter
 
+    def addItem(self, item, *args, **kwargs):
+        super().addItem(item, *args, **kwargs)
+        if isinstance(item, ImageItem):
+            """
+            addItem does not keep track of images, let's add it ourselves
+            """
+            self.dataItems.append(item)
+
     def listDataItems(self):
         """
-        Create a picklable list of data items
+        Create a picklable list of data items.
         """
         data_items = super().listDataItems()
         data_items = [mp.proxy(item) for item in data_items]
@@ -123,3 +131,32 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
     def getWindows(cls):
         windows = [mp.proxy(item) for item in cls._windows]
         return windows
+
+class ImageItemWithHistogram(ImageItem):
+        def __init__(self, *args, colormap, **kwargs):
+            super().__init__(*args, **kwargs)
+
+            # Create the attached histogram
+            self._LUTitem = HistogramLUTItem()
+            self._LUTitem.setImageItem(self)
+            self._LUTitem.gradient.setColorMap(colormap)
+            self._LUTitem.autoHistogramRange() # enable autoscaling
+
+            # Attach a signal handler on parent changed
+            #self.sigParentChanged.connect(self.parentChanged)
+
+        def getHistogramLUTItem(self):
+            return self._LUTitem
+        
+        def parentChanged(self):
+            super().parentChanged()
+            print("Called: Parent is: {}".format(repr(self.parentObject())))
+            # Add the histogram to the parent
+            view_box = self.getViewBox()
+            if isinstance(view_box, ExtendedPlotWindow):
+                view_box.addItem(self._LUTitem)
+                self._parent = view_box
+            elif self.getViewBox() is None:
+                if self._parent is not None:
+                    self._parent.removeItem(self._LUTitem)
+                    self._parent = None

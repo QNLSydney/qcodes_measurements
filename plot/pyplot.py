@@ -45,6 +45,8 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         # We still want to keep track of new items in wrapped objects
         self.__dict__['_items'] = []
         self.__dict__['_parent'] = None
+        # And make sure that ndarrays are still proxied
+        self.append_no_proxy_types(ndarray)
 
     @classmethod
     def wrap(cls, instance, *args, **kwargs):
@@ -132,12 +134,10 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             super().__setattr__(name, value)
 
     def __getattr__(self, name):
-        try:
-            attr = object.__getattribute__(self, name)
-        except:
-            attr = super().__getattr__(name)
+        attr = super().__getattr__(name)
             
         if name.startswith("add") and callable(attr):
+            print("Attribute adder")
             return self.wrap_adders(attr)
         elif name.startswith("get") and callable(attr):
             return self.wrap_getters(attr)
@@ -229,6 +229,12 @@ class PlotWindow(BasePlotWindow):
     @property
     def windows(self):
         open_windows = super().__getattr__("getWindows")()
+        open_windows = [RPGWrappedBase.autowrap(item) for item in open_windows]
+        return open_windows
+
+    @classmethod
+    def getWindows(cls):
+        open_windows = rpg.ExtendedPlotWindow.getWindows()
         open_windows = [RPGWrappedBase.autowrap(item) for item in open_windows]
         return open_windows
 
@@ -535,6 +541,9 @@ class ImageItem(PlotData):
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
+
+        self.__dict__['set_image'] = None
+
         if 'setpoint_x' in kwargs and 'setpoint_y' in kwargs:
             # If we are given the scalings, use them
             self.__dict__['setpoint_x'] = kwargs['setpoint_x']
@@ -543,27 +552,8 @@ class ImageItem(PlotData):
             # If we are only given one, that must be an error
             raise TypeError('setpoint_x or _y given without the other. Both or neither are necessary')
         else:
-            # Otherwise try to figure it out
-            image = self.image
-            if image is None:
-                # There is no data here, let's just set some scaling to the identity
-                self.__dict__['setpoint_x'] = (0, 1)
-                self.__dict__['setpoint_y'] = (0, 1)
-            else:
-                image = image._getValue()
-                x_len, y_len = image.shape
-
-                # And then query the translation
-                offs = self.scenePos()._getValue()
-                x_offs, y_offs = offs.x(), offs.y()
-
-                # And then the scaling
-                x_scale, y_scale = self.sceneTransform().map(1.0, 1.0)
-                x_scale, y_scale = x_scale - x_offs, y_scale - y_offs
-
-                # And then calculate the points
-                self.__dict__['setpoint_x'] = linspace(x_offs, x_offs+x_scale*x_len, x_len)
-                self.__dict__['setpoint_y'] = linspace(y_offs, y_offs+y_scale*y_len, y_len)
+            # Otherwise we just don't know....
+            return
         # Finally reset the scale to make sure we are consistent
         self._force_rescale()
 
@@ -592,33 +582,13 @@ class ImageItem(PlotData):
         return self.image
 
 class ImageItemWithHistogram(ImageItem):
-    _base = rpg.ImageItem
+    _base = rpg.ImageItemWithHistogram
 
     def __init__(self, setpoint_x, setpoint_y, colormap=rcmap, *args, **kwargs):
-        super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
+        super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
         # Add instance variables
-        self.__dict__['_hist'] = None
         self.__dict__['set_levels'] = None
         self.__dict__['update_histogram'] = None
-
-        # Add the histogram
-        self._hist = HistogramLUTItem()
-        self._hist.setImageItem(self._base_inst)
-        self._hist.colormap = colormap
-        self._hist.autoHistogramRange() # enable autoscaling
-
-    def _notify_added(self, parent):
-        """
-        We need to keep track of out parent window, since histograms exist
-        outside of the ImageItem view
-        Each time we are added to a window, add the histogram item as well
-
-        TODO: Should this be wrapped up into a new gridlayout? That would allow us
-        to not keep track of parent items?
-        """
-        super()._notify_added(parent)
-        if self._hist is not None:
-            parent._parent.addItem(self._hist)
 
     def pause_update(self):
         """
@@ -658,11 +628,11 @@ class ImageItemWithHistogram(ImageItem):
 
     @property
     def histogram(self):
-        return self._hist
+        return self.getHistogramLUTItem()
 
     @property
     def colormap(self):
-        return self._hist.colormap
+        return self.histogram.colormap
     @colormap.setter
     def colormap(self, cmap):
-        self._hist.colormap = cmap
+        self.histogram.colormap = cmap

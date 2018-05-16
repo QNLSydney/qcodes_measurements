@@ -58,9 +58,55 @@ def ensure_channel(mdac_channel):
                       " MDAC channel")
         raise TypeError("Trying to ramp a not MDAC channel")
     return channel
+
+def setup_bus(mdac, channels, bus_channel):
+    # Set up bus channel for output
+    assert(np.isclose(bus_channel.voltage(), 0))
+    bus_channel.bus('close')
+    bus_channel.dac_output('close')
+    bus_channel.microd('open')
+    bus_channel.smc('open')
+    bus_channel.gnd('open')
+    bus_channel.rate(0.05)
+    bus_channel.filter(2)
     
-def ramp(mdac_channel, to):
-    if (to > 0 or to < -1.5):
+    # Connect bus to front panel
+    mdac.bus('close')
+    
+    # Get all gates ready
+    assert(all(np.isclose(x, 0) for x in channels.voltage()))
+    channels.dac_output('close')
+    channels.gnd('open')
+    channels.rate(0.05)
+    channels.filter(2)
+
+def apply_bus(mdac, channels, bus_channel, voltage):
+    assert(voltage > 0 and voltage <= 0.3) # Voltage is valid
+    assert(all(x == 'open' for x in channels.gnd())) 
+    assert(all(x == 'close' for x in channels.dac_output())) # Channels are ready to output
+    assert(bus_channel.bus() == 'close') # bus channel is bussed
+    assert(bus_channel.microd() == 'open') # bus channel is not a device channel
+    assert(bus_channel.dac_output() == 'close') # bus channel is set up for dac output
+    
+    # Once all checks pass...
+    channels.ramp(voltage)
+    ramp(bus_channel, voltage, True)
+
+def end_bus(mdac, channels, bus_channel):
+    channels.ramp(0)
+    ramp(bus_channel, 0)
+    while not all(np.isclose(x, 0) for x in channels.voltage()):
+        time.sleep(0.1)
+    
+    # Disconnect all channels
+    channels.gnd('close')
+    
+    # Clear bus channel
+    bus_channel.gnd('close')
+    bus_channel.bus('open')
+    
+def ramp(mdac_channel, to, sure=False):
+    if (to > 0 or to < -1.5) and not sure:
         raise ValueError("{} is pretty big. Are you sure?".format(to))
     mdac_channel = ensure_channel(mdac_channel)
     mdac_channel.ramp(to)

@@ -42,7 +42,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
     # Set up a plotting window
     if append is None or not append:
         win = pyplot.PlotWindow()
-        win.win_title = 'Sweeping %s' % param_set.full_name
+        win.win_title = 'ID: ' % param_set.full_name
         win.resize(1000,600)
     elif isinstance(append, pyplot.PlotWindow):
         # Append to the given window
@@ -102,13 +102,13 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
             plotdata.update_histogram_axis(parameter)
         else:
             plot.update_axes(param_set, parameter)
-        plots.append(plot)
+        plots.append(plotdata)
 
     with meas.run() as datasaver:
         # Update plot titles
-        win.win_title = "ID: {}".format(datasaver.run_id)
+        win.win_title += "{} ".format(datasaver.run_id)
         for i in range(len(param_meas)):
-            plots[p].plot_title += " (id: %d)" % datasaver.run_id
+            plots[p]._parent.plot_title += " (id: %d)" % datasaver.run_id
         
         # Then, run the actual sweep
         for i, set_point in enumerate(set_points):
@@ -124,7 +124,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                     data[p][i] = output[p][1] # Update 1D data
                 
                 # Update live plots
-                plots[p].traces[-1].update(data[p])
+                plots[p].update(data[p])
             # Save data
             datasaver.add_result((param_set, set_point),
                                 *output)
@@ -140,8 +140,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     _flush_buffers(*param_meas)
     # Set up a plotting window
     win = pyplot.PlotWindow()
-    win.win_title = 'Sweeping %s, %s' % (param_set1.full_name, 
-                                         param_set2.full_name)
+    win.win_title = 'ID: '
     win.resize(800,800)
     
     # Register setpoints
@@ -171,14 +170,14 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         plotdata = plot.plot(set_points1, set_points2)
         plot.update_axes(param_set1, param_set2)
         plotdata.update_histogram_axis(parameter)
-        plots.append(plot)
+        plots.append(plotdata)
 
     with meas.run() as datasaver:
         # Update plot titles
-        win.win_title = "ID: {}".format(datasaver.run_id)
+        win.win_title += "{} ".format(datasaver.run_id)
         for i in range(len(param_meas)):
-            plots[p].plot_title += " (id: %d)" % datasaver.run_id
-            plots[p].traces[0].pause_update()
+            plots[p]._parent.plot_title += " (id: %d)" % datasaver.run_id
+            plots[p]._parent.traces[0].pause_update()
         
         for i, set_point1 in enumerate(set_points1):
             param_set2.set(start2)
@@ -199,7 +198,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                     
                     # Update plot items, and update range every 10 points
                     if (num_points1*num_points2) < 1000 or (j%20) == 0:
-                        plots[p].traces[0].update(fdata, update_range=((j%100) == 0))
+                        plots[p].update(fdata, update_range=((j%100) == 0))
 
                 # Save data
                 datasaver.add_result((param_set1, set_point1),
@@ -208,8 +207,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         
         for i in range(len(param_meas)):
             fdata = data[i]
-            plots[p].traces[0].update(fdata, True)
-            plots[p].traces[0].resume_update()
+            plots[p].update(fdata, True)
+            plots[p].resume_update()
 
     if save:
         plot_tools.save_figure(win, datasaver.run_id)
