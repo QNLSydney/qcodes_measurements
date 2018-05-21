@@ -1,19 +1,17 @@
 import time
-import os
-import json
 import numpy as np
 import logging as log
 
+from qcodes import ChannelList
 from qcodes.instrument.parameter import Parameter
-from qcodes.dataset.measurements import Measurement
-from .measure import _flush_buffers, linear1d, linear2d
-from qcodes.dataset.experiment_container import load_by_id
-from qcodes.dataset.data_export import get_data_by_id, get_shaped_data_by_runid
 from qcodes.instrument_drivers.qnl.MDAC import MDACChannel
 
-from ..plot import pyplot, plot_tools
+from qdev_wrappers.parameters import DelegateParameter
 
-def setup(ohmics, gates, shorts):
+from .. import linear1d, linear2d
+from ..plot import plot_tools
+
+def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None):
     """
     Set all gates to correct states in MDAC. Note, assume that we are connected
     to the device through Micro-D's
@@ -35,21 +33,53 @@ def setup(ohmics, gates, shorts):
     gates.dac_output('close')
     gates.smc('open')
     gates.gnd('open')
+    gates.filter(2)
+    gates.rate(0.05)
+    
+    # Set high gates (after microd) to SMC output
+    mdac.channels[48:].microd('open')
+    mdac.channels[48:].dac_output('close')
+    mdac.channels[48:].smc('close')
+    mdac.channels[48:].gnd('open')
+    mdac.channels[48:].filter(2)
+    mdac.channels[48:].rate(0.05)
     
     # Set ohmics/shorts to grounded and SMC
     ohmics.gnd('close')
     ohmics.dac_output('open')
-    ohmics.smc('close')
+    ohmics.smc('open')
+    ohmics.filter(1)
+    
     shorts.gnd('close')
     shorts.dac_output('open')
-    shorts.smc('close')
+    shorts.smc('open')
+    ohmics.filter(1)
+    
+    if bias is not None:
+        bias.dac_output('close')
+        bias.smc('close')
+        bias.gnd('open')
+        bias.voltage.scale = 100
+        bias.ramp.scale = 100
+        bias.rate.scale = 100
+        bias.filter(2)
+        bias.rate(0.0001)
+    
+    if trigger is not None:
+        trigger.dac_output('close')
+        trigger.smc('close')
+        trigger.gnd('open')
+        trigger.microd('open')
+        trigger.filter(1)
 
 def ensure_channel(mdac_channel):
     """
     Ensure that the parameter refers to the base mdac channel,
     rather than a parameter
     """
-    if isinstance(mdac_channel, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
+    if isinstance(mdac_channel, DelegateParameter):
+        channel = mdac_channel.source._instrument
+    elif isinstance(mdac_channel, Parameter) and mdac_channel.name in ('voltage', 'ramp'):
         channel = mdac_channel._instrument
     elif isinstance(mdac_channel, MDACChannel):
         channel = mdac_channel
@@ -58,6 +88,13 @@ def ensure_channel(mdac_channel):
                       " MDAC channel")
         raise TypeError("Trying to ramp a not MDAC channel")
     return channel
+
+def make_channel_list(mdac, name, channels):
+    ch_list = ChannelList(mdac, name, mdac.ch01.__class__)
+    for i in channels:
+        ch_list.append(mdac.channels[i])
+    ch_list.lock()
+    return ch_list
 
 def setup_bus(mdac, channels, bus_channel):
     # Set up bus channel for output
@@ -93,9 +130,15 @@ def apply_bus(mdac, channels, bus_channel, voltage):
     ramp(bus_channel, voltage, True)
 
 def end_bus(mdac, channels, bus_channel):
+    """
+    Set all channels to 0 and ground. Note that we will still need to disconnect
+    the bus channel from the bus.
+    """
     channels.ramp(0)
     ramp(bus_channel, 0)
     while not all(np.isclose(x, 0) for x in channels.voltage()):
+        time.sleep(0.1)
+    while not np.isclose(bus_channel.voltage(), 0):
         time.sleep(0.1)
     
     # Disconnect all channels
@@ -103,14 +146,13 @@ def end_bus(mdac, channels, bus_channel):
     
     # Clear bus channel
     bus_channel.gnd('close')
-    bus_channel.bus('open')
     
 def ramp(mdac_channel, to, sure=False):
     if (to > 0 or to < -1.5) and not sure:
         raise ValueError("{} is pretty big. Are you sure?".format(to))
-    mdac_channel = ensure_channel(mdac_channel)
-    mdac_channel.ramp(to)
-    while not np.isclose(to, mdac_channel.voltage(), 1e-3):
+    base = ensure_channel(mdac_channel)
+    base.ramp(to)
+    while not np.isclose(to, mdac_channel(), 1e-3):
         time.sleep(0.01)
 
 def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas, 
@@ -118,26 +160,19 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
     """
     Pull out the ramp parameter from the mdac and do a 1d sweep
     """
-    mdac_channel = ensure_channel(mdac_channel)
-    # Set labels correctly
-    old_label = mdac_channel.ramp.label
-    mdac_channel.ramp.label = mdac_channel.voltage.label
 
-    try:
-        ramp(mdac_channel, start)
-        trace_id = linear1d(mdac_channel.voltage, start, stop, num_points, delay, *param_meas, **kwargs, save=False)
-    finally:
-        # Restore label
-        mdac_channel.ramp.label = old_label
+    ramp(mdac_channel, start)
+    trace_id = linear1d(mdac_channel, start, stop, num_points, delay, *param_meas, **kwargs, save=False)
 
     # Add gate labels
     run_id, win = trace_id
-    add_gate_label(win, run_id)
+    plot_tools.add_gate_label(win, run_id)
     plot_tools.save_figure(win, run_id)
     
     # Rampback if requested
     if rampback:
         ramp(mdac_channel, start)
+        mdac_channel()
     
     return trace_id
 
@@ -146,30 +181,30 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              *param_meas, rampback=False, **kwargs):
     
     # Pull out MDAC chanels
-    mdac_channel1 = ensure_channel(mdac_channel1)
-    mdac_channel2 = ensure_channel(mdac_channel2)
+    ch1 = ensure_channel(mdac_channel1)
+    ch2 = ensure_channel(mdac_channel2)
 
     # Set labels correctly
-    old_label = (mdac_channel1.ramp.label, mdac_channel2.ramp.label)
-    mdac_channel1.ramp.label = mdac_channel1.voltage.label
-    mdac_channel2.ramp.label = mdac_channel2.voltage.label
+    old_label = (mdac_channel1.label, mdac_channel2.label)
+    ch1.ramp.label = mdac_channel1.label
+    ch2.ramp.label = mdac_channel2.label
 
     try:
         ramp(mdac_channel1, start1)
         ramp(mdac_channel2, start2)
         range2 = abs(start2 - stop2)
-        delay1 += range2/mdac_channel2.rate()
-        trace_id = linear2d(mdac_channel1.voltage, start1, stop1, num_points1, delay1,
-                            mdac_channel2.ramp, start2, stop2, num_points2, delay2,
+        delay1 += range2/ch2.rate()
+        trace_id = linear2d(mdac_channel1, start1, stop1, num_points1, delay1,
+                            ch2.ramp, start2, stop2, num_points2, delay2,
                             *param_meas, **kwargs, save=False)
     finally:
         # Restore labels
-        mdac_channel1.ramp.label = old_label[0]
-        mdac_channel2.ramp.label = old_label[1]
+        ch1.ramp.label = old_label[0]
+        ch2.ramp.label = old_label[1]
 
     # Add gate labels
     run_id, win = trace_id
-    add_gate_label(win, run_id)
+    plot_tools.add_gate_label(win, run_id)
     plot_tools.save_figure(win, run_id)
     
     # Rampback if requested
