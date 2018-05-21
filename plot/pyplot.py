@@ -16,6 +16,9 @@ from ..plot import ChildProcessImportError, colors
 if len(mp.QtProcess.handlers) == 0:
     proc = mp.QtProcess()
     rpg = proc._import('qcodes_measurements.plot.rpyplot')
+    rpg.setConfigOption('background', 'w')
+    rpg.setConfigOption('foreground', 'k')
+    rpg.setConfigOption('leftButtonPan', False)
 else:
     proc = next(iter(mp.QtProcess.handlers.values()))
     # Check whether it is closed
@@ -26,7 +29,9 @@ else:
             mp.QtProcess.handlers.clear()
             proc = mp.QtProcess()
             rpg = proc._import('qcodes_measurements.plot.rpyplot')
-            rpg.setConfigOptions(antialias=True)
+            rpg.setConfigOption('background', 'w')
+            rpg.setConfigOption('foreground', 'k')
+            rpg.setConfigOption('leftButtonPan', False)
     else:
         print(type(proc))
         raise ChildProcessImportError("Importing pyplot from child process")
@@ -173,23 +178,13 @@ class BasePlotWindow(RPGWrappedBase):
         super().__init__(*args, **kwargs)
         self.show()
 
+        # Set plot defaults
+        # Background white
+        self.setBackground((255,255,255))
+
         # Change plot title if given
         if title is not None:
             self.win_title = title
-    
-    @classmethod
-    def find_by_id(cls, id):
-        i = 0
-        while i < len(cls._windows):
-            window = cls._windows[i]
-            try:
-                if window.items[0].plot_title.endswith("(id: {})".format(id)):
-                    return window
-            except:
-                cls._windows.pop(i)
-                continue
-            i += 1
-        return None
 
     @property
     def win_title(self):
@@ -217,6 +212,13 @@ class BasePlotWindow(RPGWrappedBase):
     def windows(self):
         raise NotImplementedError("Can't do this on a base plot window")
 
+    @property
+    def items(self):
+        items = self.getLayoutItems()
+        items = [RPGWrappedBase.autowrap(item) for item in items]
+        return items
+    
+
 class PlotWindow(BasePlotWindow):
     _base = rpg.ExtendedPlotWindow
 
@@ -237,6 +239,18 @@ class PlotWindow(BasePlotWindow):
         open_windows = rpg.ExtendedPlotWindow.getWindows()
         open_windows = [RPGWrappedBase.autowrap(item) for item in open_windows]
         return open_windows
+
+    @classmethod
+    def find_by_id(cls, id):
+        i = 0
+        windows = self.getWindows()
+        for window in windows:
+            items = window.items
+            for item in items:
+                if isinstance(item, PlotItem):
+                    if item.plot_title.endswith("(id: {})".format(id)):
+                        return window
+        return None
 
 class PlotAxis(RPGWrappedBase):
     _base = rpg.AxisItem
@@ -466,11 +480,15 @@ ColorMap._remote_list.clear()
 #                      pos=tuple(x[0] for x in data),
 #                      color=tuple(x[1] for x in data))
 for color in colors.__data__.keys():
-   data = colors.__data__[color]
-   step = ceil(len(data) / 16)
-   rcmap = ColorMap(name=color, 
-                    pos=linspace(0.0, 1.0, len(data[::step])), 
-                    color=data[::step])
+    data = colors.__data__[color]
+    step = ceil(len(data) / 16)
+    rcmap = ColorMap(name=color, 
+                     pos=linspace(0.0, 1.0, len(data[::step])), 
+                     color=data[::step])
+    if color == 'viridis':
+        rcmap = ColorMap(name=color+"_nlin",
+                         pos=[0] + list(1/(x**1.75) for x in range(15,0,-1)),
+                         color=data[::step])
 rcmap = ColorMap.get_color_map('viridis')
 
 class PlotData(RPGWrappedBase):
@@ -572,7 +590,7 @@ class ImageItem(PlotData):
             self.set_image._setProxyOptions(callSync='off')
         #assert(data.shape == (self.setpoint_y.shape[0], self.setpoint_x.shape[0]))
 
-        self.set_image(data)
+        self.set_image(data, autoDownsample=True)
 
     @property
     def data(self):
@@ -594,7 +612,10 @@ class ImageItemWithHistogram(ImageItem):
         """
         Pause histogram autoupdates while a sweep is running.
         """
-        self._base_inst.sigImageChanged.disconnect()
+        try:
+            self._base_inst.sigImageChanged.disconnect()
+        except:
+            pass
 
     def resume_update(self):
         """
@@ -605,7 +626,7 @@ class ImageItemWithHistogram(ImageItem):
     def update(self, data, *args, **kwargs):
         super().update(data, *args, **kwargs)
         # Only update the range if requested
-        if kwargs.get('update_range', False):
+        if kwargs.get('update_range', True):
             z_range = (min(data), max(data))
             if self.set_levels is None:
                 # Cache update function so we don't have to request it each time we update

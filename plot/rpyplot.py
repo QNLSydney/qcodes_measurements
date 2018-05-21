@@ -127,6 +127,12 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
         self._windows.remove(self)
         event.accept()
 
+    def getLayoutItems(self):
+        layout = self.ci
+        items = list(layout.items.keys())
+        items = [mp.proxy(item) for item in items]
+        return items
+
     @classmethod
     def getWindows(cls):
         windows = [mp.proxy(item) for item in cls._windows]

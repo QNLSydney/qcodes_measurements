@@ -1,6 +1,6 @@
 from math import ceil
 import warnings
-import re, os, time
+import re, os, time, json
 import numpy as np
 
 from qcodes.dataset.experiment_container import load_by_id
@@ -87,8 +87,10 @@ def add_gate_label(plots, id):
 
     if isinstance(plots, pyplot.PlotWindow):
         plots = plots.items
-    elif isinstance(plots, pyplot.PlotData):
+    elif isinstance(plots, pyplot.PlotItem):
         plots = (plots,)
+    else:
+        raise TypeError("Either pass a window, or a PlotItem in a window")
 
     for item in plots:
         if isinstance(item, pyplot.PlotItem):
@@ -204,3 +206,10 @@ def plot_Wtext_by_run(exp, kt, save_fig=False, fig_folder=None):
     """
     ds = exp.data_set(kt)
     return plot_Wtext(ds.run_id, save_fig, fig_folder)
+
+def find_by_id(id):
+    """
+    Find the plotwindow that contains the given ID
+    """
+    win = pyplot.PlotWindow.find_by_id(id)
+    return win
