@@ -1,6 +1,5 @@
 import logging as log
 import numpy as np
-import os, time
 
 from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
@@ -42,14 +41,14 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
     # Set up a plotting window
     if append is None or not append:
         win = pyplot.PlotWindow()
-        win.win_title = 'ID: ' % param_set.full_name
+        win.win_title = 'ID: '
         win.resize(1000,600)
     elif isinstance(append, pyplot.PlotWindow):
         # Append to the given window
         win = append
     elif isinstance(append, bool):
         # Append to the last trace if true
-        win = pyplot.PlotWindow._windows[-1]
+        win = pyplot.PlotWindow.getWindows()[-1]
     else:
         raise ValueError("Unknown argument to append. Either give a plot window"
                          " or true to append to the last plot")
@@ -176,8 +175,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         # Update plot titles
         win.win_title += "{} ".format(datasaver.run_id)
         for i in range(len(param_meas)):
-            plots[p]._parent.plot_title += " (id: %d)" % datasaver.run_id
-            plots[p]._parent.traces[0].pause_update()
+            plots[i]._parent.plot_title += " (id: %d)" % datasaver.run_id
+            plots[i].pause_update()
         
         for i, set_point1 in enumerate(set_points1):
             param_set2.set(start2)
@@ -207,8 +206,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         
         for i in range(len(param_meas)):
             fdata = data[i]
-            plots[p].update(fdata, True)
-            plots[p].resume_update()
+            plots[i].update(fdata, True)
+            plots[i].resume_update()
 
     if save:
         plot_tools.save_figure(win, datasaver.run_id)
