@@ -13,6 +13,13 @@ from qcodes.instrument.parameter import _BaseParameter
 
 from ..plot import ChildProcessImportError, colors
 
+# Check if a QApplication exists. It will not if we are not running from spyder...
+import PyQt5
+if PyQt5.QtGui.QApplication.instance() is None:
+    app = PyQt5.QtGui.QApplication([])
+else:
+    app = PyQt5.QtGui.QApplication.instance()
+
 if len(mp.QtProcess.handlers) == 0:
     proc = mp.QtProcess()
     rpg = proc._import('qcodes_measurements.plot.rpyplot')
