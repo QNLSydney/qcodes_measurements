@@ -1,6 +1,7 @@
-from qcodes import Parameter
-
 import wrapt
+from functools import partial, reduce
+from scipy import signal
+import numpy as np
 
 class BaseWrappedParameter(wrapt.CallableObjectProxy):
     """
@@ -15,6 +16,13 @@ class BaseWrappedParameter(wrapt.CallableObjectProxy):
         """
         super().__init__(parameter)
 
+    def __call__(self):
+        """
+        Need to wrap call to reference our overridden get, rather
+        than the one in the parent
+        """
+        return self.get()
+
     @property
     def name(self):
         """
@@ -25,16 +33,26 @@ class BaseWrappedParameter(wrapt.CallableObjectProxy):
         if not param_name.startswith("wrap_"):
             param_name = f"wrap_{param_name}"
         return param_name
-
-    def snapshot_base(*args, **kwargs):
+    
+    def snapshot(self, *args, **kwargs):
+        """
+        Overwrite snapshot too, as the wrapped parameter snapshot will not have 
+        access to our snapshot_base unless it is called from here
+        """
         # Take a snapshot of the base
-        snap = super().snapshot_base(*args, **kwargs)
+        snap = self.__wrapped__.snapshot(*args, **kwargs)
 
         # Add a list of wrappers to the snapshot
         snap['wrappers'] = snap.get('wrappers', []) + [self.wrappers]
 
         # Return the snapshot with wrappers included
         return snap
+    
+    def get_raw(self):
+        raise RuntimeError("I think this shouldn't be called?")
+
+    def snapshot_base(self, *args, **kwargs):
+        raise RuntimeError("I think this shouldn't be called?")
 
 class FilterWrapper(BaseWrappedParameter):
     """
@@ -48,7 +66,7 @@ class FilterWrapper(BaseWrappedParameter):
     args = None
     kwargs = None
 
-    def __init__(self, parameter, filter_func, *args, **kwargs):
+    def __init__(self, parameter, *, filter_func, args=None, kwargs=None):
         """
         Args:
             parameter - the parameter to wrap
@@ -57,19 +75,19 @@ class FilterWrapper(BaseWrappedParameter):
         """
         super().__init__(parameter)
         self.filter_func = filter_func
-        self.args = args
-        self.kwargs = kwargs
+        self.args = args if args is not None else []
+        self.kwargs = kwargs if kwargs is not None else {}
 
         snap = {'type': type(self).__name__,
                 'filter_func': filter_func.__name__,
                 'doc': filter_func.__doc__,
                 'args': args,
                 'kwargs': kwargs}
-        self.wrappers = wrappers
+        self.wrappers = snap
 
-    def get_raw(self):
-        d = super().get_raw()
-        d = self.filter_func(d, *args, **kwargs)
+    def get(self):
+        d = self.__wrapped__.get()
+        d = self.filter_func(d, *self.args, **self.kwargs)
         return d
 
 class CutWrapper(BaseWrappedParameter):
@@ -99,7 +117,7 @@ class CutWrapper(BaseWrappedParameter):
                 'doc': type(self).__doc__,
                 'fromstart': fromstart,
                 'fromend': fromend}
-        self.wrappers = wrappers
+        self.wrappers = snap
 
     @property
     def shape(self):
@@ -118,11 +136,28 @@ class CutWrapper(BaseWrappedParameter):
         """
         old_setpoints = self.__wrapped__.setpoints
         assert(len(old_setpoints) == 1) # Only support 1D arrays for now
-        old_setpoints = old_setpoints[0][self.fromstart:-self.fromend]
+        if self.fromend == 0:
+            old_setpoints = old_setpoints[0][self.fromstart:]
+        else:
+            old_setpoints = old_setpoints[0][self.fromstart:-self.fromend]
         return (old_setpoints,)
-    
 
-    def get_raw(self):
-        d = super().get_raw()
-        d = d[self.fromstart:-self.fromend]
+    def get(self):
+        d = self.__wrapped__.get()
+        if self.fromend == 0:
+            d = d[self.fromstart:]
+        else:
+            d = d[self.fromstart:-self.fromend]
         return d
+
+# Define a function to stack filters easily
+def _compose(*filters):
+    def compose(a, b):
+        return lambda x: a(b(x))
+    return reduce(compose, filters, lambda x: x)
+
+# Define a couple of commonly used filters
+SmoothFilter = partial(FilterWrapper, filter_func=signal.savgol_filter, args=(15, 3))
+GradientFilter = partial(FilterWrapper, filter_func=np.gradient)
+# Differentiate with smoothing on two sides.
+DiffFilter = _compose(SmoothFilter, GradientFilter, SmoothFilter)
