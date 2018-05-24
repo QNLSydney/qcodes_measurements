@@ -86,7 +86,7 @@ def ensure_channel(mdac_channel):
     else:
         log.exception("Can't do an MDAC 1d sweep on something that isnt an"
                       " MDAC channel")
-        raise TypeError("Trying to ramp a not MDAC channel")
+        raise TypeError("Can't extract an MDAC channel from: {}".format(type(mdac_channel)))
     return channel
 
 def make_channel_list(mdac, name, channels):
