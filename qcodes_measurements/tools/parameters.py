@@ -36,7 +36,7 @@ class BaseWrappedParameter(wrapt.CallableObjectProxy):
         # Return the snapshot with wrappers included
         return snap
 
-def FilterWrapper(BaseWrappedParameter):
+class FilterWrapper(BaseWrappedParameter):
     """
     Wrap a filter function around a parameter. The filter used will be stored
     in metadata along with any parameters used to run it.
@@ -72,7 +72,7 @@ def FilterWrapper(BaseWrappedParameter):
         d = self.filter_func(d, *args, **kwargs)
         return d
 
-def CutResultWrapper(BaseWrappedParameter):
+class CutWrapper(BaseWrappedParameter):
     """
     Cut a certain number of records from the front or back of a parameter.
     """
