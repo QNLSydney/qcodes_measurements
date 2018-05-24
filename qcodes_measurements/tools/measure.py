@@ -1,6 +1,8 @@
 import logging as log
 import numpy as np
 
+from collections import Iterable
+
 from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
 
@@ -31,9 +33,22 @@ def _flush_buffers(*params):
                             "{} with status code {}".format(inst.name,
                                                             status_code))
 
+def _run_functions(functions, err_name="functions"):
+    # Run @start functions
+    if functions is not None:
+        if callable(functions):
+            functions()
+        elif isinstance(functions, Iterable) and all(callable(x) for x in functions):
+            for func in functions:
+                func()
+        else:
+            raise TypeError("{} must be a function or a list of functions".format(err_name))
 
-def linear1d(param_set, start, stop, num_points, delay, *param_meas, 
-             append=None, save=True):
+def linear1d(param_set, start, stop, num_points, delay, *param_meas,
+             append=None, save=True, 
+             atstart=None, ateach=None, atend=None,
+             wallcontrol=None, wallcontrol_slope=None,
+             setback=False):
     """
     """
 
@@ -64,8 +79,12 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
     data = []
     plots = []
 
+    # Run @start functions
+    _run_functions(atstart)
+
     # Register each of the sweep parameters and set up a plot window for them
     for p, parameter in enumerate(param_meas):
+        print(parameter, param_set)
         meas.register_parameter(parameter, setpoints=(param_set,))
         output.append([parameter, None])
         
@@ -103,6 +122,10 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
             plot.update_axes(param_set, parameter)
         plots.append(plotdata)
 
+    if wallcontrol is not None:
+        wallcontrol_start = wallcontrol.get()
+        step = (stop-start)/num_points
+
     with meas.run() as datasaver:
         # Update plot titles
         win.win_title += "{} ".format(datasaver.run_id)
@@ -111,7 +134,10 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         
         # Then, run the actual sweep
         for i, set_point in enumerate(set_points):
+            if wallcontrol is not None:
+                wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
             param_set.set(set_point)
+            _run_functions(ateach)
             for p, parameter in enumerate(param_meas):
                 output[p][1] = parameter.get()
                 if getattr(parameter, 'shape', None) is not None:
@@ -127,6 +153,14 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
             # Save data
             datasaver.add_result((param_set, set_point),
                                 *output)
+
+    if wallcontrol is not None:
+        wallcontrol.set(wallcontrol_start)
+
+    if setback:
+        param_set.set(start)
+
+    _run_functions(atend)
 
     if save:
         plot_tools.save_figure(win, datasaver.run_id)
