@@ -134,8 +134,8 @@ class FlattenWrapper(FilterWrapper):
         self.setpoint_names = None
         self.setpoint_labels = None
 
-        for param in ('setpoints', 'setpoint_units', 'setpoint_names', 'setpoint_labels'):
-            self.wrappers[param] = getattr(self.__wrapped__, param, None)
+        for param in ('shape', 'setpoints', 'setpoint_units', 'setpoint_names', 'setpoint_labels'):
+            self.wrappers[f'old_{param}'] = getattr(self.__wrapped__, param, None)
 
 class CutWrapper(BaseWrappedParameter):
     """

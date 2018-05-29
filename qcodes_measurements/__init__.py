@@ -11,7 +11,7 @@ try:
 
     # Import shortcuts to measurements
     from .tools.measure import linear1d, linear2d
-    from .tools.parameters import FilterWrapper, CutWrapper, SmoothFilter, DiffFilter
+    from .tools.parameters import FilterWrapper, FlattenWrapper, CutWrapper, SmoothFilter, DiffFilter, MeanFilter
 
     # If we have an MDAC, import MDAC shortcuts
     try:
