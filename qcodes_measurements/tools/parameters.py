@@ -3,6 +3,23 @@ from functools import partial, reduce
 from scipy import signal
 import numpy as np
 
+"""
+Define some modules for doing filtering on parameters as they come in. This is mainly
+useful when we actually want to store some derived quantity (i.e. the differentiated signal)
+or we need to apply some transformation before the data becomes useful.
+
+The parameters of the filter
+
+Example usage would be:
+```py
+import qcodes_measurements as qcm
+
+# This is the parameter from the instrument. Let's say we want to smooth it:
+parameter_to_measure = scope.ch1.trace
+smoothed_parameter = qcm.SmoothFilter(parameter_to_measure)
+
+"""
+
 class BaseWrappedParameter(wrapt.CallableObjectProxy):
     """
     Allow filters to be wrapped around parameters, for example to differentiate
@@ -90,6 +107,36 @@ class FilterWrapper(BaseWrappedParameter):
         d = self.filter_func(d, *self.args, **self.kwargs)
         return d
 
+class FlattenWrapper(FilterWrapper):
+    """
+    Wrap a filter function that returns a single value, potentially from an
+    array. This filter will correctly clear setpoints from the base parameter
+    (although a snapshot will be taken), such that values are correctly stored
+    as single points
+    """
+
+    setpoints = None
+    setpoint_units = None
+    setpoint_names = None
+    setpoint_labels = None
+    shape = None
+    def __init__(self, parameter, *, filter_func, args=None, kwargs=None):
+        """
+        Args:
+            parameter - the parameter to wrap
+            filter_func - the filter to apply to the result of the parameter
+            *args, **kwargs - arguments passed to the filter function
+        """
+        super().__init__(parameter, filter_func=filter_func, args=args, kwargs=kwargs)
+        self.shape = tuple()
+        self.setpoints = None
+        self.setpoint_units = None
+        self.setpoint_names = None
+        self.setpoint_labels = None
+
+        for param in ('setpoints', 'setpoint_units', 'setpoint_names', 'setpoint_labels'):
+            self.wrappers[param] = getattr(self.__wrapped__, param, None)
+
 class CutWrapper(BaseWrappedParameter):
     """
     Cut a certain number of records from the front or back of a parameter.
@@ -161,3 +208,5 @@ SmoothFilter = partial(FilterWrapper, filter_func=signal.savgol_filter, args=(15
 GradientFilter = partial(FilterWrapper, filter_func=np.gradient)
 # Differentiate with smoothing on two sides.
 DiffFilter = _compose(SmoothFilter, GradientFilter, SmoothFilter)
+# Take the mean of an array
+MeanFilter = partial(FlattenWrapper, filter_func=np.mean)
