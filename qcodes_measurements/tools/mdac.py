@@ -184,6 +184,14 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
     ch1 = ensure_channel(mdac_channel1)
     ch2 = ensure_channel(mdac_channel2)
 
+    # Do some validation
+    if start1 == stop1:
+        raise ValueError("Start and stop are the same for ch1")
+    if start2 == stop2:
+        raise ValueError("Start and stop are the same for ch2")
+    if ch1 == ch2:
+        raise ValueError("ch1 and ch2 are the same")
+
     # Set labels correctly
     old_label = (mdac_channel1.label, mdac_channel2.label)
     ch1.ramp.label = mdac_channel1.label
