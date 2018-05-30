@@ -148,7 +148,7 @@ def end_bus(mdac, channels, bus_channel):
     bus_channel.gnd('close')
     
 def ramp(mdac_channel, to, sure=False):
-    if (to > 0 or to < -1.5) and not sure:
+    if (to > 0 or to < -1.75) and not sure:
         raise ValueError("{} is pretty big. Are you sure?".format(to))
     base = ensure_channel(mdac_channel)
     base.ramp(to)
