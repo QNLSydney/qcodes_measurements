@@ -249,8 +249,7 @@ class PlotWindow(BasePlotWindow):
 
     @classmethod
     def find_by_id(cls, id):
-        i = 0
-        windows = self.getWindows()
+        windows = cls.getWindows()
         for window in windows:
             items = window.items
             for item in items:
