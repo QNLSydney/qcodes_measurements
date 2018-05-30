@@ -40,7 +40,6 @@ else:
             rpg.setConfigOption('foreground', 'k')
             rpg.setConfigOption('leftButtonPan', False)
     else:
-        print(type(proc))
         raise ChildProcessImportError("Importing pyplot from child process")
     
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
@@ -289,7 +288,7 @@ class PlotItem(RPGWrappedBase):
         if title is not None:
             self.plot_title = title
 
-    def plot(self, setpoint_x, setpoint_y=None, data=None, **kwargs):
+    def plot(self, *, setpoint_x, setpoint_y=None, data=None, **kwargs):
         """
         Add some plotdata to this plot
         """

@@ -108,28 +108,25 @@ class CustomViewBox(ViewBox):
         if obj == self.rbScaleBox:
             # Run our custom handler if we've clicked inside the scale box
             if isinstance(ev, QGraphicsSceneMouseEvent):
-                try:
-                    # We only handle left button events inside the rectangle
-                    if (ev.button() & QtCore.Qt.LeftButton) and obj.rect().contains(ev.pos()):
-                        # Check for a mouse click inside the scale box on the left mouse button
-                        # Ignore events where we've dragged.
-                        if ((ev.type() == QtCore.QEvent.GraphicsSceneMouseRelease) and
-                            (ev.buttonDownPos(QtCore.Qt.LeftButton) == ev.pos())):
-                            # Translate event to PyQtGraph event framework
-                            ev = MouseClickEvent(ev)
-                            ev.accept()
+                # We only handle left button events inside the rectangle
+                if (ev.button() & QtCore.Qt.LeftButton) and obj.rect().contains(ev.pos()):
+                    # Check for a mouse click inside the scale box on the left mouse button
+                    # Ignore events where we've dragged.
+                    if ((ev.type() == QtCore.QEvent.GraphicsSceneMouseRelease) and
+                        (ev.buttonDownPos(QtCore.Qt.LeftButton) == ev.pos())):
+                        # Translate event to PyQtGraph event framework
+                        ev = MouseClickEvent(ev)
+                        ev.accept()
 
-                            # Get the menu
-                            self.menu = self.rbMenu
-                            # Then add in context dependant menus
-                            self.scene().addParentContextMenus(self, self.menu, ev)
-                            # And finally raise the context menu
-                            self.raiseContextMenu(ev)
-                            return True
-                        elif (ev.type() == QtCore.QEvent.GraphicsSceneMousePress):
-                            return True
-                except Exception as e:
-                    print(e)
+                        # Get the menu
+                        self.menu = self.rbMenu
+                        # Then add in context dependant menus
+                        self.scene().addParentContextMenus(self, self.menu, ev)
+                        # And finally raise the context menu
+                        self.raiseContextMenu(ev)
+                        return True
+                    elif (ev.type() == QtCore.QEvent.GraphicsSceneMousePress):
+                        return True
         return False
 
     def mouseClickEvent(self, ev):
