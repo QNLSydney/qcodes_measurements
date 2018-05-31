@@ -23,7 +23,7 @@ def _set_defaults(rpg):
     rpg.setConfigOption('background', 'w')
     rpg.setConfigOption('foreground', 'k')
     rpg.setConfigOption('leftButtonPan', False)
-    rpg._setProxyOptions(deferGetattr=True)
+    rpg._setProxyOptions(deferGetattr=False)
 
 def _ensure_ndarray(array):
     """
@@ -61,6 +61,9 @@ else:
         raise ChildProcessImportError("Importing pyplot from child process")
     
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
+    # Keep track of children so they aren't recomputed each time
+    _subclass_types = None
+
     # Reserve names for local variables, so they aren't proxied.
     _items = None
     _parent = None
@@ -101,7 +104,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         base_inst = cls.__new__(cls)
         base_inst.__dict__ = {**base_inst.__dict__, 
                               **instance.__dict__}
-        self._base_inst = instance
+        base_inst._base_inst = instance
 
         # If we do want to initialize some instance variables, we can do it in
         # the special __wrap__ method
@@ -114,24 +117,27 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
     @staticmethod
     def autowrap(inst):
         # Figure out the types that we know how to autowrap
-        subclass_types = {}
-        def append_subclasses(d, cls):
-            for t in cls.__subclasses__():
-                append_subclasses(d, t)
-                base = getattr(t, '_base', None)
-                if base is None:
-                    continue
-                typestr = base._typeStr.split()[1].strip('\'>').split('.')[-1]
-                d[typestr] = t
-        append_subclasses(subclass_types, RPGWrappedBase)
+        if RPGWrappedBase._subclass_types is None:
+            RPGWrappedBase._subclass_types = {}
+            def append_subclasses(d, cls):
+                for t in cls.__subclasses__():
+                    append_subclasses(d, t)
+                    base = getattr(t, '_base', None)
+                    if base is None:
+                        continue
+                    print(base.__class__.__name__)
+                    typestr = base._typeStr.split()[1].strip('\'>').split('.')[-1]
+                    print(typestr)
+                    d[typestr] = t
+            append_subclasses(RPGWrappedBase._subclass_types, RPGWrappedBase)
 
         # Then, if we have an object proxy, wrap it if it is in the list of wrappable types
         if isinstance(inst, mp.remoteproxy.ObjectProxy):
             if isinstance(inst, RPGWrappedBase):
                 return inst
             typestr = inst._typeStr.split()[0].strip('< ').split('.')[-1]
-            if typestr in subclass_types:
-                return subclass_types[typestr].wrap(inst)
+            if typestr in RPGWrappedBase._subclass_types:
+                return RPGWrappedBase._subclass_types[typestr].wrap(inst)
         # Otherwise, just return the bare instance
         return inst
 
@@ -252,7 +258,7 @@ class BasePlotWindow(RPGWrappedBase):
         All extra keyword arguments are passed to :func:`PlotItem.__init__ <pyqtgraph.PlotItem.__init__>`
         Returns the created item.
         """
-        plot = ExtendedPlotItem(**kargs)
+        plot = PlotItem(**kargs)
         self.addItem(plot, row, col, rowspan, colspan)
         return plot
 
@@ -467,6 +473,10 @@ class HistogramLUTItem(RPGWrappedBase):
         self.allowAdd = allowAdd
         self._remote_function_options['setLevels'] = {'callSync': 'off'}
         self._remote_function_options['imageChanged'] = {'callSync': 'off'}
+    def __wrap__(self, *args, **kwargs):
+        super().__wrap__(*args, **kwargs)
+        self._remote_function_options['setLevels'] = {'callSync': 'off'}
+        self._remote_function_options['imageChanged'] = {'callSync': 'off'}
 
     @property
     def axis(self):
@@ -660,8 +670,16 @@ class ImageItem(PlotData):
 class ImageItemWithHistogram(ImageItem):
     _base = rpg.ImageItemWithHistogram
 
+    # Local Variables
+    _histogram = None
+
     def __init__(self, setpoint_x, setpoint_y, colormap=rcmap, *args, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
+        self._histogram = self.getHistogramLUTItem()
+
+    def __wrap__(self, *args, **kwargs):
+        super().__wrap__(*args, **kwargs)
+        self._histogram = self.getHistogramLUTItem()
 
     def pause_update(self):
         """
@@ -697,7 +715,7 @@ class ImageItemWithHistogram(ImageItem):
 
     @property
     def histogram(self):
-        return self.getHistogramLUTItem()
+        return self._histogram
 
     @property
     def colormap(self):
