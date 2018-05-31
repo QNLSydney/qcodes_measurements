@@ -272,3 +272,16 @@ class ImageItemWithHistogram(ImageItem):
                 if self._parent is not None:
                     self._parent.removeItem(self._LUTitem)
                     self._parent = None
+
+import logging
+import sys
+
+logger = logging.getLogger("rpyplot")
+log_handler = logging.FileHandler("rpyplot.log")
+log_handler.setLevel(logging.INFO)
+log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+log_handler.setFormatter(log_format)
+logger.addHandler(log_handler)
+def exc(type, value, tb):
+    logger.exception("Uncaught Exception: {}\n{}".format(str(value), str(tb)))
+sys.excepthook = exc
