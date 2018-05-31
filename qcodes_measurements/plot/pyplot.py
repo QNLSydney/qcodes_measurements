@@ -125,9 +125,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
                     base = getattr(t, '_base', None)
                     if base is None:
                         continue
-                    print(base.__class__.__name__)
                     typestr = base._typeStr.split()[1].strip('\'>').split('.')[-1]
-                    print(typestr)
                     d[typestr] = t
             append_subclasses(RPGWrappedBase._subclass_types, RPGWrappedBase)
 
@@ -367,7 +365,6 @@ class BasePlotItem(RPGWrappedBase):
         If left or bottom axis is from an ArrayParameter, set param_x_setpoint
         or param_y_setpoint to true
         """
-        print(param_x, param_y)
         if not isinstance(param_x, _BaseParameter):
             raise TypeError("param_x must be a qcodes parameter")
         if not isinstance(param_y, _BaseParameter):
