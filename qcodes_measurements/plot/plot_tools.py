@@ -127,7 +127,7 @@ def add_image_plot(plot, x, y, z, title=None):
         plot.plot_title = title
 
     # Create image plot
-    implot = plot.plot(x['data'], y['data'], data=z['data'])
+    implot = plot.plot(setpoint_x=x['data'], setpoint_y=y['data'], data=z['data'])
 
     # Set Axis Labels
     plot.left_axis.label   = y.get('label', "")
