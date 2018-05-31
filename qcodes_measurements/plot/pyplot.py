@@ -315,7 +315,7 @@ class PlotAxis(RPGWrappedBase):
     def units(self, units):
         self.setLabel(units=units)
 
-class PlotItem(RPGWrappedBase):
+class BasePlotItem(RPGWrappedBase):
     _base = rpg.PlotItem
 
     def __init__(self, title=None):
@@ -399,7 +399,7 @@ class PlotItem(RPGWrappedBase):
         raise NotImplementedError("Can't get a list of traces from a non-extended plot_item")
     
 
-class ExtendedPlotItem(PlotItem):
+class PlotItem(BasePlotItem):
     _base = rpg.ExtendedPlotItem
 
     def export(self, fname, export_type="image"):
