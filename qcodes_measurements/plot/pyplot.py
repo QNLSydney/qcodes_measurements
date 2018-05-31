@@ -66,9 +66,15 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
     _parent = None
     _base_inst = None
 
+    # Cache remote functions, allowing proxy options for each to be set
+    _remote_functions = None
+    _remote_function_options = None
+
     def __init__(self, *args, **kwargs):
         self._items = []
         self._parent = None
+        self._remote_functions = {}
+        self._remote_function_options = {}
         if '_base' in self.__class__.__dict__:
             base = self.__class__.__dict__['_base'](*args, **kwargs)
             self._base_inst = base
@@ -80,6 +86,8 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         # We still want to keep track of new items in wrapped objects
         self._items = []
         self._parent = None
+        self._remote_functions = {}
+        self._remote_function_options = {}
         # And make sure that ndarrays are still proxied
         self.append_no_proxy_types(ndarray)
 
@@ -169,13 +177,23 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             super().__setattr__(name, value)
 
     def __getattr__(self, name):
+        # Check whether this function has been cached
+        if name in self._remote_functions:
+            return self._remote_functions[name]
+
+        # Get attribute from object proxy
         attr = getattr(self._base_inst, name)
-            
+        
+        # Wrap adders and getters
         if name.startswith("add") and callable(attr):
-            print("Attribute adder")
             return self.wrap_adders(attr)
         elif name.startswith("get") and callable(attr):
             return self.wrap_getters(attr)
+
+        # Save a cached copy, if we have a function with specific options
+        if callable(attr) and name in self._remote_function_options:
+            attr._setProxyOptions(**self._remote_function_options[name])
+            self._remote_functions[name] = attr
 
         return attr
 
@@ -447,6 +465,8 @@ class HistogramLUTItem(RPGWrappedBase):
         super().__init__(*args, **kwargs)
         self._cmap = None
         self.allowAdd = allowAdd
+        self._remote_function_options['setLevels'] = {'callSync': 'off'}
+        self._remote_function_options['imageChanged'] = {'callSync': 'off'}
 
     @property
     def axis(self):
@@ -540,15 +560,15 @@ class PlotDataItem(PlotData):
 
     # Reserve names of local variables
     setpoint_x = None
-    set_data = None
 
     def __init__(self, setpoint_x=None, *args, **kwargs):
-        self.setpoint_x = _ensure_ndarray(setpoint_x)
-        self.set_data = None
         super().__init__(*args, **kwargs)
+        self.setpoint_x = _ensure_ndarray(setpoint_x)
+        self._remote_function_options['setData'] = {'callSync': 'off'}
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
+        self._remote_function_options['setData'] = {'callSync': 'off'}
         if 'setpoint_x' in kwargs:
             # If we know what our setpoints are, use them
             self.setpoint_x = kwargs['setpoint_x']
@@ -564,11 +584,7 @@ class PlotDataItem(PlotData):
                 self.setpoint_x = None
 
     def update(self, data, *args, **kwargs):
-        if self.set_data is None:
-            # Cache update function so we don't have to request it each time we update
-            self.set_data = self.setData
-            self.set_data._setProxyOptions(callSync='off')
-        self.set_data(x=self.setpoint_x, y=_ensure_ndarray(data), *args, **kwargs)
+        self.setData(x=self.setpoint_x, y=_ensure_ndarray(data), *args, **kwargs)
 
     @property
     def data(self):
@@ -583,20 +599,18 @@ class ImageItem(PlotData):
     # Reserve names of local variables
     setpoint_x = None
     setpoint_y = None
-    set_image = None
 
     def __init__(self, setpoint_x, setpoint_y, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setpoint_x = _ensure_ndarray(setpoint_x)
         self.setpoint_y = _ensure_ndarray(setpoint_y)
-        self.set_image = None
+        self._remote_function_options['setImage'] = {'callSync': 'off'}
         # Set axis scales correctly
         self._force_rescale()
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
-
-        self.set_image = None
+        self._remote_function_options['setImage'] = {'callSync': 'off'}
 
         if 'setpoint_x' in kwargs and 'setpoint_y' in kwargs:
             # If we are given the scalings, use them
@@ -620,13 +634,7 @@ class ImageItem(PlotData):
         self.scale(step_x, step_y)
 
     def update(self, data, *args, **kwargs):
-        if self.set_image is None:
-            # Cache update function so we don't have to request it each time we update
-            self.set_image = self.setImage
-            self.set_image._setProxyOptions(callSync='off')
-        #assert(data.shape == (self.setpoint_y.shape[0], self.setpoint_x.shape[0]))
-
-        self.set_image(_ensure_ndarray(data), autoDownsample=True)
+        self.setImage(_ensure_ndarray(data), autoDownsample=True)
 
     @property
     def data(self):
@@ -638,15 +646,8 @@ class ImageItem(PlotData):
 class ImageItemWithHistogram(ImageItem):
     _base = rpg.ImageItemWithHistogram
 
-    # Reserve names of local variables
-    update_histogram = None
-    set_levels = None
-
     def __init__(self, setpoint_x, setpoint_y, colormap=rcmap, *args, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
-        # Add instance variables
-        self.set_levels = None
-        self.update_histogram = None
 
     def pause_update(self):
         """
@@ -668,15 +669,8 @@ class ImageItemWithHistogram(ImageItem):
         # Only update the range if requested
         if kwargs.get('update_range', True):
             z_range = (min(data), max(data))
-            if self.set_levels is None:
-                # Cache update function so we don't have to request it each time we update
-                self.set_levels = self.histogram.setLevels
-                self.set_levels._setProxyOptions(callSync='off')
-            if self.update_histogram is None:
-                self.update_histogram = self.histogram.imageChanged
-                self.update_histogram._setProxyOptions(callSync='off')
-            self.update_histogram()
-            self.set_levels(*z_range)
+            self.histogram.imageChanged()
+            self.histogram.setLevels(*z_range)
 
     def update_histogram_axis(self, param_z):
         """
