@@ -575,17 +575,25 @@ class PlotDataItem(PlotData):
         else:
             try:
                 # Otherwise try and extract them from the existing data
-                xData = self.xData
-                if isinstance(xData, mp.remoteproxy.ObjectProxy):
-                    self.setpoint_x = xData._getValue()
-                else:
-                    self.setpoint_x = xData
+                self.setpoint_x = _ensure_ndarray(self.xData)
             except AttributeError:
                 self.setpoint_x = None
 
     def update(self, data, *args, **kwargs):
         self.setData(x=self.setpoint_x, y=_ensure_ndarray(data), *args, **kwargs)
 
+    @property
+    def xData(self):
+        xData = getattr(self._base_inst, 'xData')
+        if isinstance(xData, mp.remoteproxy.ObjectProxy):
+            xData = xData._getValue()
+        return xData
+    @property
+    def yData(self):
+        yData = getattr(self._base_inst, 'yData')
+        if isinstance(yData, mp.remoteproxy.ObjectProxy):
+            yData = yData._getValue()
+        return yData
     @property
     def data(self):
         """
@@ -636,6 +644,12 @@ class ImageItem(PlotData):
     def update(self, data, *args, **kwargs):
         self.setImage(_ensure_ndarray(data), autoDownsample=True)
 
+    @property
+    def image(self):
+        image = getattr(self._base_inst, 'image')
+        if isinstance(image, mp.remoteproxy.ObjectProxy):
+            image = image._getValue()
+        return image
     @property
     def data(self):
         """
