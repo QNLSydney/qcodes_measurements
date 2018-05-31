@@ -3,18 +3,40 @@
 from math import ceil
 import warnings
 import re
+import PyQt5
 
 import pyqtgraph as pg
 import pyqtgraph.multiprocess as mp
 
+import numpy as np
 from numpy import linspace, min, max, ndarray
 
 from qcodes.instrument.parameter import _BaseParameter
 
 from ..plot import ChildProcessImportError, colors
 
+#Define some convenient functions
+def _set_defaults(rpg):
+    """
+    Set up the default state of the plot windows. Add any other global config options here.
+    """
+    rpg.setConfigOption('background', 'w')
+    rpg.setConfigOption('foreground', 'k')
+    rpg.setConfigOption('leftButtonPan', False)
+    rpg._setProxyOptions(deferGetattr=True)
+
+def _ensure_ndarray(array):
+    """
+    Ensure the given array is a numpy array. Necessary for some parts of pyqtgraph.
+    """
+    if array is None:
+        return None
+    if not isinstance(array, ndarray):
+        return np.array(array)
+    return array
+
+# --- ON STARTUP - Create a remote Qt process used for plotting in the background
 # Check if a QApplication exists. It will not if we are not running from spyder...
-import PyQt5
 if PyQt5.QtGui.QApplication.instance() is None:
     app = PyQt5.QtGui.QApplication([])
 else:
@@ -23,9 +45,7 @@ else:
 if len(mp.QtProcess.handlers) == 0:
     proc = mp.QtProcess()
     rpg = proc._import('qcodes_measurements.plot.rpyplot')
-    rpg.setConfigOption('background', 'w')
-    rpg.setConfigOption('foreground', 'k')
-    rpg.setConfigOption('leftButtonPan', False)
+    _set_defaults(rpg)
 else:
     proc = next(iter(mp.QtProcess.handlers.values()))
     # Check whether it is closed
@@ -36,26 +56,30 @@ else:
             mp.QtProcess.handlers.clear()
             proc = mp.QtProcess()
             rpg = proc._import('qcodes_measurements.plot.rpyplot')
-            rpg.setConfigOption('background', 'w')
-            rpg.setConfigOption('foreground', 'k')
-            rpg.setConfigOption('leftButtonPan', False)
+            _set_defaults(rpg)
     else:
         raise ChildProcessImportError("Importing pyplot from child process")
     
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
+    # Reserve names for local variables, so they aren't proxied.
+    _items = None
+    _parent = None
+    _base_inst = None
+
     def __init__(self, *args, **kwargs):
-        self.__dict__['_items'] = []
-        self.__dict__['_parent'] = None
+        self._items = []
+        self._parent = None
         if '_base' in self.__class__.__dict__:
             base = self.__class__.__dict__['_base'](*args, **kwargs)
-            self.__dict__['_base_inst'] = base
-            self.__dict__ = {**base.__dict__, **self.__dict__}
+            self._base_inst = base
+        else:
+            raise TypeError("Base instance not defined. Don't know how to create remote object.")
         self.append_no_proxy_types(ndarray)
             
     def __wrap__(self):
         # We still want to keep track of new items in wrapped objects
-        self.__dict__['_items'] = []
-        self.__dict__['_parent'] = None
+        self._items = []
+        self._parent = None
         # And make sure that ndarrays are still proxied
         self.append_no_proxy_types(ndarray)
 
@@ -64,12 +88,12 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         if not isinstance(instance, mp.remoteproxy.ObjectProxy):
             raise TypeError("We can only wrap ObjectProxies")
 
-        # Create an empty instance of the class we want wrapped,
+        # Create an empty instance of RPGWrappedBase,
         # and copy over instance variables
         base_inst = cls.__new__(cls)
         base_inst.__dict__ = {**base_inst.__dict__, 
                               **instance.__dict__}
-        base_inst.__dict__['_base_inst'] = instance
+        self._base_inst = instance
 
         # If we do want to initialize some instance variables, we can do it in
         # the special __wrap__ method
@@ -145,7 +169,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             super().__setattr__(name, value)
 
     def __getattr__(self, name):
-        attr = super().__getattr__(name)
+        attr = getattr(self._base_inst, name)
             
         if name.startswith("add") and callable(attr):
             print("Attribute adder")
@@ -156,7 +180,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         return attr
 
     def __repr__(self):
-        return "<%s for %s >" % (self.__class__.__name__, super().__repr__())
+        return "<%s for %s>" % (self.__class__.__name__, super().__repr__())
 
     def _notify_added(self, parent):
         # Allow objects to keep track of which window they are in if they need to
@@ -223,7 +247,6 @@ class BasePlotWindow(RPGWrappedBase):
         items = self.getLayoutItems()
         items = [RPGWrappedBase.autowrap(item) for item in items]
         return items
-    
 
 class PlotWindow(BasePlotWindow):
     _base = rpg.ExtendedPlotWindow
@@ -417,9 +440,12 @@ class TextItem(RPGWrappedBase):
 class HistogramLUTItem(RPGWrappedBase):
     _base = rpg.HistogramLUTItem
 
+    # Reserve names of local variables
+    _cmap = None
+
     def __init__(self, *args, allowAdd=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__dict__['_cmap'] = None
+        self._cmap = None
         self.allowAdd = allowAdd
 
     @property
@@ -451,8 +477,11 @@ class ColorMap(RPGWrappedBase):
     _remote_list = rpg.graphicsItems.GradientEditorItem.__getattr__('Gradients', 
                                                                     _returnType="proxy")
 
+    # Reserve names of local variables
+    _name = None
+
     def __init__(self, name, pos, color, *args, **kwargs):
-        self.__dict__['_name'] = name
+        self._name = None
         super().__init__(pos, color, *args, **kwargs)
 
         # Keep track of all color maps, and add them to the list of available colormaps
@@ -462,7 +491,6 @@ class ColorMap(RPGWrappedBase):
             'ticks': list(zip(pos, (tuple(int(y*255) for y in x) + (255,) for x in color))),
             'mode': 'rgb'
         }
-
 
     @classmethod
     def get_color_map(cls, name):
@@ -478,12 +506,6 @@ class ColorMap(RPGWrappedBase):
 ## Transfer color scales to remote process, truncating steps to 16 if necessary
 maps = ColorMap._remote_list._getValue()
 ColorMap._remote_list.clear()
-# for name, vals in maps.items():
-#     data = vals['ticks']
-#     mode = vals['mode']
-#     rcmap = ColorMap(name=name,
-#                      pos=tuple(x[0] for x in data),
-#                      color=tuple(x[1] for x in data))
 for color in colors.__data__.keys():
     data = colors.__data__[color]
     step = ceil(len(data) / 16)
@@ -492,7 +514,7 @@ for color in colors.__data__.keys():
                      color=data[::step])
     if color == 'viridis':
         rcmap = ColorMap(name=color+"_nlin",
-                         pos=[0] + list(1/(x**1.75) for x in range(15,0,-1)),
+                         pos=[0] + list(1/(x**1.5) for x in range(15,0,-1)),
                          color=data[::step])
 rcmap = ColorMap.get_color_map('viridis')
 
@@ -516,33 +538,37 @@ class PlotData(RPGWrappedBase):
 class PlotDataItem(PlotData):
     _base = rpg.PlotDataItem
 
+    # Reserve names of local variables
+    setpoint_x = None
+    set_data = None
+
     def __init__(self, setpoint_x=None, *args, **kwargs):
-        self.__dict__['setpoint_x'] = setpoint_x
-        self.__dict__['set_data'] = None
+        self.setpoint_x = _ensure_ndarray(setpoint_x)
+        self.set_data = None
         super().__init__(*args, **kwargs)
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
         if 'setpoint_x' in kwargs:
             # If we know what our setpoints are, use them
-            self.__dict__['setpoint_x'] = kwargs['setpoint_x']
+            self.setpoint_x = kwargs['setpoint_x']
         else:
             try:
                 # Otherwise try and extract them from the existing data
                 xData = self.xData
                 if isinstance(xData, mp.remoteproxy.ObjectProxy):
-                    self.__dict__['setpoint_x'] = xData._getValue()
+                    self.setpoint_x = xData._getValue()
                 else:
-                    self.__dict__['setpoint_x'] = xData
+                    self.setpoint_x = xData
             except AttributeError:
-                self.__dict__['setpoint_x'] = None
+                self.setpoint_x = None
 
     def update(self, data, *args, **kwargs):
         if self.set_data is None:
             # Cache update function so we don't have to request it each time we update
             self.set_data = self.setData
             self.set_data._setProxyOptions(callSync='off')
-        self.set_data(x=self.setpoint_x, y=data, *args, **kwargs)
+        self.set_data(x=self.setpoint_x, y=_ensure_ndarray(data), *args, **kwargs)
 
     @property
     def data(self):
@@ -554,23 +580,28 @@ class PlotDataItem(PlotData):
 class ImageItem(PlotData):
     _base = rpg.ImageItem
 
+    # Reserve names of local variables
+    setpoint_x = None
+    setpoint_y = None
+    set_image = None
+
     def __init__(self, setpoint_x, setpoint_y, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__dict__['setpoint_x'] = setpoint_x
-        self.__dict__['setpoint_y'] = setpoint_y
-        self.__dict__['set_image'] = None
+        self.setpoint_x = _ensure_ndarray(setpoint_x)
+        self.setpoint_y = _ensure_ndarray(setpoint_y)
+        self.set_image = None
         # Set axis scales correctly
         self._force_rescale()
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
 
-        self.__dict__['set_image'] = None
+        self.set_image = None
 
         if 'setpoint_x' in kwargs and 'setpoint_y' in kwargs:
             # If we are given the scalings, use them
-            self.__dict__['setpoint_x'] = kwargs['setpoint_x']
-            self.__dict__['setpoint_y'] = kwargs['setpoint_y']
+            self.setpoint_x = kwargs['setpoint_x']
+            self.setpoint_y = kwargs['setpoint_y']
         elif 'setpoint_x' in kwargs or 'setpoint_y' in kwargs:
             # If we are only given one, that must be an error
             raise TypeError('setpoint_x or _y given without the other. Both or neither are necessary')
@@ -595,7 +626,7 @@ class ImageItem(PlotData):
             self.set_image._setProxyOptions(callSync='off')
         #assert(data.shape == (self.setpoint_y.shape[0], self.setpoint_x.shape[0]))
 
-        self.set_image(data, autoDownsample=True)
+        self.set_image(_ensure_ndarray(data), autoDownsample=True)
 
     @property
     def data(self):
@@ -607,11 +638,15 @@ class ImageItem(PlotData):
 class ImageItemWithHistogram(ImageItem):
     _base = rpg.ImageItemWithHistogram
 
+    # Reserve names of local variables
+    update_histogram = None
+    set_levels = None
+
     def __init__(self, setpoint_x, setpoint_y, colormap=rcmap, *args, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
         # Add instance variables
-        self.__dict__['set_levels'] = None
-        self.__dict__['update_histogram'] = None
+        self.set_levels = None
+        self.update_histogram = None
 
     def pause_update(self):
         """
