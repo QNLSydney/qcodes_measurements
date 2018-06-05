@@ -16,7 +16,6 @@ setup(
     ],
     license='MIT',
     packages=find_packages(),
-    package_data={'qcodes': ['config/*.json']},
     install_requires=[
         'matplotlib>=2.0.2',
         'pyqtgraph>=0.10.0',
