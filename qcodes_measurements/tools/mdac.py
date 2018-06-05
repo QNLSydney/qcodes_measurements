@@ -11,7 +11,7 @@ from qdev_wrappers.parameters import DelegateParameter
 from .. import linear1d, linear2d
 from ..plot import plot_tools
 
-def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None):
+def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None, microd_high=48):
     """
     Set all gates to correct states in MDAC. Note, assume that we are connected
     to the device through Micro-D's
@@ -37,12 +37,12 @@ def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None):
     gates.rate(0.05)
     
     # Set high gates (after microd) to SMC output
-    mdac.channels[48:].microd('open')
-    mdac.channels[48:].dac_output('close')
-    mdac.channels[48:].smc('close')
-    mdac.channels[48:].gnd('open')
-    mdac.channels[48:].filter(2)
-    mdac.channels[48:].rate(0.05)
+    mdac.channels[microd_high:].microd('open')
+    mdac.channels[microd_high:].dac_output('close')
+    mdac.channels[microd_high:].smc('close')
+    mdac.channels[microd_high:].gnd('open')
+    mdac.channels[microd_high:].filter(2)
+    mdac.channels[microd_high:].rate(0.05)
     
     # Set ohmics/shorts to grounded and SMC
     ohmics.gnd('close')
@@ -152,6 +152,8 @@ def ramp(mdac_channel, to, sure=False):
         raise ValueError("{} is pretty big. Are you sure?".format(to))
     base = ensure_channel(mdac_channel)
     base.ramp(to)
+    if isinstance(mdac_channel, MDACChannel):
+        mdac_channel = mdac_channel.voltage
     while not np.isclose(to, mdac_channel(), 1e-3):
         time.sleep(0.01)
 
