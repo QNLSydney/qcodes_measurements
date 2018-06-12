@@ -2,6 +2,7 @@ import wrapt
 from functools import partial, reduce
 from scipy import signal
 import numpy as np
+import qcodes
 
 """
 Define some modules for doing filtering on parameters as they come in. This is mainly
@@ -101,6 +102,62 @@ class FilterWrapper(BaseWrappedParameter):
                 'args': args,
                 'kwargs': kwargs}
         self.wrappers = snap
+
+    def get(self):
+        d = self.__wrapped__.get()
+        d = self.filter_func(d, *self.args, **self.kwargs)
+        return d
+
+class ReduceFilterWrapper(BaseWrappedParameter):
+    """
+    Wrap a filter function around a parameter that will reduce the number of points to one. The filter used will be stored
+    in metadata along with any parameters used to run it.
+    """
+
+    # The following variables are reserved, otherwise they would bme passed along
+    # to the base parameter
+    filter_func = None
+    args = None
+    kwargs = None
+
+    def __init__(self, parameter, *, filter_func, args=None, kwargs=None):
+        """
+        Args:
+            parameter - the parameter to wrap
+            filter_func - the filter to apply to the result of the parameter
+            *args, **kwargs - arguments passed to the filter function
+        """
+        super().__init__(parameter)
+        self.filter_func = filter_func
+        self.args = args if args is not None else []
+        self.kwargs = kwargs if kwargs is not None else {}
+
+        snap = {'type': type(self).__name__,
+                'filter_func': filter_func.__name__,
+                'doc': filter_func.__doc__,
+                'args': args,
+                'kwargs': kwargs}
+        self.wrappers = snap
+    
+    @property
+    def setpoints(self):
+        return None
+    @property
+    def shape(self):
+        return None
+    @property
+    def setpoint_labels(self):
+        return None
+    @property
+    def setpoint_units(self):
+        return None
+    @property
+    def setpoint_names(self):
+        return None
+    @property
+    def __class__(self):
+        return qcodes.instrument.parameter.Parameter
+    
 
     def get(self):
         d = self.__wrapped__.get()
