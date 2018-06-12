@@ -247,7 +247,6 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
 class ImageItemWithHistogram(ImageItem):
         def __init__(self, *args, colormap, **kwargs):
             super().__init__(*args, **kwargs)
-
             # Create the attached histogram
             self._LUTitem = HistogramLUTItem()
             self._LUTitem.setImageItem(self)
@@ -274,7 +273,7 @@ class ImageItemWithHistogram(ImageItem):
                     self._parent = None
 
 import logging
-import sys
+import sys, traceback
 
 logger = logging.getLogger("rpyplot")
 log_handler = logging.FileHandler("rpyplot.log")
@@ -283,5 +282,5 @@ log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messa
 log_handler.setFormatter(log_format)
 logger.addHandler(log_handler)
 def exc(type, value, tb):
-    logger.exception("Uncaught Exception: {}\n{}".format(str(value), str(tb)))
+    logger.exception("Uncaught Exception: {}\n{}".format(str(value), str(traceback.format_tb(tb))))
 sys.excepthook = exc
