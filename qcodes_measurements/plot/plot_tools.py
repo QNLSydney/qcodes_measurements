@@ -1,6 +1,6 @@
 from math import ceil
 import warnings
-import re, os, time, json
+import re, os, time, json, colorsys
 import numpy as np
 
 from qcodes.dataset.experiment_container import load_by_id
@@ -108,7 +108,7 @@ def add_line_plot(plot, x, y, title=None):
         plot.plot_title = title
 
     # Create line plot
-    lplot = plot.plot(x['data'], data=y['data'], pen='r')
+    lplot = plot.plot(setpoint_x=x['data'], data=y['data'], pen='r')
 
     # Set Axis Labels
     plot.left_axis.label = y.get('label', "")
@@ -213,3 +213,13 @@ def find_by_id(id):
     """
     win = pyplot.PlotWindow.find_by_id(id)
     return win
+
+def make_traces_different(plot, saturation=0.5, value=0.9):
+    if not isinstance(plot, pyplot.PlotItem):
+        raise TypeError("Can only color plot items. Perhaps you meant to pass in win.items[0]?")
+    ntraces = len(plot.traces)
+    for i, trace in enumerate(plot.traces):
+        color = colorsys.hsv_to_rgb(i/(ntraces), saturation, value)
+        color = tuple(int(c*255) for c in color)
+        trace.setPen(*color)
+    
