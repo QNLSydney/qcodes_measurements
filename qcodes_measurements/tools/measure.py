@@ -97,9 +97,10 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                                 parameter.full_name, parameter.label))
         
         # Figure out if we have 1d or 2d data
-        if getattr(parameter, 'shape', None):
+        shape = getattr(parameter, 'shape', None)
+        if shape is not None and shape:
             # If we have 2d data, we need to know its length
-            shape = parameter.shape[0]
+            shape = shape[0]
             set_points_y = parameter.setpoints[0]
             
             # Create data array
@@ -127,6 +128,8 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         step = (stop-start)/num_points
 
     with meas.run() as datasaver:
+        # Set write period to much longer...
+        datasaver.write_period = 120
         # Update plot titles
         win.win_title += "{} ".format(datasaver.run_id)
         for i in range(len(param_meas)):
@@ -140,7 +143,8 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
             _run_functions(ateach)
             for p, parameter in enumerate(param_meas):
                 output[p][1] = parameter.get()
-                if getattr(parameter, 'shape', None) is not None:
+                shape = getattr(parameter, 'shape', None)
+                if shape is not None and shape:
                     data[p][i,:] = output[p][1] # Update 2D data
                     if i == 0:
                         data[p][1:] = (np.min(output[p][1]) + 
@@ -200,12 +204,14 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         plot = win.addPlot(title="%s (%s) v.<br>%s (%s)" % 
                            (param_set1.full_name, param_set1.label,
                             param_set2.full_name, param_set2.label))
-        plotdata = plot.plot(set_points1, set_points2)
+        plotdata = plot.plot(setpoint_x=set_points1, setpoint_y=set_points2)
         plot.update_axes(param_set1, param_set2)
         plotdata.update_histogram_axis(parameter)
         plots.append(plotdata)
 
     with meas.run() as datasaver:
+        # Set write period to much longer...
+        datasaver.write_period = 120
         # Update plot titles
         win.win_title += "{} ".format(datasaver.run_id)
         for i in range(len(param_meas)):
