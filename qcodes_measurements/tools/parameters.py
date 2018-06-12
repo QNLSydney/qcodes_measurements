@@ -157,42 +157,11 @@ class ReduceFilterWrapper(BaseWrappedParameter):
     @property
     def __class__(self):
         return qcodes.instrument.parameter.Parameter
-    
 
     def get(self):
         d = self.__wrapped__.get()
         d = self.filter_func(d, *self.args, **self.kwargs)
         return d
-
-class FlattenWrapper(FilterWrapper):
-    """
-    Wrap a filter function that returns a single value, potentially from an
-    array. This filter will correctly clear setpoints from the base parameter
-    (although a snapshot will be taken), such that values are correctly stored
-    as single points
-    """
-
-    setpoints = None
-    setpoint_units = None
-    setpoint_names = None
-    setpoint_labels = None
-    shape = None
-    def __init__(self, parameter, *, filter_func, args=None, kwargs=None):
-        """
-        Args:
-            parameter - the parameter to wrap
-            filter_func - the filter to apply to the result of the parameter
-            *args, **kwargs - arguments passed to the filter function
-        """
-        super().__init__(parameter, filter_func=filter_func, args=args, kwargs=kwargs)
-        self.shape = tuple()
-        self.setpoints = None
-        self.setpoint_units = None
-        self.setpoint_names = None
-        self.setpoint_labels = None
-
-        for param in ('shape', 'setpoints', 'setpoint_units', 'setpoint_names', 'setpoint_labels'):
-            self.wrappers[f'old_{param}'] = getattr(self.__wrapped__, param, None)
 
 class CutWrapper(BaseWrappedParameter):
     """
