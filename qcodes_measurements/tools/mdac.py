@@ -168,7 +168,8 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
 
     # Add gate labels
     run_id, win = trace_id
-    plot_tools.add_gate_label(win, run_id)
+    if "append" not in kwargs or not kwargs['append']:
+        plot_tools.add_gate_label(win, run_id)
     plot_tools.save_figure(win, run_id)
     
     # Rampback if requested
@@ -214,7 +215,8 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
 
     # Add gate labels
     run_id, win = trace_id
-    plot_tools.add_gate_label(win, run_id)
+    if "append" not in kwargs or not kwargs['append']:
+        plot_tools.add_gate_label(win, run_id)
     plot_tools.save_figure(win, run_id)
     
     # Rampback if requested
