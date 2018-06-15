@@ -615,13 +615,17 @@ class ImageItem(PlotData):
     setpoint_x = None
     setpoint_y = None
 
-    def __init__(self, setpoint_x, setpoint_y, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
+        super().__init__(*args, colormap=colormap, **kwargs)
         self.setpoint_x = _ensure_ndarray(setpoint_x)
         self.setpoint_y = _ensure_ndarray(setpoint_y)
         self._remote_function_options['setImage'] = {'callSync': 'off'}
         # Set axis scales correctly
         self._force_rescale()
+
+        if colormap is not None:
+            lut = colormap.getLookupTable(0, 1, alpha=False)
+            self.setLookupTable(lut)
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)

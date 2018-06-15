@@ -235,4 +235,4 @@ GradientFilter = partial(FilterWrapper, filter_func=np.gradient)
 # Differentiate with smoothing on two sides.
 DiffFilter = _compose(SmoothFilter, GradientFilter, SmoothFilter)
 # Take the mean of an array
-MeanFilter = partial(FlattenWrapper, filter_func=np.mean)
+MeanFilter = partial(ReduceFilterWrapper, filter_func=np.mean)
