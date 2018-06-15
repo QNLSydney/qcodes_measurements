@@ -98,10 +98,9 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                                 parameter.full_name, parameter.label))
         
         # Figure out if we have 1d or 2d data
-        shape = getattr(parameter, 'shape', None)
-        if shape is not None and shape:
+        if getattr(parameter, 'shape', None):
             # If we have 2d data, we need to know its length
-            shape = shape[0]
+            shape = parameter.shape[0]
             set_points_y = parameter.setpoints[0]
             
             # Create data array
@@ -134,8 +133,8 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         # Update plot titles
         win.win_title += "{} ".format(datasaver.run_id)
         for i in range(len(param_meas)):
-            plots[p]._parent.plot_title += " (id: %d)" % datasaver.run_id
-        
+            plots[i]._parent.plot_title += " (id: %d)" % datasaver.run_id
+
         # Then, run the actual sweep
         for i, set_point in enumerate(set_points):
             if wallcontrol is not None:
@@ -144,11 +143,10 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
             _run_functions(ateach)
             for p, parameter in enumerate(param_meas):
                 output[p][1] = parameter.get()
-                shape = getattr(parameter, 'shape', None)
-                if shape is not None and shape:
+                if getattr(parameter, 'shape', None) is not None:
                     data[p][i,:] = output[p][1] # Update 2D data
                     if i == 0:
-                        data[p][1:] = (np.min(output[p][1]) + 
+                        data[p][1:] = (np.min(output[p][1]) +
                                        np.max(output[p][1]))/2
                 else:
                     data[p][i] = output[p][1] # Update 1D data
