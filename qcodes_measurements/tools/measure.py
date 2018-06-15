@@ -49,7 +49,8 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
              append=None, save=True, 
              atstart=None, ateach=None, atend=None,
              wallcontrol=None, wallcontrol_slope=None,
-             setback=False):
+             setback=False,
+             write_period=120):
     """
     """
 
@@ -127,9 +128,9 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         wallcontrol_start = wallcontrol.get()
         step = (stop-start)/num_points
 
+    meas.write_period = write_period
+
     with meas.run() as datasaver:
-        # Set write period to much longer...
-        datasaver.write_period = 120
         # Update plot titles
         win.win_title += "{} ".format(datasaver.run_id)
         for i in range(len(param_meas)):
