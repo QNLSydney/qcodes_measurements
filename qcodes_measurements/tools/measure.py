@@ -44,6 +44,7 @@ def _run_functions(functions, err_name="functions"):
         else:
             raise TypeError("{} must be a function or a list of functions".format(err_name))
 
+
 def linear1d(param_set, start, stop, num_points, delay, *param_meas,
              append=None, save=True, 
              atstart=None, ateach=None, atend=None,

@@ -10,6 +10,7 @@ try:
     from .plot import plot_tools, pyplot
 
     # Import shortcuts to measurements
+    from .tools.midas import midasLinear1d
     from .tools.measure import linear1d, linear2d
     from .tools.parameters import FilterWrapper, CutWrapper, SmoothFilter, DiffFilter, MeanFilter, ReduceFilterWrapper
 
