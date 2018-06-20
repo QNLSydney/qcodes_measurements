@@ -172,7 +172,10 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 
 def linear2d(param_set1, start1, stop1, num_points1, delay1,
              param_set2, start2, stop2, num_points2, delay2,
-             *param_meas, save=True):
+             *param_meas, 
+             atstart=None, ateach=None, atend=None,
+             wallcontrol=None, wallcontrol_slope=None,
+             setback=False, save=True):
     
     _flush_buffers(*param_meas)
     # Set up a plotting window
@@ -195,6 +198,9 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     output = []
     data = np.ndarray((len(param_meas), num_points1, num_points2))
     plots = []
+
+    # Run @start functions
+    _run_functions(atstart)
     
     for p, parameter in enumerate(param_meas):
         meas.register_parameter(parameter, setpoints=(param_set1, param_set2))
@@ -209,6 +215,10 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         plotdata.update_histogram_axis(parameter)
         plots.append(plotdata)
 
+    if wallcontrol is not None:
+        wallcontrol_start = wallcontrol.get()
+        step = (stop1-start1)/num_points1
+
     with meas.run() as datasaver:
         # Set write period to much longer...
         datasaver.write_period = 120
@@ -221,8 +231,11 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         for i, set_point1 in enumerate(set_points1):
             param_set2.set(start2)
             param_set1.set(set_point1)
+            if wallcontrol is not None:
+                wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
             for j, set_point2 in enumerate(set_points2):
                 param_set2.set(set_point2)
+                _run_functions(ateach)
                 for p, parameter in enumerate(param_meas):
                     output[p][1] = parameter.get()
                     fdata = data[p]
@@ -249,6 +262,16 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             plots[i].update(fdata, True)
             plots[i].resume_update()
 
+    if wallcontrol is not None:
+        wallcontrol.set(wallcontrol_start)
+
+    if setback:
+        param_set1.set(start1)
+        param_set2.set(start2)
+
+    _run_functions(atend)
+
     if save:
         plot_tools.save_figure(win, datasaver.run_id)
+
     return (datasaver.run_id, win)
