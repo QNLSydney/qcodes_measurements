@@ -608,6 +608,9 @@ class PlotDataItem(PlotData):
         """
         return (self.xData, self.yData)
 
+class ExtendedPlotDataItem(PlotDataItem):
+    _base = rpg.ExtendedPlotDataItem
+
 class ImageItem(PlotData):
     _base = rpg.ImageItem
 
@@ -668,7 +671,10 @@ class ImageItem(PlotData):
         """
         return self.image
 
-class ImageItemWithHistogram(ImageItem):
+class ExtendedImageItem(ImageItem):
+    _base = rpg.ExtendedImageItem
+
+class ImageItemWithHistogram(ExtendedImageItem):
     _base = rpg.ImageItemWithHistogram
 
     # Local Variables
