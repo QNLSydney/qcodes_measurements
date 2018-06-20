@@ -169,11 +169,11 @@ class PlotMenu(object):
         for item in items:
             if not isinstance(item, (PlotCurveItem, PlotDataItem, ImageItem)):
                 continue
+            dataitem = item.parentObject()
             if not hasattr(dataitem, "getContextMenus"):
                 continue                
 
             # Figure out the name and references of this item
-            dataitem = item.parentObject()
             name = dataitem.name()
             ind = itemNumbers[dataitem]
             if name is None:
