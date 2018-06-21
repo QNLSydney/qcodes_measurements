@@ -15,7 +15,9 @@ from pyqtgraph.GraphicsScene.mouseEvents import MouseClickEvent
 from PyQt5.QtWidgets import QApplication, QMessageBox, QMainWindow, QAction, QGraphicsSceneMouseEvent
 from PyQt5 import QtCore
 
+import numpy as np
 from numpy import linspace, min, max, ndarray, searchsorted
+import scipy.linalg
 
 class ExtendedPlotWindow(GraphicsLayoutWidget):
     _windows = []
@@ -565,6 +567,7 @@ class ExtendedImageItem(ImageItem):
                 self.gradientSelectorMenu.addAction(act)
         self.menu.addMenu(self.gradientSelectorMenu)
 
+        # Actions that use the scale box
         if rect is not None:
             xrange = rect.left(), rect.right()
             yrange = rect.top(), rect.bottom()
@@ -574,6 +577,11 @@ class ExtendedImageItem(ImageItem):
             self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Plane Fit", self.menu)
+            qaction.triggered.connect(partial(self.planeFit, xrange=xrange, yrange=yrange))
+            self.menu.addAction(qaction)
+
+            qaction = QtGui.QAction("Level Columns", self.menu)
+            qaction.triggered.connect(partial(self.levelColumns, xrange=xrange, yrange=yrange))
             self.menu.addAction(qaction)
 
         self.menu.setTitle("Image Item")
@@ -600,6 +608,47 @@ class ExtendedImageItem(ImageItem):
         # Then set the range
         self.setLevels((min_v, max_v))
 
+    def planeFit(self, xrange, yrange):
+        # Extract indices of limits
+        xmin, xmax = xrange
+        ymin, ymax = yrange
+        xmin_p, xmax_p = searchsorted(self.setpoint_x, (xmin, xmax))
+        ymin_p, ymax_p = searchsorted(self.setpoint_y, (ymin, ymax))
+
+        # Get the coordinate grid
+        X, Y = np.meshgrid(self.setpoint_x[xmin_p:xmax_p], self.setpoint_y[ymin_p:ymax_p])
+        X = X.flatten()
+        Y = Y.flatten()
+        CG = np.c_[X, Y, np.ones(X.shape)]
+
+        # Get the data in the correct format
+        data = self.image[xmin_p:xmax_p, ymin_p:ymax_p]
+        data = data.T.flatten()
+        assert(data[1] == self.image[xmin_p+1, ymin_p])
+
+        # Perform the fit
+        C,_,_,_ = scipy.linalg.lstsq(CG, data, overwrite_a=True, overwrite_b=True)
+
+        # Then, do the plane fit on the image
+        X, Y = np.meshgrid(self.setpoint_x, self.setpoint_y)
+        Z = C[0]*X + C[1]*Y + C[2]
+        image = self.image - Z.T
+        self.setImage(image)
+
+    def levelColumns(self, xrange, yrange):
+        # Extract indices of limits
+        ymin, ymax = yrange
+        ymin_p, ymax_p = searchsorted(self.setpoint_y, (ymin, ymax))
+
+        # Get a list of means for that column
+        col_mean = self.image[:,ymin_p:ymax_p]
+        col_mean = np.mean(col_mean, axis=1)
+        col_mean.shape = col_mean.shape + (1,)
+
+        # Subtract from that column
+        image = self.image - col_mean
+        self.setImage(image)
+
     def rescale(self):
         step_x = (self.setpoint_x[-1] - self.setpoint_x[0])/len(self.setpoint_x)
         step_y = (self.setpoint_y[-1] - self.setpoint_y[0])/len(self.setpoint_y)
@@ -620,6 +669,20 @@ class ImageItemWithHistogram(ExtendedImageItem):
 
         # Attach a signal handler on parent changed
         #self.sigParentChanged.connect(self.parentChanged)
+
+    def setLevels(self, levels, update=True):
+        """
+        Hook setLevels to update histogram when the levels are changed in
+        the image
+        """
+        super().setLevels(levels, update)
+        self._LUTitem.setLevels(*self.levels)
+
+    def changeColorScale(self, checked=False, name=None):
+        if name is None:
+            raise ValueError("Name of color map must be given")
+        cmap = self.colormaps[name]
+        self._LUTitem.gradient.setColorMap(cmap)
 
     def getHistogramLUTItem(self):
         return self._LUTitem

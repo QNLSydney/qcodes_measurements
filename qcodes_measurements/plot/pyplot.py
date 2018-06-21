@@ -76,8 +76,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         self._remote_functions = {}
         self._remote_function_options = {}
         if '_base' in self.__class__.__dict__:
-            print(f"Init {self.__class__.__dict__['_base'].__name__} with args {args}")
-            base = self.__class__.__dict__['_base'](*args, **kwargs)
+            base = self.__class__._base(*args, **kwargs)
             self._base_inst = base
         else:
             raise TypeError("Base instance not defined. Don't know how to create remote object.")
