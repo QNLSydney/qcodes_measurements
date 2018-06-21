@@ -1,10 +1,8 @@
-from math import ceil
-import warnings
-import re, os, time, json, colorsys
+import os, time, json
 import numpy as np
 
 from qcodes.dataset.experiment_container import load_by_id
-from qcodes.dataset.data_export import get_data_by_id, get_shaped_data_by_runid
+from qcodes.dataset.data_export import get_shaped_data_by_runid
 
 from ..plot import pyplot
 
@@ -158,7 +156,7 @@ def plot_by_id(id, save_fig=False, fig_folder=None):
                 # No data in plot
                 continue
 
-            lplot = add_line_plot(plot, x, y)
+            add_line_plot(plot, x, y)
         elif len(plot_data) == 3:
             plot.plot_title = "{} v {} (id: {})".format(plot_data[0]['label'],
                                                         plot_data[1]['label'],
@@ -170,7 +168,7 @@ def plot_by_id(id, save_fig=False, fig_folder=None):
             # Reshape data to expected format
             z['data'] = np.nan_to_num(z['data']).T
 
-            implot = add_image_plot(plot, x, y, z)
+            add_image_plot(plot, x, y, z)
         else:
             raise ValueError("Invalid number of datas")
 
@@ -214,12 +212,3 @@ def find_by_id(id):
     win = pyplot.PlotWindow.find_by_id(id)
     return win
 
-def make_traces_different(plot, saturation=0.5, value=0.9):
-    if not isinstance(plot, pyplot.PlotItem):
-        raise TypeError("Can only color plot items. Perhaps you meant to pass in win.items[0]?")
-    ntraces = len(plot.traces)
-    for i, trace in enumerate(plot.traces):
-        color = colorsys.hsv_to_rgb(i/(ntraces), saturation, value)
-        color = tuple(int(c*255) for c in color)
-        trace.setPen(*color)
-    
