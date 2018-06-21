@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from math import ceil
-import warnings
-import re
 import PyQt5
 
-import pyqtgraph as pg
 import pyqtgraph.multiprocess as mp
 
 import numpy as np
@@ -410,7 +407,7 @@ class PlotItem(BasePlotItem):
 
     @property
     def traces(self):
-        data_items = self.listDataItems()
+        data_items = self.listDataItems(proxy=True)
         data_items = [RPGWrappedBase.autowrap(item) for item in data_items]
         return data_items
 
@@ -614,17 +611,13 @@ class ExtendedPlotDataItem(PlotDataItem):
 class ImageItem(PlotData):
     _base = rpg.ImageItem
 
-    # Reserve names of local variables
-    setpoint_x = None
-    setpoint_y = None
-
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
-        super().__init__(*args, colormap=colormap, **kwargs)
-        self.setpoint_x = _ensure_ndarray(setpoint_x)
-        self.setpoint_y = _ensure_ndarray(setpoint_y)
+        super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
+        setpoint_x = _ensure_ndarray(setpoint_x)
+        setpoint_y = _ensure_ndarray(setpoint_y)
         self._remote_function_options['setImage'] = {'callSync': 'off'}
         # Set axis scales correctly
-        self._force_rescale()
+        self._force_rescale(setpoint_x, setpoint_y)
 
         if colormap is not None:
             lut = colormap.getLookupTable(0, 1, alpha=False)
@@ -634,25 +627,12 @@ class ImageItem(PlotData):
         super().__wrap__(*args, **kwargs)
         self._remote_function_options['setImage'] = {'callSync': 'off'}
 
-        if 'setpoint_x' in kwargs and 'setpoint_y' in kwargs:
-            # If we are given the scalings, use them
-            self.setpoint_x = kwargs['setpoint_x']
-            self.setpoint_y = kwargs['setpoint_y']
-        elif 'setpoint_x' in kwargs or 'setpoint_y' in kwargs:
-            # If we are only given one, that must be an error
-            raise TypeError('setpoint_x or _y given without the other. Both or neither are necessary')
-        else:
-            # Otherwise we just don't know....
-            return
-        # Finally reset the scale to make sure we are consistent
-        self._force_rescale()
-
-    def _force_rescale(self):
-        step_x = (self.setpoint_x[-1] - self.setpoint_x[0])/len(self.setpoint_x)
-        step_y = (self.setpoint_y[-1] - self.setpoint_y[0])/len(self.setpoint_y)
+    def _force_rescale(self, setpoint_x, setpoint_y):
+        step_x = (setpoint_x[-1] - setpoint_x[0])/len(setpoint_x)
+        step_y = (setpoint_y[-1] - setpoint_y[0])/len(setpoint_y)
 
         self.resetTransform()
-        self.translate(self.setpoint_x[0], self.setpoint_y[0])
+        self.translate(setpoint_x[0], setpoint_y[0])
         self.scale(step_x, step_y)
 
     def update(self, data, *args, **kwargs):
@@ -660,6 +640,9 @@ class ImageItem(PlotData):
 
     @property
     def image(self):
+        """
+        Return the data underlying this trace
+        """
         image = getattr(self._base_inst, 'image')
         if isinstance(image, mp.remoteproxy.ObjectProxy):
             image = image._getValue()
@@ -672,7 +655,42 @@ class ImageItem(PlotData):
         return self.image
 
 class ExtendedImageItem(ImageItem):
+    """
+    Extended image item keeps track of x and y setpoints remotely, as this is necessary
+    to do more enhanced image processing that makes use of the axis scale, like color-by-marquee.
+    """
     _base = rpg.ExtendedImageItem
+
+    def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
+        super().__init__(setpoint_x, setpoint_y, *args, colormap, **kwargs)
+        self.setpoint_x = setpoint_x
+        self.setpoint_y = setpoint_y
+
+    def _force_rescale(self, setpoint_x, setpoint_y):
+        """
+        This is handled on the server side...
+        """
+        pass
+
+    @property
+    def setpoint_x(self):
+        setpoint_x = self._base_inst.setpoint_x
+        if isinstance(setpoint_x, mp.remoteproxy.ObjectProxy):
+            setpoint_x = setpoint_x._getValue()
+        return setpoint_x
+    @setpoint_x.setter
+    def setpoint_x(self, val):
+        self._base_inst.setpoint_x = val
+
+    @property
+    def setpoint_x(self):
+        setpoint_y = self._base_inst.setpoint_y
+        if isinstance(setpoint_y, mp.remoteproxy.ObjectProxy):
+            setpoint_y = setpoint_y._getValue()
+        return setpoint_y
+    @setpoint_x.setter
+    def setpoint_x(self, val):
+        self._base_inst.setpoint_y = val
 
 class ImageItemWithHistogram(ExtendedImageItem):
     _base = rpg.ImageItemWithHistogram
@@ -682,11 +700,11 @@ class ImageItemWithHistogram(ExtendedImageItem):
 
     def __init__(self, setpoint_x, setpoint_y, colormap=rcmap, *args, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
-        self._histogram = self.getHistogramLUTItem()
+        self._histogram = None
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
-        self._histogram = self.getHistogramLUTItem()
+        self._histogram = None
 
     def pause_update(self):
         """
@@ -722,6 +740,8 @@ class ImageItemWithHistogram(ExtendedImageItem):
 
     @property
     def histogram(self):
+        if self._histogram is None:
+            self._histogram = self.getHistogramLUTItem()
         return self._histogram
 
     @property
