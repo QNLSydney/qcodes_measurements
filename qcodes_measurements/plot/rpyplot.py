@@ -5,6 +5,7 @@ import warnings
 from functools import partial
 import weakref
 from collections import namedtuple
+import colorsys
 
 from pyqtgraph import *
 from pyqtgraph.exporters import *
@@ -14,7 +15,7 @@ from pyqtgraph.GraphicsScene.mouseEvents import MouseClickEvent
 from PyQt5.QtWidgets import QApplication, QMessageBox, QMainWindow, QAction, QGraphicsSceneMouseEvent
 from PyQt5 import QtCore
 
-from numpy import linspace, min, max, ndarray
+from numpy import linspace, min, max, ndarray, searchsorted
 
 class ExtendedPlotWindow(GraphicsLayoutWidget):
     _windows = []
@@ -130,11 +131,9 @@ class PlotMenu(object):
         Raise the context menu, removing extra separators as they are added pretty recklessly
         """
         menu = self.getContextMenus(ev)
-        
         # Let the scene add on to the end of our context menu
         # (this is optional)
         menu = self.scene().addParentContextMenus(self, menu, ev)
-
         # Collapse sequential separators
         i = 1
         actions = menu.actions()
@@ -150,7 +149,7 @@ class PlotMenu(object):
         menu.popup(QtCore.QPoint(pos.x(), pos.y()))
         return True
 
-    def addPlotContextMenus(self, items, itemNumbers, menu):
+    def addPlotContextMenus(self, items, itemNumbers, menu, rect=None):
         """
         Add plot items to the menu
 
@@ -169,12 +168,19 @@ class PlotMenu(object):
         for item in items:
             if not isinstance(item, (PlotCurveItem, PlotDataItem, ImageItem)):
                 continue
-            dataitem = item.parentObject()
+            if isinstance(item, PlotCurveItem):
+                dataitem = item.parentObject()
+            else:
+                dataitem = item
+
             if not hasattr(dataitem, "getContextMenus"):
                 continue                
 
             # Figure out the name and references of this item
-            name = dataitem.name()
+            if hasattr(dataitem, "name"):
+                name = dataitem.name()
+            else:
+                name = None
             ind = itemNumbers[dataitem]
             if name is None:
                 name = f"(Trace: {ind+1})"
@@ -182,7 +188,10 @@ class PlotMenu(object):
                 name = f"{name} (Trace: {ind+1})"
 
             # Create menus for each of the items
-            menu = dataitem.getContextMenus()
+            if isinstance(dataitem, (ExtendedPlotDataItem, ExtendedImageItem)):
+                menu = dataitem.getContextMenus(rect=rect)
+            else:
+                menu = dataitem.getContextMenus()
             menu.setTitle(name)
             itemsToAdd.append((ind, menu))
 
@@ -192,8 +201,13 @@ class PlotMenu(object):
         # Add each of the items in to the menu
         if itemsToAdd:
             self.addedMenuItems.append(self.menu.addSeparator())
-            for item in itemsToAdd:
-                self.addedMenuItems.append(self.menu.addMenu(item[1]))
+            if len(itemsToAdd) == 1:
+                for item in itemsToAdd[0][1].actions():
+                    self.addedMenuItems.append(item)
+                    self.menu.addAction(item)
+            else:
+                for item in itemsToAdd:
+                    self.addedMenuItems.append(self.menu.addMenu(item[1]))
 
         return itemsToAdd
 
@@ -224,32 +238,12 @@ class DraggableScaleBox(PlotMenu, GraphicsObject):
             if self.raiseContextMenu(ev):
                 ev.accept()
 
-    def raiseContextMenu(self, ev):
-        menu = self.getContextMenus(ev)
-        
-        # Let the scene add on to the end of our context menu
-        # (this is optional)
-        menu = self.scene().addParentContextMenus(self, menu, ev)
-
-        # Collapse sequential separators
-        i = 1
-        actions = menu.actions()
-        while i < len(actions):
-            if actions[i].isSeparator() and actions[i-1].isSeparator():
-                menu.removeAction(actions[i])
-                actions.remove(actions[i])
-                continue
-            i += 1
-
-        pos = ev.screenPos()
-        menu.popup(QtCore.QPoint(pos.x(), pos.y()))
-        return True
-
     # This method will be called when this item's _children_ want to raise
     # a context menu that includes their parents' menus.
     def getContextMenus(self, event=None):
         if self.menu is None:
             self.menu = QtGui.QMenu()
+            self.menu.triggered.connect(self.hide)
             self.menu.setTitle("Scale Box")
 
             # Add scale items
@@ -263,12 +257,16 @@ class DraggableScaleBox(PlotMenu, GraphicsObject):
                 qaction.triggered.connect(action[1])
                 self.menu.addAction(qaction)
 
+        # Get the size of the scale box
+        vb = self.getViewBox()
+        rect = self.mapRectToItem(vb.childGroup, self.boundingRect())
+
         # Add plot items to the menu
         items = self.scene().items(self.mapRectToScene(self.boundingRect()))
         # Let's figure out as well the number of the plot item for labelling purposes
         itemNumbers = [x for x in self.parentObject().childItems() if isinstance(x, PlotDataItem) or isinstance(x, ImageItem)]
         itemNumbers = dict((x[1], x[0]) for x in enumerate(itemNumbers))
-        self.addPlotContextMenus(items, itemNumbers, self.menu)
+        self.addPlotContextMenus(items, itemNumbers, self.menu, rect)
 
         return self.menu
 
@@ -287,8 +285,6 @@ class DraggableScaleBox(PlotMenu, GraphicsObject):
             existingRect = vb.viewRect()
             p.setBottom(existingRect.bottom())
             p.setTop(existingRect.top())
-        # Hide the scale box
-        self.hide()
 
         # Do scale
         vb.setRange(rect=p, padding=0)
@@ -313,6 +309,10 @@ class CustomViewBox(PlotMenu, ViewBox):
             for action in actions:
                 if action.text() == menuItem:
                     self.menu.removeAction(action)
+
+        # Extra menu actions
+        self.makeTracesDifferentAction = QAction("Make All Traces Different", self.menu)
+        self.makeTracesDifferentAction.triggered.connect(self.makeTracesDifferent)
 
     def mouseClickEvent(self, ev):
         if (ev.button() & QtCore.Qt.LeftButton):
@@ -347,7 +347,16 @@ class CustomViewBox(PlotMenu, ViewBox):
         We do this in the view box instead of in the plot item otherwise the axis menus
         get collapsed down.
         """
-        if event is not None:
+
+        # If we clicked on a trace, add it to the context menu
+        if event is not None and event.acceptedItem == self:
+            # Add plot context meny items
+            traces = self.parentObject().listDataItems()
+            if any(isinstance(trace, PlotDataItem) for trace in traces):
+                self.menu.addAction(self.makeTracesDifferentAction)
+            else:
+                self.menu.removeAction(self.makeTracesDifferentAction)
+
             # for plot curve items, we need to do an additional check that we 
             # are actually on the curve, as itemsNearEvent uses the boundingBox
             def filterNear(item):
@@ -381,6 +390,9 @@ class CustomViewBox(PlotMenu, ViewBox):
         """
         self.parentObject().removeItem(item)
         self.scaleBox.hide()
+
+    def makeTracesDifferent(self, checked=False, items=None):
+        self.parentObject().makeTracesDifferent(items=items)
 
 class ExtendedPlotItem(PlotItem):
     def __init__(self, *args, **kwargs):
@@ -416,12 +428,13 @@ class ExtendedPlotItem(PlotItem):
             # addItem does not keep track of images, let's add it ourselves
             self.dataItems.append(item)
 
-    def listDataItems(self):
+    def listDataItems(self, proxy=False):
         """
         Create a picklable list of data items.
         """
         data_items = super().listDataItems()
-        data_items = [mp.proxy(item) for item in data_items]
+        if proxy:
+            data_items = [mp.proxy(item) for item in data_items]
         return data_items
 
     def plot(self, *args, **kargs):
@@ -433,9 +446,7 @@ class ExtendedPlotItem(PlotItem):
         Extra allowed arguments are:
             clear    - clear all plots before displaying new data
             params   - meta-parameters to associate with this data
-        """
-        
-        
+        """        
         clear = kargs.get('clear', False)
         params = kargs.get('params', None)
           
@@ -450,40 +461,140 @@ class ExtendedPlotItem(PlotItem):
         
         return item
 
+    def makeTracesDifferent(self, saturation=0.8, value=0.9, items=None):
+        """
+        Color each of the traces in a plot a different color
+        """
+        if items is None:
+            items = self.listDataItems()
+        items = [x for x in items if isinstance(x, PlotDataItem)]
+        ntraces = len(items)
+
+        for i, trace in enumerate(items):
+            color = colorsys.hsv_to_rgb(i/ntraces, saturation, value)
+            color = tuple(int(c*255) for c in color)
+            trace.setPen(*color)
+
 class ExtendedPlotDataItem(PlotDataItem):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.menu = None
 
-    def getContextMenus(self):
+        # Plot color selection dialog
+        self.colorDialog = QtGui.QColorDialog()
+        self.colorDialog.setOption(QtGui.QColorDialog.ShowAlphaChannel, True)
+        self.colorDialog.setOption(QtGui.QColorDialog.DontUseNativeDialog, True)
+        self.colorDialog.colorSelected.connect(self.colorSelected)
+
+    def getContextMenus(self, *, rect=None):
         if self.menu is None:
             self.menu = QtGui.QMenu()
+
+            qaction = QtGui.QAction("Select Color", self.menu)
+            qaction.triggered.connect(self.selectColor)
+            self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Remove Item", self.menu)
             qaction.triggered.connect(partial(self.getViewBox().removePlotItem, self))
             self.menu.addAction(qaction)
+
         self.menu.setTitle(self.name())
         return self.menu
 
-class ExtendedImageItem(ImageItem):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.menu = None
+    def selectColor(self):
+        color = self.opts['pen']
+        if isinstance(color, QtGui.QPen):
+            color = color.color()
+        elif not isinstance(color, QtGui.QColor):
+            color = mkColor(color)
+        self.colorDialog.setCurrentColor(color)
+        self.colorDialog.open()
 
-    def getContextMenus(self):
+    def colorSelected(self, color):
+        self.setPen(color)
+
+class ExtendedImageItem(ImageItem):
+    def __init__(self, setpoint_x, setpoint_y, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setpoint_x = setpoint_x
+        self.setpoint_y = setpoint_y
+        self.menu = None
+        self.gradientSelectorMenu = None
+
+        self.rescale()
+
+    def mouseClickEvent(self, ev):
+        return False
+
+    def getContextMenus(self, *, rect=None):
         if self.menu is None:
             self.menu = QtGui.QMenu()
+        self.menu.clear()
+
+        # # Add color selector
+        # if self.gradientSelectorMenu is None:
+        #     l = 80
+        #     self.gradientSelectorMenu = QtGui.QMenu()
+        #     self.gradientSelectorMenu.setTitle("Color Scale")
+        #     gradients = graphicsItems.GradientEditorItem.Gradients
+        #     for g in gradients:
+        #         px = QtGui.QPixmap(100, 15)
+        #         p = QtGui.QPainter(px)
+        #         pos
+        #         cmap = ColorMap
+        #         grad = self.getGradient()
+        #         brush = QtGui.QBrush(grad)
+        #         p.fillRect(QtCore.QRect(0, 0, 100, 15), brush)
+        #         p.end()
+        #         label = QtGui.QLabel()
+        #         label.setPixmap(px)
+        #         label.setContentsMargins(1, 1, 1, 1)
+        #         act = QtGui.QWidgetAction(self)
+        #         act.setDefaultWidget(label)
+        #         act.triggered.connect(self.contextMenuClicked)
+        #         act.name = g[0]
+        #         self.menu.addAction(act)
+        # self.menu.addAction(self.gradientSelectorMenu)
+
+        if rect is not None:
+            xrange = rect.left(), rect.right()
+            yrange = rect.top(), rect.bottom()
 
             qaction = QtGui.QAction("Colour By Marquee", self.menu)
+            qaction.triggered.connect(partial(self.colorByMarquee, xrange=xrange, yrange=yrange))
             self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Plane Fit", self.menu)
             self.menu.addAction(qaction)
-        self.menu.setTitle(name)
+
+        self.menu.setTitle("Image Item")
+
         return self.menu
 
+    def colorByMarquee(self, xrange, yrange):
+        # Extract indices of limits
+        xmin, xmax = xrange
+        ymin, ymax = yrange
+        xmin_p, xmax_p = searchsorted(self.setpoint_x, (xmin, xmax))
+        ymin_p, ymax_p = searchsorted(self.setpoint_y, (ymin, ymax))
+
+        # Then calculate the min/max range of the array
+        data = self.image[xmin_p:xmax_p,ymin_p:ymax_p]
+        min_v, max_v = min(data), max(data)
+
+        # Then set the range
+        self.setLevels((min_v, max_v))
+
+    def rescale(self):
+        step_x = (self.setpoint_x[-1] - self.setpoint_x[0])/len(self.setpoint_x)
+        step_y = (self.setpoint_y[-1] - self.setpoint_y[0])/len(self.setpoint_y)
+
+        self.resetTransform()
+        self.translate(self.setpoint_x[0], self.setpoint_y[0])
+        self.scale(step_x, step_y)
+
 class ImageItemWithHistogram(ExtendedImageItem):
-    def __init__(self, *args, colormap, **kwargs):
+    def __init__(self, setpoint_x, setpoint_y, *args, colormap, **kwargs):
         super().__init__(*args, **kwargs)
         # Create the attached histogram
         self._LUTitem = HistogramLUTItem()
