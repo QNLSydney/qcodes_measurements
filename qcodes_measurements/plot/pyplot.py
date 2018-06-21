@@ -76,6 +76,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         self._remote_functions = {}
         self._remote_function_options = {}
         if '_base' in self.__class__.__dict__:
+            print(f"Init {self.__class__.__dict__['_base'].__name__} with args {args}")
             base = self.__class__.__dict__['_base'](*args, **kwargs)
             self._base_inst = base
         else:
@@ -699,8 +700,12 @@ class ImageItemWithHistogram(ExtendedImageItem):
     _histogram = None
 
     def __init__(self, setpoint_x, setpoint_y, colormap=rcmap, *args, **kwargs):
-        super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
+        super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
         self._histogram = None
+
+        # Set colormap
+        if colormap is not None:
+            self.colormap = colormap
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)

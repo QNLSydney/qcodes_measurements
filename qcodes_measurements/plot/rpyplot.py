@@ -514,6 +514,8 @@ class ExtendedPlotDataItem(PlotDataItem):
         self.setPen(color)
 
 class ExtendedImageItem(ImageItem):
+    colormaps = {}
+
     def __init__(self, setpoint_x, setpoint_y, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setpoint_x = setpoint_x
@@ -531,30 +533,37 @@ class ExtendedImageItem(ImageItem):
             self.menu = QtGui.QMenu()
         self.menu.clear()
 
-        # # Add color selector
-        # if self.gradientSelectorMenu is None:
-        #     l = 80
-        #     self.gradientSelectorMenu = QtGui.QMenu()
-        #     self.gradientSelectorMenu.setTitle("Color Scale")
-        #     gradients = graphicsItems.GradientEditorItem.Gradients
-        #     for g in gradients:
-        #         px = QtGui.QPixmap(100, 15)
-        #         p = QtGui.QPainter(px)
-        #         pos
-        #         cmap = ColorMap
-        #         grad = self.getGradient()
-        #         brush = QtGui.QBrush(grad)
-        #         p.fillRect(QtCore.QRect(0, 0, 100, 15), brush)
-        #         p.end()
-        #         label = QtGui.QLabel()
-        #         label.setPixmap(px)
-        #         label.setContentsMargins(1, 1, 1, 1)
-        #         act = QtGui.QWidgetAction(self)
-        #         act.setDefaultWidget(label)
-        #         act.triggered.connect(self.contextMenuClicked)
-        #         act.name = g[0]
-        #         self.menu.addAction(act)
-        # self.menu.addAction(self.gradientSelectorMenu)
+        # Add color selector
+        if self.gradientSelectorMenu is None:
+            l = 80
+            self.gradientSelectorMenu = QtGui.QMenu()
+            self.gradientSelectorMenu.setTitle("Color Scale")
+            gradients = graphicsItems.GradientEditorItem.Gradients
+            for g in gradients:
+                if g in ExtendedImageItem.colormaps:
+                    cmap = ExtendedImageItem.colormaps[g]
+                else:
+                    pos = [x[0] for x in gradients[g]['ticks']]
+                    colors = [x[1] for x in gradients[g]['ticks']]
+                    mode = ColorMap.RGB if gradients[g]['mode'] == 'rgb' else ColorMap.HSV_POS
+                    cmap = ColorMap(pos, colors, mode=mode)
+                    self.colormaps[g] = cmap
+
+                px = QtGui.QPixmap(l, 15)
+                p = QtGui.QPainter(px)
+                grad = cmap.getGradient(QtCore.QPointF(0,0), QtCore.QPointF(l,0))
+                brush = QtGui.QBrush(grad)
+                p.fillRect(QtCore.QRect(0, 0, l, 15), brush)
+                p.end()
+                label = QtGui.QLabel()
+                label.setPixmap(px)
+                label.setContentsMargins(1, 1, 1, 1)
+                act = QtGui.QWidgetAction(self)
+                act.setDefaultWidget(label)
+                act.triggered.connect(partial(self.changeColorScale, name=g))
+                act.name = g
+                self.gradientSelectorMenu.addAction(act)
+        self.menu.addMenu(self.gradientSelectorMenu)
 
         if rect is not None:
             xrange = rect.left(), rect.right()
@@ -570,6 +579,12 @@ class ExtendedImageItem(ImageItem):
         self.menu.setTitle("Image Item")
 
         return self.menu
+
+    def changeColorScale(self, checked=False, name=None):
+        if name is None:
+            raise ValueError("Name of color map must be given")
+        cmap = self.colormaps[name]
+        self.setLookupTable(cmap.getLookupTable(0.0, 1.0, alpha=False))
 
     def colorByMarquee(self, xrange, yrange):
         # Extract indices of limits
@@ -595,11 +610,12 @@ class ExtendedImageItem(ImageItem):
 
 class ImageItemWithHistogram(ExtendedImageItem):
     def __init__(self, setpoint_x, setpoint_y, *args, colormap, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
         # Create the attached histogram
         self._LUTitem = HistogramLUTItem()
         self._LUTitem.setImageItem(self)
-        self._LUTitem.gradient.setColorMap(colormap)
+        if colormap is not None:
+            self._LUTitem.gradient.setColorMap(colormap)
         self._LUTitem.autoHistogramRange() # enable autoscaling
 
         # Attach a signal handler on parent changed
