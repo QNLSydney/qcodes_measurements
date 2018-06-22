@@ -19,6 +19,10 @@ import qcodes_measurements as qcm
 parameter_to_measure = scope.ch1.trace
 smoothed_parameter = qcm.SmoothFilter(parameter_to_measure)
 
+# Then we can use this parameter as normal
+smoothed_paramter.prepare_curvedata()
+qcm.linear1d(mdac.LW1, -0.7, -0.8, 200, 0.1, smoothed_parameter)
+```
 """
 
 class BaseWrappedParameter(wrapt.CallableObjectProxy):
@@ -112,9 +116,10 @@ class ReduceFilterWrapper(BaseWrappedParameter):
     """
     Wrap a filter function around a parameter that will reduce the number of points to one. The filter used will be stored
     in metadata along with any parameters used to run it.
+    The end result converts an ArrayParameter like object to a Parameter like object.
     """
 
-    # The following variables are reserved, otherwise they would bme passed along
+    # The following variables are reserved, otherwise they would be passed along
     # to the base parameter
     filter_func = None
     args = None
@@ -174,6 +179,8 @@ class CutWrapper(BaseWrappedParameter):
     fromend = None
 
     def __init__(self, parameter, fromstart=0, fromend=0):
+        # Must be an array paramter
+        assert(hasattr(parameter, "shape"))
         super().__init__(parameter)
 
         # Save variables
@@ -181,7 +188,7 @@ class CutWrapper(BaseWrappedParameter):
             raise ValueError(f"Number of points to trim from start must be"
                              f" greater than 0. Given {fromstart}")
         if fromend < 0:
-            raise ValueError(f"Number of points to trim from start must be"
+            raise ValueError(f"Number of points to trim from end must be"
                              f" greater than 0. Given {fromend}")
         self.fromstart = fromstart
         self.fromend = fromend
