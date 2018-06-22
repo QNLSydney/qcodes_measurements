@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from math import ceil
+from collections import Iterable
 import PyQt5
 
 import pyqtgraph.multiprocess as mp
@@ -31,6 +32,29 @@ def _ensure_ndarray(array):
     if not isinstance(array, ndarray):
         return np.array(array)
     return array
+
+def _ensure_val(f):
+    """
+    Decorator to ensure that a result is returned by value rather than as a proxy
+    """
+    def wrap(*args, **kwargs):
+        val = f(*args, **kwargs)
+        if isinstance(val, mp.remoteproxy.ObjectProxy):
+            return val._getValue()
+        return val
+    return wrap
+
+def _auto_wrap(f):
+    """
+    Decorator to ensure values are wrapped by RPGWrappedBase
+    """
+    def wrap(*args, **kwargs):
+        val = f(*args, **kwargs)
+        if isinstance(val, Iterable):
+            return tuple(RPGWrappedBase.autowrap(item) for item in val)
+        else:
+            return RPGWrappedBase.autowrap(val)
+    return wrap
 
 # --- ON STARTUP - Create a remote Qt process used for plotting in the background
 # Check if a QApplication exists. It will not if we are not running from spyder...
@@ -80,7 +104,6 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             self._base_inst = base
         else:
             raise TypeError("Base instance not defined. Don't know how to create remote object.")
-        self.append_no_proxy_types(ndarray)
             
     def __wrap__(self):
         # We still want to keep track of new items in wrapped objects
@@ -89,7 +112,6 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         self._remote_functions = {}
         self._remote_function_options = {}
         # And make sure that ndarrays are still proxied
-        self.append_no_proxy_types(ndarray)
 
     @classmethod
     def wrap(cls, instance, *args, **kwargs):
@@ -161,10 +183,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         return save
 
     def wrap_getters(self, f):
-        def wrapper(*args, **kwargs):
-            res = f(*args, **kwargs)
-            return RPGWrappedBase.autowrap(res)
-        return wrapper
+        return _auto_wrap(f)
 
     def __setattr__(self, name, value):
         for cls in self.__class__.__mro__:
@@ -205,17 +224,9 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         # Allow objects to keep track of which window they are in if they need to
         self._parent = parent
 
-    def append_no_proxy_types(self, new_type):
-        if not isinstance(new_type, type):
-            raise TypeError('New no proxy type must be a type')
-        noProxyTypes = self._getProxyOption('noProxyTypes')
-        if new_type not in noProxyTypes:
-            noProxyTypes.append(new_type)
-        self._setProxyOptions(noProxyTypes=noProxyTypes[:])
-
     @property
     def items(self):
-        return self._items[:]
+        return tuple(self._items)
 
 class BasePlotWindow(RPGWrappedBase):
     _base = rpg.GraphicsLayoutWidget
@@ -226,10 +237,6 @@ class BasePlotWindow(RPGWrappedBase):
         """
         super().__init__(*args, **kwargs)
         self.show()
-
-        # Set plot defaults
-        # Background white
-        self.setBackground((255,255,255))
 
         # Change plot title if given
         if title is not None:
@@ -262,10 +269,9 @@ class BasePlotWindow(RPGWrappedBase):
         raise NotImplementedError("Can't do this on a base plot window")
 
     @property
+    @_auto_wrap
     def items(self):
-        items = self.getLayoutItems()
-        items = [RPGWrappedBase.autowrap(item) for item in items]
-        return items
+        return self.getLayoutItems()
 
 class PlotWindow(BasePlotWindow):
     _base = rpg.ExtendedPlotWindow
@@ -274,19 +280,17 @@ class PlotWindow(BasePlotWindow):
         super().__init__(*args, **kwargs)
 
     def export(self, fname, export_type="image"):
-        return super().__getattr__("export")(fname, export_type)
+        return self._base_inst.export(fname, export_type)
 
     @property
+    @_auto_wrap
     def windows(self):
-        open_windows = super().__getattr__("getWindows")()
-        open_windows = [RPGWrappedBase.autowrap(item) for item in open_windows]
-        return open_windows
+        return self.getWindows()
 
     @classmethod
+    @_auto_wrap
     def getWindows(cls):
-        open_windows = rpg.ExtendedPlotWindow.getWindows()
-        open_windows = [RPGWrappedBase.autowrap(item) for item in open_windows]
-        return open_windows
+        return rpg.ExtendedPlotWindow.getWindows()
 
     @classmethod
     def find_by_id(cls, id):
@@ -403,13 +407,12 @@ class PlotItem(BasePlotItem):
     _base = rpg.ExtendedPlotItem
 
     def export(self, fname, export_type="image"):
-        return super().__getattr__("export")(fname, export_type)
+        return self._base_inst.export(fname, export_type)
 
     @property
+    @_auto_wrap
     def traces(self):
-        data_items = self.listDataItems(proxy=True)
-        data_items = [RPGWrappedBase.autowrap(item) for item in data_items]
-        return data_items
+        return self.listDataItems(proxy=True)
 
 class TextItem(RPGWrappedBase):
     _base = rpg.DraggableTextItem
@@ -419,7 +422,7 @@ class TextItem(RPGWrappedBase):
                 'br': (1,1)}
 
     def setParentItem(self, p):
-        super().__getattr__("setParentItem")(p)
+        self._base_inst.setParentItem(p)
         if isinstance(p, RPGWrappedBase):
             p._items.append(self)
 
@@ -429,14 +432,13 @@ class TextItem(RPGWrappedBase):
         (tl, tr, bl, br)
         """
         anchor_point = TextItem._ANCHORS[anchor]
-        super().__getattr__("anchor")(itemPos=anchor_point,
-                                      parentPos=anchor_point,
-                                      offset=(0,0))
+        self._base_inst.anchor(itemPos=anchor_point,
+                               parentPos=anchor_point,
+                               offset=(0,0))
 
     @property
     def offset(self):
-        pos = self.getOffset()
-        return pos
+        return self.getOffset()
     @offset.setter
     def offset(self, offs):
         if not isinstance(offs, tuple) or len(offs) != 2:
@@ -473,8 +475,9 @@ class HistogramLUTItem(RPGWrappedBase):
         self._remote_function_options['imageChanged'] = {'callSync': 'off'}
 
     @property
+    @_auto_wrap
     def axis(self):
-        return RPGWrappedBase.autowrap(super().__getattr__('axis'))
+        return self._base_inst.axis
 
     @property
     def allowAdd(self):
@@ -581,20 +584,16 @@ class PlotDataItem(PlotData):
     def setpoint_x(self):
         return self.xData
     @property
+    @_ensure_val
     def xData(self):
-        xData = getattr(self._base_inst, 'xData')
-        if isinstance(xData, mp.remoteproxy.ObjectProxy):
-            xData = xData._getValue()
-        return xData
+        return self._base_inst.xData
     @xData.setter
     def xData(self, val):
         self._base_inst.xData = _ensure_ndarray(val)
     @property
+    @_ensure_val
     def yData(self):
-        yData = getattr(self._base_inst, 'yData')
-        if isinstance(yData, mp.remoteproxy.ObjectProxy):
-            yData = yData._getValue()
-        return yData
+        return self._base_inst.yData
     @property
     def data(self):
         """
@@ -639,14 +638,12 @@ class ImageItem(PlotData):
         self.setImage(_ensure_ndarray(data), autoDownsample=True)
 
     @property
+    @_ensure_val
     def image(self):
         """
         Return the data underlying this trace
         """
-        image = getattr(self._base_inst, 'image')
-        if isinstance(image, mp.remoteproxy.ObjectProxy):
-            image = image._getValue()
-        return image
+        return self._base_inst.image
     @property
     def data(self):
         """
@@ -673,23 +670,19 @@ class ExtendedImageItem(ImageItem):
         pass
 
     @property
+    @_ensure_val
     def setpoint_x(self):
-        setpoint_x = self._base_inst.setpoint_x
-        if isinstance(setpoint_x, mp.remoteproxy.ObjectProxy):
-            setpoint_x = setpoint_x._getValue()
-        return setpoint_x
+        return self._base_inst.setpoint_x
     @setpoint_x.setter
     def setpoint_x(self, val):
         self._base_inst.setpoint_x = val
 
     @property
-    def setpoint_x(self):
-        setpoint_y = self._base_inst.setpoint_y
-        if isinstance(setpoint_y, mp.remoteproxy.ObjectProxy):
-            setpoint_y = setpoint_y._getValue()
-        return setpoint_y
-    @setpoint_x.setter
-    def setpoint_x(self, val):
+    @_ensure_val
+    def setpoint_y(self):
+        return self._base_inst.setpoint_y
+    @setpoint_y.setter
+    def setpoint_y(self, val):
         self._base_inst.setpoint_y = val
 
 class ImageItemWithHistogram(ExtendedImageItem):
