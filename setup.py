@@ -20,7 +20,10 @@ setup(
         'matplotlib>=2.0.2',
         'pyqtgraph>=0.10.0',
         'qcodes>=0.1.3',
-        'wrapt>=1.10.11'
+        'wrapt>=1.10.11',
+        'PyQt5>=5.10.1',
+        'scipy>=1.1.0',
+        'numpy>=1.14.3'
     ],
     python_requires='>=3'
 )
