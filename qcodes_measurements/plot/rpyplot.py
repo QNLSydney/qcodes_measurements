@@ -19,6 +19,19 @@ import numpy as np
 from numpy import linspace, min, max, ndarray, searchsorted
 import scipy.linalg
 
+import logging
+import sys, traceback
+
+logger = logging.getLogger("rpyplot")
+log_handler = logging.FileHandler("rpyplot.log")
+log_handler.setLevel(logging.INFO)
+log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+log_handler.setFormatter(log_format)
+logger.addHandler(log_handler)
+def exc(type, value, tb):
+    logger.exception("Uncaught Exception: {}\n{}".format(str(value), str(traceback.format_tb(tb))))
+sys.excepthook = exc
+
 class ExtendedPlotWindow(GraphicsLayoutWidget):
     _windows = []
     def __init__(self, *args, **kwargs):
@@ -191,9 +204,9 @@ class PlotMenu(object):
 
             # Create menus for each of the items
             if isinstance(dataitem, (ExtendedPlotDataItem, ExtendedImageItem)):
-                menu = dataitem.getContextMenus(rect=rect)
+                menu = dataitem.getContextMenus(rect=rect, event=None)
             else:
-                menu = dataitem.getContextMenus()
+                menu = dataitem.getContextMenus(event=None)
             menu.setTitle(name)
             itemsToAdd.append((ind, menu))
 
@@ -488,7 +501,7 @@ class ExtendedPlotDataItem(PlotDataItem):
         self.colorDialog.setOption(QtGui.QColorDialog.DontUseNativeDialog, True)
         self.colorDialog.colorSelected.connect(self.colorSelected)
 
-    def getContextMenus(self, *, rect=None):
+    def getContextMenus(self, *, rect=None, event=None):
         if self.menu is None:
             self.menu = QtGui.QMenu()
 
@@ -500,7 +513,10 @@ class ExtendedPlotDataItem(PlotDataItem):
             qaction.triggered.connect(partial(self.getViewBox().removePlotItem, self))
             self.menu.addAction(qaction)
 
-        self.menu.setTitle(self.name())
+        if self.name() is not None:
+            self.menu.setTitle(self.name())
+        else:
+            self.menu.setTitle("Trace")
         return self.menu
 
     def selectColor(self):
@@ -514,6 +530,9 @@ class ExtendedPlotDataItem(PlotDataItem):
 
     def colorSelected(self, color):
         self.setPen(color)
+
+    def update(self, yData):
+        self.setData(x=self.xData, y=yData)
 
 class ExtendedImageItem(ImageItem):
     colormaps = {}
@@ -530,7 +549,7 @@ class ExtendedImageItem(ImageItem):
     def mouseClickEvent(self, ev):
         return False
 
-    def getContextMenus(self, *, rect=None):
+    def getContextMenus(self, *, rect=None, event=None):
         if self.menu is None:
             self.menu = QtGui.QMenu()
         self.menu.clear()
@@ -699,16 +718,3 @@ class ImageItemWithHistogram(ExtendedImageItem):
             if self._parent is not None:
                 self._parent.removeItem(self._LUTitem)
                 self._parent = None
-
-import logging
-import sys, traceback
-
-logger = logging.getLogger("rpyplot")
-log_handler = logging.FileHandler("rpyplot.log")
-log_handler.setLevel(logging.INFO)
-log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-log_handler.setFormatter(log_format)
-logger.addHandler(log_handler)
-def exc(type, value, tb):
-    logger.exception("Uncaught Exception: {}\n{}".format(str(value), str(traceback.format_tb(tb))))
-sys.excepthook = exc

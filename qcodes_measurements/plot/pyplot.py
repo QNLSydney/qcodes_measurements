@@ -336,7 +336,7 @@ class BasePlotItem(RPGWrappedBase):
         """
         # Create a plot, 1d if we have a single setpoint, 2d if we have 2 setpoints
         if setpoint_y is None:
-            plotdata = PlotDataItem(setpoint_x, **kwargs)
+            plotdata = ExtendedPlotDataItem(setpoint_x, **kwargs)
         else:
             plotdata = ImageItemWithHistogram(setpoint_x, setpoint_y, **kwargs)
         self.addItem(plotdata)
@@ -562,12 +562,9 @@ class PlotData(RPGWrappedBase):
 class PlotDataItem(PlotData):
     _base = rpg.PlotDataItem
 
-    # Reserve names of local variables
-    setpoint_x = None
-
     def __init__(self, setpoint_x=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.setpoint_x = _ensure_ndarray(setpoint_x)
+        self.xData = _ensure_ndarray(setpoint_x)
         self._remote_function_options['setData'] = {'callSync': 'off'}
 
     def __wrap__(self, *args, **kwargs):
@@ -575,23 +572,23 @@ class PlotDataItem(PlotData):
         self._remote_function_options['setData'] = {'callSync': 'off'}
         if 'setpoint_x' in kwargs:
             # If we know what our setpoints are, use them
-            self.setpoint_x = kwargs['setpoint_x']
-        else:
-            try:
-                # Otherwise try and extract them from the existing data
-                self.setpoint_x = _ensure_ndarray(self.xData)
-            except AttributeError:
-                self.setpoint_x = None
+            self.xData = kwargs['setpoint_x']
 
     def update(self, data, *args, **kwargs):
         self.setData(x=self.setpoint_x, y=_ensure_ndarray(data), *args, **kwargs)
 
+    @property
+    def setpoint_x(self):
+        return self.xData
     @property
     def xData(self):
         xData = getattr(self._base_inst, 'xData')
         if isinstance(xData, mp.remoteproxy.ObjectProxy):
             xData = xData._getValue()
         return xData
+    @xData.setter
+    def xData(self, val):
+        self._base_inst.xData = _ensure_ndarray(val)
     @property
     def yData(self):
         yData = getattr(self._base_inst, 'yData')
@@ -607,6 +604,9 @@ class PlotDataItem(PlotData):
 
 class ExtendedPlotDataItem(PlotDataItem):
     _base = rpg.ExtendedPlotDataItem
+
+    def update(self, data, *args, **kwargs):
+        self.update(data)
 
 class ImageItem(PlotData):
     _base = rpg.ImageItem

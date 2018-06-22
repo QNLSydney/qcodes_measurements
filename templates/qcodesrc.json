@@ -1,9 +1,10 @@
 {
     "core":{
-        "loglevel": "DEBUG",
+        "loglevel": "WARNING",
+        "file_loglevel": "INFO",
         "default_fmt": "data/{date}/#{counter}_{name}_{time}",
         "register_magic": true,
-        "db_location": "C:\\Users\\Administrator\\Documents\\Experiments/experiments.db",
+        "db_location": "C:\\Users\\Administrator\\Documents\\Experiments\\experiments.db",
         "db_debug": false
     },
     "gui" :{
@@ -16,5 +17,10 @@
         "scriptfolder": "C:\\Users\\Administrator\\Documents\\Experiments",
         "mainfolder": "C:\\Users\\Administrator\\Documents\\Experiments",
         "auto_reconnect_instrument": true
+    },
+    "station_configurator": {
+        "enable_forced_reconnect": false,
+        "default_folder": ".",
+        "default_file": "instrument_config.yml"
     }
 }
