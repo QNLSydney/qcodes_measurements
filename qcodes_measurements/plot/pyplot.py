@@ -606,7 +606,7 @@ class ExtendedPlotDataItem(PlotDataItem):
     _base = rpg.ExtendedPlotDataItem
 
     def update(self, data, *args, **kwargs):
-        self.update(data)
+        self._base_inst.update(data)
 
 class ImageItem(PlotData):
     _base = rpg.ImageItem
