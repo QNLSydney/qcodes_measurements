@@ -323,12 +323,12 @@ class PlotAxis(RPGWrappedBase):
 class BasePlotItem(RPGWrappedBase):
     _base = rpg.PlotItem
 
-    def __init__(self, title=None):
+    def __init__(self, title=None, **kwargs):
         """
         Create a new plot. This has to be embedded inside 
         a plot window to actually be visible
         """
-        super().__init__()
+        super().__init__(**kwargs)
         
         # Update title if requested
         if title is not None:

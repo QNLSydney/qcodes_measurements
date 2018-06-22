@@ -158,13 +158,17 @@ def ramp(mdac_channel, to, sure=False):
         time.sleep(0.01)
 
 def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas, 
-                  rampback=False, **kwargs):
+                  rampback=False, wallcontrol=None, **kwargs):
     """
     Pull out the ramp parameter from the mdac and do a 1d sweep
     """
 
+    # Save wallcontrol parameters
+    if wallcontrol is not None:
+        wallcontrol_start = wallcontrol()
+
     ramp(mdac_channel, start)
-    trace_id = linear1d(mdac_channel, start, stop, num_points, delay, *param_meas, **kwargs, save=False)
+    trace_id = linear1d(mdac_channel, start, stop, num_points, delay, *param_meas, **kwargs, wallcontrol=wallcontrol, save=False)
 
     # Add gate labels
     run_id, win = trace_id
@@ -175,14 +179,21 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
     # Rampback if requested
     if rampback:
         ramp(mdac_channel, start)
+        if wallcontrol:
+            ramp(wallcontrol, wallcontrol_start)
         mdac_channel()
+        wallcontrol()
     
     return trace_id
 
 def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              mdac_channel2, start2, stop2, num_points2, delay2,
-             *param_meas, rampback=False, **kwargs):
+             *param_meas, rampback=False, wallcontrol=None, **kwargs):
     
+    # Save wallcontrol parameters
+    if wallcontrol is not None:
+        wallcontrol_start = wallcontrol()
+
     # Pull out MDAC chanels
     ch1 = ensure_channel(mdac_channel1)
     ch2 = ensure_channel(mdac_channel2)
@@ -207,7 +218,7 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
         delay1 += range2/ch2.rate()
         trace_id = linear2d(mdac_channel1, start1, stop1, num_points1, delay1,
                             ch2.ramp, start2, stop2, num_points2, delay2,
-                            *param_meas, **kwargs, save=False)
+                            *param_meas, **kwargs, wallcontrol=wallcontrol, save=False)
     finally:
         # Restore labels
         ch1.ramp.label = old_label[0]
@@ -223,6 +234,8 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
     if rampback:
         ramp(mdac_channel1, start1)
         ramp(mdac_channel2, start2)
+        if wallcontrol:
+            ramp(wallcontrol, wallcontrol_start)
     
     return trace_id
 
