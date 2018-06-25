@@ -613,12 +613,30 @@ class ExtendedImageItem(ImageItem):
         cmap = self.colormaps[name]
         self.setLookupTable(cmap.getLookupTable(0.0, 1.0, alpha=False))
 
+    def getLimits(self, data, limits):
+        """
+        Get the indicies from the given data array that correspond
+        to the given limits.
+        """
+        flipped = False
+        if data[0] > data[-1]:
+            flipped = True
+            data = np.flipud(data)
+        limits = searchsorted(data, limits)
+        if flipped:
+            length = len(data)
+            limits = tuple(sorted(length-x for x in limits))
+        return limits
+
     def colorByMarquee(self, xrange, yrange):
         # Extract indices of limits
         xmin, xmax = xrange
         ymin, ymax = yrange
-        xmin_p, xmax_p = searchsorted(self.setpoint_x, (xmin, xmax))
-        ymin_p, ymax_p = searchsorted(self.setpoint_y, (ymin, ymax))
+        xmin_p, xmax_p = self.getLimits(self.setpoint_x, (xmin, xmax))
+        ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
+
+        logger.info(f"Doing a levelColumns between x: {xrange}, y: {yrange}")
+        logger.debug(f"Calculated limits: x: {(xmin_p, xmax_p)}, y: {(ymin_p, ymax_p)}")
 
         # Then calculate the min/max range of the array
         data = self.image[xmin_p:xmax_p,ymin_p:ymax_p]
@@ -631,8 +649,11 @@ class ExtendedImageItem(ImageItem):
         # Extract indices of limits
         xmin, xmax = xrange
         ymin, ymax = yrange
-        xmin_p, xmax_p = searchsorted(self.setpoint_x, (xmin, xmax))
-        ymin_p, ymax_p = searchsorted(self.setpoint_y, (ymin, ymax))
+        xmin_p, xmax_p = self.getLimits(self.setpoint_x, (xmin, xmax))
+        ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
+
+        logger.info(f"Doing a planeFit between x: {xrange}, y: {yrange}")
+        logger.debug(f"Calculated limits: x: {(xmin_p, xmax_p)}, y: {(ymin_p, ymax_p)}")
 
         # Get the coordinate grid
         X, Y = np.meshgrid(self.setpoint_x[xmin_p:xmax_p], self.setpoint_y[ymin_p:ymax_p])
@@ -657,7 +678,10 @@ class ExtendedImageItem(ImageItem):
     def levelColumns(self, xrange, yrange):
         # Extract indices of limits
         ymin, ymax = yrange
-        ymin_p, ymax_p = searchsorted(self.setpoint_y, (ymin, ymax))
+        ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
+
+        logger.info(f"Doing a levelColumns between y: {yrange}")
+        logger.debug(f"Calculated limits: y: {(ymin_p, ymax_p)}")
 
         # Get a list of means for that column
         col_mean = self.image[:,ymin_p:ymax_p]
