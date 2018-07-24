@@ -27,7 +27,6 @@ def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None, microd_high=48):
     # Connect all pins to MicroD
     gates.microd('close')
     ohmics.microd('close')
-    shorts.microd('close')
     
     # Set gates to dac_output
     gates.dac_output('close')
@@ -50,10 +49,12 @@ def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None, microd_high=48):
     ohmics.smc('open')
     ohmics.filter(1)
     
-    shorts.gnd('close')
-    shorts.dac_output('open')
-    shorts.smc('open')
-    ohmics.filter(1)
+    if shorts:
+        shorts.microd('close')
+        shorts.gnd('close')
+        shorts.dac_output('open')
+        shorts.smc('open')
+        ohmics.filter(1)
     
     if bias is not None:
         bias.dac_output('close')
@@ -181,8 +182,8 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
         ramp(mdac_channel, start)
         if wallcontrol:
             ramp(wallcontrol, wallcontrol_start)
+            wallcontrol()
         mdac_channel()
-        wallcontrol()
     
     return trace_id
 
