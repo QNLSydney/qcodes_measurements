@@ -54,10 +54,10 @@ def append_by_id(win, id, param_name=None, force=False):
     
     # Sanity Check: Are axis labels the same?
     if not force:
-        assert(plot.left_axis.label == data[1]['data'].get('label', ""))
-        assert(plot.left_axis.units == data[1]['data'].get('unit', "A.U."))
-        assert(plot.bot_axis.label == data[0]['data'].get('label', ""))
-        assert(plot.bot_axis.units == data[0]['data'].get('unit', "A.U."))
+        assert(plot.left_axis.label == data[1].get('label', ""))
+        assert(plot.left_axis.units == data[1].get('unit', "A.U."))
+        assert(plot.bot_axis.label == data[0].get('label', ""))
+        assert(plot.bot_axis.units == data[0].get('unit', "A.U."))
     
 
     # Do the plot
