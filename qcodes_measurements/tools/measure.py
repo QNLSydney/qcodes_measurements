@@ -258,7 +258,10 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
     _run_functions(atend) # Run functions at the end
 
     if plot and save:
-        plot_tools.save_figure(win, datasaver.run_id)
+        try:
+            plot_tools.save_figure(win, datasaver.run_id)
+        except:
+            print(f"Failed to save figure {datasaver.run_id}")
 
     # Return the dataid, and a handle to the created window
     return (datasaver.run_id, win)  # can use plot_by_id(dataid)
@@ -445,6 +448,10 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     _run_functions(atend)
 
     if plot and save:
-        plot_tools.save_figure(win, datasaver.run_id)
+        try:
+            plot_tools.save_figure(win, datasaver.run_id)
+        except:
+            print(f"Failed to save figure {datasaver.run_id}")
+
 
     return (datasaver.run_id, win)

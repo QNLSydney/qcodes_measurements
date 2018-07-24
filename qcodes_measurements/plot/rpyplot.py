@@ -23,8 +23,9 @@ import logging
 import sys, traceback
 
 logger = logging.getLogger("rpyplot")
+logger.setLevel(logging.DEBUG)
 log_handler = logging.FileHandler("rpyplot.log")
-log_handler.setLevel(logging.INFO)
+log_handler.setLevel(logging.DEBUG)
 log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 log_handler.setFormatter(log_format)
 logger.addHandler(log_handler)
