@@ -357,6 +357,7 @@ class BasePlotItem(RPGWrappedBase):
         """
         textbox_item = TextItem(text=str(text))
         textbox_item.setParentItem(self)
+        self._items.append(textbox_item)
         return textbox_item
 
     def update_axes(self, param_x, param_y,
