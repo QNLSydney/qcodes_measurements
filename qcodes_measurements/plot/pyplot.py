@@ -448,7 +448,7 @@ class TextItem(RPGWrappedBase):
 
     @property
     def text(self):
-        text = self.getText().replace("<br>", "\n")
+        text = "".join(self.getText()).replace("<br>", "\n")
         return text
     @text.setter
     def text(self, text):
