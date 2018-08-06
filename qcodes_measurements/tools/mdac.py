@@ -98,6 +98,13 @@ def make_channel_list(mdac, name, channels):
     return ch_list
 
 def setup_bus(mdac, channels, bus_channel):
+    # Set high gates to open
+    mdac.channels[48:].gnd('close')
+    mdac.channels[48:].smc('open')
+    mdac.channels[48:].microd('open')
+    mdac.channels[48:].bus('open')
+    mdac.channels[48:].dac_output('open')
+    
     # Set up bus channel for output
     assert(np.isclose(bus_channel.voltage(), 0))
     bus_channel.bus('close')
@@ -107,6 +114,7 @@ def setup_bus(mdac, channels, bus_channel):
     bus_channel.gnd('open')
     bus_channel.rate(0.05)
     bus_channel.filter(2)
+
     
     # Connect bus to front panel
     mdac.bus('close')
