@@ -1,8 +1,6 @@
 from .plot import ChildProcessImportError
 import logging
 
-__all__ = ['tools', 'plot']
-
 logger = logging.getLogger("qcodes_measurements")
 
 try:
@@ -13,6 +11,9 @@ try:
     from .tools.midas import midasLinear1d
     from .tools.measure import linear1d, linear2d
     from .tools.parameters import FilterWrapper, CutWrapper, SmoothFilter, DiffFilter, MeanFilter, ReduceFilterWrapper
+
+    # Import shortcuts to device
+    from .device import *
 
     # If we have an MDAC, import MDAC shortcuts
     try:
