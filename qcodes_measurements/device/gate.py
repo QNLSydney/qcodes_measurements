@@ -10,7 +10,9 @@ from qcodes.utils import validators as vals
 try:
     import qcodes.instrument_drivers.qnl.MDAC as MDAC
 except ModuleNotFoundError:
-    MDAC = object()
+    class _Blank(object):
+        pass
+    MDAC = _Blank()
     MDAC.MDACChannel = type(None)
     MDAC.MDAC = type(None)
 
@@ -128,7 +130,7 @@ class Gate(Parameter):
         """
         Get refers to the voltage of the underlying source
         """
-        return self.voltage()
+        return self.source.voltage()
 
     def set_raw(self, val):
         """

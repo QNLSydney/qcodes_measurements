@@ -5,7 +5,9 @@ from .gate import *
 try:
     import qcodes.instrument_drivers.qnl.MDAC as MDAC
 except ModuleNotFoundError:
-    MDAC = object()
+    class _Blank(object):
+        pass
+    MDAC = _Blank()
     MDAC.MDACChannel = type(None)
     MDAC.MDAC = type(None)
 
