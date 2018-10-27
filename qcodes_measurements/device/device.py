@@ -7,7 +7,9 @@ from .gate import Gate, Ohmic, GateWrapper, OhmicWrapper, \
 try:
     from MDAC import MDAC
 except ModuleNotFoundError:
-    MDAC = object()
+    class _Blank(object):
+        pass
+    MDAC = _Blank()
     MDAC.MDACChannel = type(None)
     MDAC.MDAC = type(None)
 from .bb import BBChan
