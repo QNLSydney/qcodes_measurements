@@ -55,10 +55,10 @@ class BaseWrappedParameter(wrapt.CallableObjectProxy):
         if not param_name.startswith("wrap_"):
             param_name = f"wrap_{param_name}"
         return param_name
-    
+
     def snapshot(self, *args, **kwargs):
         """
-        Overwrite snapshot too, as the wrapped parameter snapshot will not have 
+        Overwrite snapshot too, as the wrapped parameter snapshot will not have
         access to our snapshot_base unless it is called from here
         """
         # Take a snapshot of the base
@@ -69,7 +69,7 @@ class BaseWrappedParameter(wrapt.CallableObjectProxy):
 
         # Return the snapshot with wrappers included
         return snap
-    
+
     def get_raw(self):
         raise RuntimeError("I think this shouldn't be called?")
 
@@ -87,18 +87,25 @@ class FilterWrapper(BaseWrappedParameter):
     filter_func = None
     args = None
     kwargs = None
+    _label = None
+    _unit = None
 
-    def __init__(self, parameter, *, filter_func, args=None, kwargs=None):
+    def __init__(self, parameter, *, filter_func,
+                 label=None, unit=None, args=None, kwargs=None):
         """
         Args:
             parameter - the parameter to wrap
             filter_func - the filter to apply to the result of the parameter
+            label - (optional) relabel the data
+            unit - (optional) change the units of the data
             *args, **kwargs - arguments passed to the filter function
         """
         super().__init__(parameter)
         self.filter_func = filter_func
         self.args = args if args is not None else []
         self.kwargs = kwargs if kwargs is not None else {}
+        self._label = label
+        self._unit = unit
 
         snap = {'type': type(self).__name__,
                 'filter_func': filter_func.__name__,
@@ -106,6 +113,18 @@ class FilterWrapper(BaseWrappedParameter):
                 'args': args,
                 'kwargs': kwargs}
         self.wrappers = snap
+
+    @property
+    def label(self):
+        if self._label is None:
+            return self.__wrapped__.label
+        return self._label
+
+    @property
+    def unit(self):
+        if self._unit is None:
+            return self.__wrapped__.unit
+        return self._unit
 
     def get(self):
         d = self.__wrapped__.get()
@@ -143,7 +162,7 @@ class ReduceFilterWrapper(BaseWrappedParameter):
                 'args': args,
                 'kwargs': kwargs}
         self.wrappers = snap
-    
+
     @property
     def setpoints(self):
         return None
