@@ -1,13 +1,16 @@
-from qcodes import Instrument, ChannelList
+from qcodes import Instrument, ChannelList, Parameter
 
-from .gate import *
+from .gate import Gate, Ohmic, GateWrapper, OhmicWrapper, \
+                  MDACGateWrapper, MDACOhmicWrapper, \
+                  BBGateWrapper, BBOhmicWrapper
 
 try:
-    import qcodes.instrument_drivers.qnl.MDAC as MDAC
+    from MDAC import MDAC
 except ModuleNotFoundError:
     MDAC = object()
     MDAC.MDACChannel = type(None)
     MDAC.MDAC = type(None)
+from .bb import BBChan
 
 
 class Device(Instrument):
@@ -35,10 +38,14 @@ class Device(Instrument):
         if isinstance(new_param, Gate):
             if isinstance(new_param.source, MDAC.MDACChannel):
                 self.gates.append(MDACGateWrapper(new_param, name))
+            elif isinstance(new_param.source, BBChan):
+                self.gates.append(BBGateWrapper(new_param, name))
             else:
                 self.gates.append(GateWrapper(new_param, name))
         elif isinstance(new_param, Ohmic):
             if isinstance(new_param.source, MDAC.MDACChannel):
                 self.ohmics.append(MDACOhmicWrapper(new_param, name))
+            elif isinstance(new_param.source, BBChan):
+                self.ohmics.append(BBOhmicWrapper(new_param, name))
             else:
                 self.ohmics.append(OhmicWrapper(new_param, name))

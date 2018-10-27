@@ -8,20 +8,24 @@ from qcodes import Instrument, InstrumentChannel, Parameter
 from qcodes.utils import validators as vals
 
 try:
-    import qcodes.instrument_drivers.qnl.MDAC as MDAC
+    from MDAC import MDAC
 except ModuleNotFoundError:
     MDAC = object()
     MDAC.MDACChannel = type(None)
     MDAC.MDAC = type(None)
+from .bb import BBChan
 
+__all__ = ["GateMode", "ConnState", "Gate", "GateWrapper", "MDACGateWrapper", 
+           "BBGateWrapper", "Ohmic", "OhmicWrapper", "MDACOhmicWrapper", 
+           "BBOhmicWrapper"]
 
-class GateMode(enum.Enum):
+class GateMode(str, enum.Enum):
     BIAS = enum.auto()
     COLD = enum.auto()
     FREE = enum.auto()
 
 
-class ConnState(enum.Enum):
+class ConnState(str, enum.Enum):
     BUS = enum.auto()
     GND = enum.auto()
     DAC = enum.auto()
@@ -128,7 +132,7 @@ class Gate(Parameter):
         """
         Get refers to the voltage of the underlying source
         """
-        return self.voltage()
+        return self.source.voltage()
 
     def set_raw(self, val):
         """
@@ -160,9 +164,10 @@ class GateWrapper(InstrumentChannel):
         if not isinstance(parent, Gate):
             raise TypeError("GateWrapper can only wrap gates")
         self._state = ConnState.UNDEF
+        self.add_parameter('state',
+                           get_cmd=self.get_state)
 
-    @property
-    def state(self):
+    def get_state(self):
         return self._state
 
     def ground(self):
@@ -187,12 +192,11 @@ class MDACGateWrapper(GateWrapper):
         # Allow access to gate voltage
         self.parameters['voltage'] = parent
 
-    @property
-    def state(self):
-        gnd = self.instrument.gnd() == 'close'
-        smc = self.instrument.smc() == 'close'
-        bus = self.instrument.bus() == 'close'
-        dac_output = self.instrument.dac_output() == 'close'
+    def get_state(self):
+        gnd = self.parent.gnd() == 'close'
+        smc = self.parent.smc() == 'close'
+        bus = self.parent.bus() == 'close'
+        dac_output = self.parent.dac_output() == 'close'
         if gnd:
             if not smc and not bus:
                 return ConnState.GND
@@ -207,22 +211,32 @@ class MDACGateWrapper(GateWrapper):
                 return ConnState.SMC
 
     def ground(self):
-        self.instrument.ground('close')
-        self.instrument.smc('open')
-        self.instrument.bus('open')
-        self.instrument.dac_output('open')
+        self.parent.gnd('close')
+        self.parent.smc('open')
+        self.parent.bus('open')
+        self.parent.dac_output('open')
 
     def bus(self):
-        self.instrument.bus('close')
-        self.instrument.smc('open')
-        self.instrument.ground('open')
-        self.instrument.dac_output('open')
+        self.parent.bus('close')
+        self.parent.smc('open')
+        self.parent.gnd('open')
+        self.parent.dac_output('open')
 
     def dac(self):
-        self.instrument.dac_output('close')
-        self.instrument.bus('open')
-        self.instrument.smc('open')
-        self.instrument.ground('open')
+        self.parent.dac_output('close')
+        self.parent.bus('open')
+        self.parent.smc('open')
+        self.parent.gnd('open')
+
+
+class BBGateWrapper(GateWrapper):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        if not isinstance(parent.source, BBChan):
+            raise TypeError("BBGateWrapperWithMDAC must wrap a gate on an breakout box")
+
+        # Allow access to gate voltage
+        self.parameters['voltage'] = parent
 
 
 class Ohmic(Parameter):
@@ -231,8 +245,8 @@ class Ohmic(Parameter):
         if not isinstance(source, (Instrument, InstrumentChannel)):
             raise TypeError("The source must be an instrument or instrument channel.")
         if not hasattr(source, "voltage") or not hasattr(source.voltage, "set"):
-            self.set_raw = None
-            self.get_raw = None
+            del self.set_raw
+            del self.get_raw
 
         if label is None:
             label = name
@@ -284,9 +298,10 @@ class OhmicWrapper(InstrumentChannel):
         if not isinstance(parent, Ohmic):
             raise TypeError("OhmicWrapper can only wrap ohmics")
         self._state = ConnState.UNDEF
+        self.add_parameter('state',
+                   get_cmd=self.get_state)
 
-    @property
-    def state(self):
+    def get_state(self):
         return self._state
 
     def ground(self):
@@ -314,12 +329,11 @@ class MDACOhmicWrapper(OhmicWrapper):
         # Allow access to gate voltage
         self.parameters['voltage'] = parent
 
-    @property
-    def state(self):
-        gnd = self.instrument.gnd() == 'close'
-        smc = self.instrument.smc() == 'close'
-        bus = self.instrument.bus() == 'close'
-        dac_output = self.instrument.dac_output() == 'close'
+    def get_state(self):
+        gnd = self.parent.gnd() == 'close'
+        smc = self.parent.smc() == 'close'
+        bus = self.parent.bus() == 'close'
+        dac_output = self.parent.dac_output() == 'close'
         if gnd:
             if not smc and not bus:
                 return ConnState.GND
@@ -336,25 +350,35 @@ class MDACOhmicWrapper(OhmicWrapper):
                 return ConnState.FLOAT
 
     def ground(self):
-        self.instrument.ground('close')
-        self.instrument.smc('open')
-        self.instrument.bus('open')
-        self.instrument.dac_output('open')
+        self.parent.gnd('close')
+        self.parent.smc('open')
+        self.parent.bus('open')
+        self.parent.dac_output('open')
 
     def bus(self):
-        self.instrument.bus('close')
-        self.instrument.smc('open')
-        self.instrument.ground('open')
-        self.instrument.dac_output('open')
+        self.parent.bus('close')
+        self.parent.smc('open')
+        self.parent.gnd('open')
+        self.parent.dac_output('open')
 
     def float(self):
-        self.instrument.dac_output('open')
-        self.instrument.bus('open')
-        self.instrument.smc('open')
-        self.instrument.ground('open')
+        self.parent.dac_output('open')
+        self.parent.bus('open')
+        self.parent.smc('open')
+        self.parent.gnd('open')
 
     def smc(self):
-        self.instrument.smc('close')
-        self.instrument.dac_output('open')
-        self.instrument.bus('open')
-        self.instrument.ground('open')
+        self.parent.smc('close')
+        self.parent.dac_output('open')
+        self.parent.bus('open')
+        self.parent.gnd('open')
+
+
+class BBOhmicWrapper(OhmicWrapper):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        if not isinstance(parent.source, BBChan):
+            raise TypeError("BBGateWrapperWithMDAC must wrap a gate on an breakout box")
+
+        # Allow access to gate voltage
+        self.parameters['voltage'] = parent
