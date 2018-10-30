@@ -166,23 +166,22 @@ class GateWrapper(InstrumentChannel):
         if not isinstance(parent, Gate):
             raise TypeError("GateWrapper can only wrap gates")
         self._state = ConnState.UNDEF
-        self.add_parameter('state',
-                           get_cmd=self.get_state)
+        self.add_parameter('state')
 
     def get_state(self):
         return self._state
 
     def ground(self):
         print(f"Manually Ground {self.name}")
-        self._state = ConnState.GND
+        self.state(ConnState.GND)
 
     def bus(self):
         print(f"Manually Bus {self.name}")
-        self._state = ConnState.BUS
+        self.state(ConnState.BUS)
 
     def dac(self):
         print(f"Manually Connect DAC to {self.name}")
-        self._state = ConnState.DAC
+        self.state(ConnState.DAC)
 
 
 class MDACGateWrapper(GateWrapper):
@@ -194,41 +193,50 @@ class MDACGateWrapper(GateWrapper):
         # Allow access to gate voltage
         self.parameters['voltage'] = parent
 
+        # Wrap get command for state
+        self.state.get = self.state._wrap_get(self.get_state)
+
     def get_state(self):
         gnd = self.parent.gnd() == 'close'
         smc = self.parent.smc() == 'close'
         bus = self.parent.bus() == 'close'
         dac_output = self.parent.dac_output() == 'close'
+        state = None
         if gnd:
             if not smc and not bus:
-                return ConnState.GND
+                state = ConnState.GND
             else:
-                return ConnState.UNDEF
+                state = ConnState.UNDEF
         else:
             if bus:
-                return ConnState.BUS
+                state = ConnState.BUS
             elif dac_output:
-                return ConnState.DAC
+                state = ConnState.DAC
             elif smc:
-                return ConnState.SMC
+                state = ConnState.SMC
+        self.state._save_val(state)
+        return state
 
     def ground(self):
         self.parent.gnd('close')
         self.parent.smc('open')
         self.parent.bus('open')
         self.parent.dac_output('open')
+        self.state._save_val(ConnState.GND)
 
     def bus(self):
         self.parent.bus('close')
         self.parent.smc('open')
         self.parent.gnd('open')
         self.parent.dac_output('open')
+        self.state._save_val(ConnState.BUS)
 
     def dac(self):
         self.parent.dac_output('close')
         self.parent.bus('open')
         self.parent.smc('open')
         self.parent.gnd('open')
+        self.state._save_val(ConnState.DAC)
 
 
 class BBGateWrapper(GateWrapper):
@@ -299,24 +307,22 @@ class OhmicWrapper(InstrumentChannel):
         super().__init__(parent.source, name)
         if not isinstance(parent, Ohmic):
             raise TypeError("OhmicWrapper can only wrap ohmics")
-        self._state = ConnState.UNDEF
-        self.add_parameter('state',
-                   get_cmd=self.get_state)
+        self.add_parameter('state')
 
     def get_state(self):
-        return self._state
+        return self.state()
 
     def ground(self):
         print(f"Manually Ground {self.name}")
-        self._state = ConnState.GND
+        self.state(ConnState.GND)
 
     def bus(self):
         print(f"Manually Bus {self.name}")
-        self._state = ConnState.BUS
+        self.state(ConnState.BUS)
 
     def float(self):
         print(f"Manually Float {self.name}")
-        self._state = ConnState.FLOAT
+        self.state(ConnState.FLOAT)
 
     def smc(self):
         self.float()
@@ -331,49 +337,59 @@ class MDACOhmicWrapper(OhmicWrapper):
         # Allow access to gate voltage
         self.parameters['voltage'] = parent
 
+        # Wrap get command for state
+        self.state.get = self.state._wrap_get(self.get_state)
+
     def get_state(self):
         gnd = self.parent.gnd() == 'close'
         smc = self.parent.smc() == 'close'
         bus = self.parent.bus() == 'close'
         dac_output = self.parent.dac_output() == 'close'
+        state = None
         if gnd:
             if not smc and not bus:
-                return ConnState.GND
+                state = ConnState.GND
             else:
-                return ConnState.UNDEF
+                state = ConnState.UNDEF
         else:
             if bus:
-                return ConnState.BUS
+                state = ConnState.BUS
             elif dac_output:
-                return ConnState.DAC
+                state = ConnState.DAC
             elif smc:
-                return ConnState.SMC
+                state = ConnState.SMC
             else:
-                return ConnState.FLOAT
+                state = ConnState.FLOAT
+        self.state._save_val(state)
+        return state
 
     def ground(self):
         self.parent.gnd('close')
         self.parent.smc('open')
         self.parent.bus('open')
         self.parent.dac_output('open')
+        self.state._save_val(ConnState.GND)
 
     def bus(self):
         self.parent.bus('close')
         self.parent.smc('open')
         self.parent.gnd('open')
         self.parent.dac_output('open')
+        self.state._save_val(ConnState.BUS)
 
     def float(self):
         self.parent.dac_output('open')
         self.parent.bus('open')
         self.parent.smc('open')
         self.parent.gnd('open')
+        self.state._save_val(ConnState.FLOAT)
 
     def smc(self):
         self.parent.smc('close')
         self.parent.dac_output('open')
         self.parent.bus('open')
         self.parent.gnd('open')
+        self.state._save_val(ConnState.SMC)
 
 
 class BBOhmicWrapper(OhmicWrapper):
