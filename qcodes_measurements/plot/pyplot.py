@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
+import sys
 from math import ceil
-from collections import Iterable
 import PyQt5
+import re
 
 import pyqtgraph.multiprocess as mp
 
@@ -12,6 +13,9 @@ from numpy import linspace, min, max, ndarray
 from qcodes.instrument.parameter import _BaseParameter
 
 from ..plot import ChildProcessImportError, colors
+
+# Get access to module level variables
+this = sys.modules[__name__]
 
 #Define some convenient functions
 def _set_defaults(rpg):
@@ -50,11 +54,37 @@ def _auto_wrap(f):
     """
     def wrap(*args, **kwargs):
         val = f(*args, **kwargs)
-        if isinstance(val, Iterable):
-            return tuple(RPGWrappedBase.autowrap(item) for item in val)
-        else:
+        try:
+            iterator = iter(val)
+            return tuple(RPGWrappedBase.autowrap(item) for item in iterator)
+        except TypeError:
             return RPGWrappedBase.autowrap(val)
     return wrap
+
+def _start_remote():
+    if len(mp.QtProcess.handlers) == 0:
+        proc = mp.QtProcess()
+        this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
+        _set_defaults(this.rpg)
+    else:
+        raise ChildProcessImportError(f"Importing pyplot from child process {mp.QtProcess.handlers}")
+
+def _restart_remote():
+    if len(mp.QtProcess.handlers) == 0:
+        _start_remote()
+    else:
+        for pid in mp.QtProcess.handlers:
+            try:
+                proc = mp.QtProcess.handlers[pid]
+                if isinstance(proc, mp.QtProcess):
+                    if not proc.exited:
+                        mp.QtProcess.handlers[pid].join()
+                else:
+                    raise ChildProcessImportError(f"Importing pyplot from child process")
+            except mp.ClosedError:
+                continue
+        mp.QtProcess.handlers.clear()
+        _start_remote()
 
 # --- ON STARTUP - Create a remote Qt process used for plotting in the background
 # Check if a QApplication exists. It will not if we are not running from spyder...
@@ -63,23 +93,7 @@ if PyQt5.QtGui.QApplication.instance() is None:
 else:
     app = PyQt5.QtGui.QApplication.instance()
 
-if len(mp.QtProcess.handlers) == 0:
-    proc = mp.QtProcess()
-    rpg = proc._import('qcodes_measurements.plot.rpyplot')
-    _set_defaults(rpg)
-else:
-    proc = next(iter(mp.QtProcess.handlers.values()))
-    # Check whether it is closed
-    if isinstance(proc, mp.QtProcess):
-        try:
-            rpg = proc._import('qcodes_measurements.plot.rpyplot')
-        except mp.ClosedError:
-            mp.QtProcess.handlers.clear()
-            proc = mp.QtProcess()
-            rpg = proc._import('qcodes_measurements.plot.rpyplot')
-            _set_defaults(rpg)
-    else:
-        raise ChildProcessImportError("Importing pyplot from child process")
+_start_remote()
     
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
     # Keep track of children so they aren't recomputed each time
@@ -100,7 +114,13 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         self._remote_functions = {}
         self._remote_function_options = {}
         if '_base' in self.__class__.__dict__:
-            base = self.__class__._base(*args, **kwargs)
+            try:
+                base = getattr(this.rpg, self.__class__._base)
+                base = base(*args, **kwargs)
+            except mp.ClosedError:
+                _restart_remote()
+                base = getattr(this.rpg, self.__class__._base)
+                base = base(*args, **kwargs)
             self._base_inst = base
         else:
             raise TypeError("Base instance not defined. Don't know how to create remote object.")
@@ -144,7 +164,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
                     base = getattr(t, '_base', None)
                     if base is None:
                         continue
-                    typestr = base._typeStr.split()[1].strip('\'>').split('.')[-1]
+                    typestr = base
                     d[typestr] = t
             append_subclasses(RPGWrappedBase._subclass_types, RPGWrappedBase)
 
@@ -197,6 +217,12 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             super().__setattr__(name, value)
 
     def __getattr__(self, name):
+        # Check for ipython special methods
+        if re.match("_repr_.*_", name):
+            raise AttributeError("Ignoring iPython special methods")
+        if re.match("_ipython_.*_", name):
+            raise AttributeError("Ignoring iPython special methods")
+        
         # Check whether this function has been cached
         if name in self._remote_functions:
             return self._remote_functions[name]
@@ -229,7 +255,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         return tuple(self._items)
 
 class BasePlotWindow(RPGWrappedBase):
-    _base = rpg.GraphicsLayoutWidget
+    _base = "GraphicsLayoutWidget"
 
     def __init__(self, title=None, *args, **kwargs):
         """
@@ -274,7 +300,7 @@ class BasePlotWindow(RPGWrappedBase):
         return self.getLayoutItems()
 
 class PlotWindow(BasePlotWindow):
-    _base = rpg.ExtendedPlotWindow
+    _base = "ExtendedPlotWindow"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -290,7 +316,7 @@ class PlotWindow(BasePlotWindow):
     @classmethod
     @_auto_wrap
     def getWindows(cls):
-        return rpg.ExtendedPlotWindow.getWindows()
+        return this.rpg.ExtendedPlotWindow.getWindows()
 
     @classmethod
     def find_by_id(cls, id):
@@ -304,7 +330,7 @@ class PlotWindow(BasePlotWindow):
         return None
 
 class PlotAxis(RPGWrappedBase):
-    _base = rpg.AxisItem
+    _base = "AxisItem"
 
     @property
     def label(self):
@@ -321,7 +347,7 @@ class PlotAxis(RPGWrappedBase):
         self.setLabel(units=units)
 
 class BasePlotItem(RPGWrappedBase):
-    _base = rpg.PlotItem
+    _base = "PlotItem"
 
     def __init__(self, title=None, **kwargs):
         """
@@ -405,7 +431,7 @@ class BasePlotItem(RPGWrappedBase):
     
 
 class PlotItem(BasePlotItem):
-    _base = rpg.ExtendedPlotItem
+    _base = "ExtendedPlotItem"
 
     def export(self, fname, export_type="image"):
         return self._base_inst.export(fname, export_type)
@@ -416,7 +442,7 @@ class PlotItem(BasePlotItem):
         return self.listDataItems(proxy=True)
 
 class TextItem(RPGWrappedBase):
-    _base = rpg.DraggableTextItem
+    _base = "DraggableTextItem"
     _ANCHORS = {'tl': (0,0),
                 'tr': (1,0),
                 'bl': (0,1),
@@ -459,7 +485,7 @@ class TextItem(RPGWrappedBase):
         self.setText(str(text))
 
 class HistogramLUTItem(RPGWrappedBase):
-    _base = rpg.HistogramLUTItem
+    _base = "HistogramLUTItem"
 
     # Reserve names of local variables
     _cmap = None
@@ -500,10 +526,8 @@ class HistogramLUTItem(RPGWrappedBase):
         self._cmap = cmap
 
 class ColorMap(RPGWrappedBase):
-    _base = rpg.ColorMap
+    _base = "ColorMap"
     _all_colors = {}
-    _remote_list = rpg.graphicsItems.GradientEditorItem.__getattr__('Gradients', 
-                                                                    _returnType="proxy")
 
     # Reserve names of local variables
     _name = None
@@ -515,10 +539,17 @@ class ColorMap(RPGWrappedBase):
         # Keep track of all color maps, and add them to the list of available colormaps
         ColorMap._all_colors[name] = self
         # And add each of our colors to the new list
-        ColorMap._remote_list[name] = {
+        remote_list = self.get_remote_list()
+        remote_list[name] = {
             'ticks': list(zip(pos, (tuple(int(y*255) for y in x) + (255,) for x in color))),
             'mode': 'rgb'
         }
+
+    @classmethod
+    def get_remote_list(cls):
+        remote_list = this.rpg.graphicsItems.GradientEditorItem.__getattr__('Gradients', 
+                                                                    _returnType="proxy")
+        return remote_list
 
     @classmethod
     def get_color_map(cls, name):
@@ -532,8 +563,8 @@ class ColorMap(RPGWrappedBase):
         return self._name
     
 ## Transfer color scales to remote process, truncating steps to 16 if necessary
-maps = ColorMap._remote_list._getValue()
-ColorMap._remote_list.clear()
+maps = ColorMap.get_remote_list()._getValue()
+ColorMap.get_remote_list().clear()
 for color in colors.__data__.keys():
     data = colors.__data__[color]
     step = ceil(len(data) / 16)
@@ -564,7 +595,7 @@ class PlotData(RPGWrappedBase):
         raise NotImplementedError("This should be implemented by the actual plot item")
 
 class PlotDataItem(PlotData):
-    _base = rpg.PlotDataItem
+    _base = "PlotDataItem"
 
     def __init__(self, setpoint_x=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -603,13 +634,13 @@ class PlotDataItem(PlotData):
         return (self.xData, self.yData)
 
 class ExtendedPlotDataItem(PlotDataItem):
-    _base = rpg.ExtendedPlotDataItem
+    _base = "ExtendedPlotDataItem"
 
     def update(self, data, *args, **kwargs):
         self._base_inst.update(data)
 
 class ImageItem(PlotData):
-    _base = rpg.ImageItem
+    _base = "ImageItem"
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
@@ -657,7 +688,7 @@ class ExtendedImageItem(ImageItem):
     Extended image item keeps track of x and y setpoints remotely, as this is necessary
     to do more enhanced image processing that makes use of the axis scale, like color-by-marquee.
     """
-    _base = rpg.ExtendedImageItem
+    _base = "ExtendedImageItem"
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, colormap, **kwargs)
@@ -687,7 +718,7 @@ class ExtendedImageItem(ImageItem):
         self._base_inst.setpoint_y = val
 
 class ImageItemWithHistogram(ExtendedImageItem):
-    _base = rpg.ImageItemWithHistogram
+    _base = "ImageItemWithHistogram"
 
     # Local Variables
     _histogram = None
