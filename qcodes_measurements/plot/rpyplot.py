@@ -30,7 +30,9 @@ log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messa
 log_handler.setFormatter(log_format)
 logger.addHandler(log_handler)
 def exc(type, value, tb):
-    logger.exception("Uncaught Exception: {}\n{}".format(str(value), str(traceback.format_tb(tb))))
+    logger.exception("Uncaught Exception: {}\n{}".format(str(value), "".join(traceback.format_tb(tb))))
+    traceback.print_exc()
+    
 sys.excepthook = exc
 
 class ExtendedPlotWindow(GraphicsLayoutWidget):
