@@ -5,7 +5,7 @@ from .gate import Gate, Ohmic, GateWrapper, OhmicWrapper, \
                   BBGateWrapper, BBOhmicWrapper
 
 try:
-    from MDAC import MDAC
+    import MDAC
 except ModuleNotFoundError:
     class _Blank(object):
         pass

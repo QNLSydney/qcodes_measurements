@@ -8,7 +8,7 @@ from qcodes import Instrument, InstrumentChannel, Parameter
 from qcodes.utils import validators as vals
 
 try:
-    from MDAC import MDAC
+    import MDAC
 except ModuleNotFoundError:
     class _Blank(object):
         pass
@@ -17,8 +17,8 @@ except ModuleNotFoundError:
     MDAC.MDAC = type(None)
 from .bb import BBChan
 
-__all__ = ["GateMode", "ConnState", "Gate", "GateWrapper", "MDACGateWrapper", 
-           "BBGateWrapper", "Ohmic", "OhmicWrapper", "MDACOhmicWrapper", 
+__all__ = ["GateMode", "ConnState", "Gate", "GateWrapper", "MDACGateWrapper",
+           "BBGateWrapper", "Ohmic", "OhmicWrapper", "MDACOhmicWrapper",
            "BBOhmicWrapper"]
 
 class GateMode(str, enum.Enum):

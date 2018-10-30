@@ -17,7 +17,7 @@ try:
 
     # If we have an MDAC, import MDAC shortcuts
     try:
-        import qcodes.instrument_drivers.qnl.MDAC as MDAC
+        from MDAC import MDAC
         from .tools.mdac import *
     except ModuleNotFoundError:
         logger.info("MDAC drivers not present. Not loading drivers")

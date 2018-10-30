@@ -4,7 +4,7 @@ import logging as log
 
 from qcodes import ChannelList
 from qcodes.instrument.parameter import Parameter
-from qcodes.instrument_drivers.qnl.MDAC import MDACChannel
+from MDAC import MDACChannel
 
 from qdev_wrappers.parameters import DelegateParameter
 
@@ -15,26 +15,26 @@ def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None, microd_high=48):
     """
     Set all gates to correct states in MDAC. Note, assume that we are connected
     to the device through Micro-D's
-    
+
     Ohmics, Gates, Shorts are all ChannelLists
     """
-    
+
     # Check that all gates are in a safe state
     assert(all(gate.voltage() == 0 for gate in gates))
     assert(all(ohmic.voltage() == 0 for ohmic in ohmics))
     assert(all(short.voltage() == 0 for short in shorts))
-    
+
     # Connect all pins to MicroD
     gates.microd('close')
     ohmics.microd('close')
-    
+
     # Set gates to dac_output
     gates.dac_output('close')
     gates.smc('open')
     gates.gnd('open')
     gates.filter(2)
     gates.rate(0.05)
-    
+
     # Set high gates (after microd) to SMC output
     mdac.channels[microd_high:].microd('open')
     mdac.channels[microd_high:].dac_output('close')
@@ -42,20 +42,20 @@ def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None, microd_high=48):
     mdac.channels[microd_high:].gnd('open')
     mdac.channels[microd_high:].filter(2)
     mdac.channels[microd_high:].rate(0.05)
-    
+
     # Set ohmics/shorts to grounded and SMC
     ohmics.gnd('close')
     ohmics.dac_output('open')
     ohmics.smc('open')
     ohmics.filter(1)
-    
+
     if shorts:
         shorts.microd('close')
         shorts.gnd('close')
         shorts.dac_output('open')
         shorts.smc('open')
         ohmics.filter(1)
-    
+
     if bias is not None:
         bias.dac_output('close')
         bias.smc('close')
@@ -65,7 +65,7 @@ def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None, microd_high=48):
         bias.rate.scale = 100
         bias.filter(2)
         bias.rate(0.0001)
-    
+
     if trigger is not None:
         trigger.dac_output('close')
         trigger.smc('close')
@@ -104,7 +104,7 @@ def setup_bus(mdac, channels, bus_channel):
     mdac.channels[48:].microd('open')
     mdac.channels[48:].bus('open')
     mdac.channels[48:].dac_output('open')
-    
+
     # Set up bus channel for output
     assert(np.isclose(bus_channel.voltage(), 0))
     bus_channel.bus('close')
@@ -115,10 +115,10 @@ def setup_bus(mdac, channels, bus_channel):
     bus_channel.rate(0.05)
     bus_channel.filter(2)
 
-    
+
     # Connect bus to front panel
     mdac.bus('close')
-    
+
     # Get all gates ready
     assert(all(np.isclose(x, 0) for x in channels.voltage()))
     channels.dac_output('close')
@@ -128,12 +128,12 @@ def setup_bus(mdac, channels, bus_channel):
 
 def apply_bus(mdac, channels, bus_channel, voltage):
     assert(voltage > 0 and voltage <= 0.3) # Voltage is valid
-    assert(all(x == 'open' for x in channels.gnd())) 
+    assert(all(x == 'open' for x in channels.gnd()))
     assert(all(x == 'close' for x in channels.dac_output())) # Channels are ready to output
     assert(bus_channel.bus() == 'close') # bus channel is bussed
     assert(bus_channel.microd() == 'open') # bus channel is not a device channel
     assert(bus_channel.dac_output() == 'close') # bus channel is set up for dac output
-    
+
     # Once all checks pass...
     channels.ramp(voltage)
     ramp(bus_channel, voltage, True)
@@ -149,13 +149,13 @@ def end_bus(mdac, channels, bus_channel):
         time.sleep(0.1)
     while not np.isclose(bus_channel.voltage(), 0):
         time.sleep(0.1)
-    
+
     # Disconnect all channels
     channels.gnd('close')
-    
+
     # Clear bus channel
     bus_channel.gnd('close')
-    
+
 def ramp(mdac_channel, to, sure=False):
     if (to > 0 or to < -1.75) and not sure:
         raise ValueError("{} is pretty big. Are you sure?".format(to))
@@ -166,7 +166,7 @@ def ramp(mdac_channel, to, sure=False):
     while not np.isclose(to, mdac_channel(), 1e-3):
         time.sleep(0.01)
 
-def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas, 
+def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
                   rampback=False, wallcontrol=None, **kwargs):
     """
     Pull out the ramp parameter from the mdac and do a 1d sweep
@@ -184,7 +184,7 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
     if "append" not in kwargs or not kwargs['append']:
         plot_tools.add_gate_label(win, run_id)
     plot_tools.save_figure(win, run_id)
-    
+
     # Rampback if requested
     if rampback:
         ramp(mdac_channel, start)
@@ -192,13 +192,13 @@ def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
             ramp(wallcontrol, wallcontrol_start)
             wallcontrol()
         mdac_channel()
-    
+
     return trace_id
 
 def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
              mdac_channel2, start2, stop2, num_points2, delay2,
              *param_meas, rampback=False, wallcontrol=None, **kwargs):
-    
+
     # Save wallcontrol parameters
     if wallcontrol is not None:
         wallcontrol_start = wallcontrol()
@@ -238,14 +238,14 @@ def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
     if "append" not in kwargs or not kwargs['append']:
         plot_tools.add_gate_label(win, run_id)
     plot_tools.save_figure(win, run_id)
-    
+
     # Rampback if requested
     if rampback:
         ramp(mdac_channel1, start1)
         ramp(mdac_channel2, start2)
         if wallcontrol:
             ramp(wallcontrol, wallcontrol_start)
-    
+
     return trace_id
 
 def change_filter_all(mdac, filter):
