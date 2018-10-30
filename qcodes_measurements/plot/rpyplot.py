@@ -8,19 +8,27 @@ from collections import namedtuple
 import colorsys
 
 from pyqtgraph import *
-from pyqtgraph.exporters import *
+# from pyqtgraph import GraphicsObject, GraphicsWidget, GraphicsWidgetAnchor, \
+#                       GraphicsLayoutWidget, graphicsItems, mkPen, mkColor, \
+#                       mkBrush, ImageItem, PlotItem, PlotDataItem, PlotCurveItem, \
+#                       HistogramLUTItem, ColorMap, LabelItem, Point, ViewBox, \
+#                       setConfigOption, setConfigOptions, getConfigOption, \
+#                       AxisItem
+from pyqtgraph.exporters import ImageExporter, SVGExporter
 import pyqtgraph.multiprocess as mp
 from pyqtgraph.GraphicsScene.mouseEvents import MouseClickEvent
 
-from PyQt5.QtWidgets import QApplication, QMessageBox, QMainWindow, QAction, QGraphicsSceneMouseEvent
-from PyQt5 import QtCore
+from PyQt5.QtWidgets import QApplication, QMessageBox, QMainWindow, QAction, \
+                            QGraphicsSceneMouseEvent
+from PyQt5 import QtGui, QtCore
 
 import numpy as np
 from numpy import linspace, min, max, ndarray, searchsorted
-import scipy.linalg
+from scipy.linalg import lstsq
 
 import logging
-import sys, traceback
+import sys
+import traceback
 
 logger = logging.getLogger("rpyplot")
 logger.setLevel(logging.DEBUG)
@@ -29,10 +37,10 @@ log_handler.setLevel(logging.DEBUG)
 log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 log_handler.setFormatter(log_format)
 logger.addHandler(log_handler)
-def exc(type, value, tb):
-    logger.exception("Uncaught Exception: {}\n{}".format(str(value), "".join(traceback.format_tb(tb))))
+def exc(e_type, value, tb):
+    logger.exception(f"Uncaught Exception: {value}\n{''.join(traceback.format_tb(tb))}")
     traceback.print_exc()
-    
+
 sys.excepthook = exc
 
 class ExtendedPlotWindow(GraphicsLayoutWidget):
@@ -68,7 +76,7 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
         return windows
 
 class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
-    def __init__(self, text="", offset=None, *args, **kwargs):
+    def __init__(self, *args, text="", offset=None, **kwargs):
         GraphicsWidget.__init__(self)
         GraphicsWidgetAnchor.__init__(self)
         self.setFlag(self.ItemIgnoresTransformations)
@@ -85,8 +93,8 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
         self.label_item.setText(text)
         self.layout.addItem(self.label_item, 0, 0)
 
-        self.pen = fn.mkPen(255,255,255,100)
-        self.brush = fn.mkBrush(100,100,100,50)
+        self.pen = mkPen(255, 255, 255, 100)
+        self.brush = mkBrush(100, 100, 100, 50)
 
         self.updateSize()
 
@@ -192,7 +200,7 @@ class PlotMenu(object):
                 dataitem = item
 
             if not hasattr(dataitem, "getContextMenus"):
-                continue                
+                continue
 
             # Figure out the name and references of this item
             if hasattr(dataitem, "name"):
@@ -237,14 +245,14 @@ class DraggableScaleBox(PlotMenu, GraphicsObject):
         self.menu = None
 
         # Set Formatting
-        self.pen = mkPen((255,255,100), width=1)
-        self.brush = mkBrush(255,255,0,100)
+        self.pen = mkPen((255, 255, 100), width=1)
+        self.brush = mkBrush(255, 255, 0, 100)
         self.setZValue(1e9)
 
     # All graphics items must have paint() and boundingRect() defined.
     def boundingRect(self):
         return QtCore.QRectF(0, 0, 1, 1)
-    
+
     def paint(self, p, *args):
         p.setPen(self.pen)
         p.setBrush(self.brush)
@@ -282,7 +290,7 @@ class DraggableScaleBox(PlotMenu, GraphicsObject):
         # Add plot items to the menu
         items = self.scene().items(self.mapRectToScene(self.boundingRect()))
         # Let's figure out as well the number of the plot item for labelling purposes
-        itemNumbers = [x for x in self.parentObject().childItems() if isinstance(x, PlotDataItem) or isinstance(x, ImageItem)]
+        itemNumbers = [x for x in self.parentObject().childItems() if isinstance(x, (PlotDataItem, ImageItem))]
         itemNumbers = dict((x[1], x[0]) for x in enumerate(itemNumbers))
         self.addPlotContextMenus(items, itemNumbers, self.menu, rect)
 
@@ -293,7 +301,7 @@ class DraggableScaleBox(PlotMenu, GraphicsObject):
         vb = self.getViewBox()
         # Get the size of the scale box
         p = self.mapRectToItem(vb.childGroup, self.boundingRect())
-        
+
         # Set axes to existing if we don't want to set them
         if 'X' not in axis:
             existingRect = vb.viewRect()
@@ -375,7 +383,7 @@ class CustomViewBox(PlotMenu, ViewBox):
             else:
                 self.menu.removeAction(self.makeTracesDifferentAction)
 
-            # for plot curve items, we need to do an additional check that we 
+            # for plot curve items, we need to do an additional check that we
             # are actually on the curve, as itemsNearEvent uses the boundingBox
             def filterNear(item):
                 if isinstance(item, PlotCurveItem):
@@ -460,23 +468,23 @@ class ExtendedPlotItem(PlotItem):
         Reimplements PlotItem.plot to use ExtendedPlotDataItems.
         Add and return a new plot.
         See :func:`PlotDataItem.__init__ <pyqtgraph.PlotDataItem.__init__>` for data arguments
-        
+
         Extra allowed arguments are:
             clear    - clear all plots before displaying new data
             params   - meta-parameters to associate with this data
-        """        
+        """
         clear = kargs.get('clear', False)
         params = kargs.get('params', None)
-          
+
         if clear:
             self.clear()
-            
+
         item = ExtendedPlotDataItem(*args, **kargs)
-            
+
         if params is None:
             params = {}
         self.addItem(item, params=params)
-        
+
         return item
 
     def makeTracesDifferent(self, saturation=0.8, value=0.9, items=None):
@@ -575,7 +583,7 @@ class ExtendedImageItem(ImageItem):
 
                 px = QtGui.QPixmap(l, 15)
                 p = QtGui.QPainter(px)
-                grad = cmap.getGradient(QtCore.QPointF(0,0), QtCore.QPointF(l,0))
+                grad = cmap.getGradient(QtCore.QPointF(0, 0), QtCore.QPointF(l, 0))
                 brush = QtGui.QBrush(grad)
                 p.fillRect(QtCore.QRect(0, 0, l, 15), brush)
                 p.end()
@@ -642,7 +650,7 @@ class ExtendedImageItem(ImageItem):
         logger.debug(f"Calculated limits: x: {(xmin_p, xmax_p)}, y: {(ymin_p, ymax_p)}")
 
         # Then calculate the min/max range of the array
-        data = self.image[xmin_p:xmax_p,ymin_p:ymax_p]
+        data = self.image[xmin_p:xmax_p, ymin_p:ymax_p]
         min_v, max_v = min(data), max(data)
 
         # Then set the range
@@ -670,7 +678,7 @@ class ExtendedImageItem(ImageItem):
         assert(data[1] == self.image[xmin_p+1, ymin_p])
 
         # Perform the fit
-        C,_,_,_ = scipy.linalg.lstsq(CG, data, overwrite_a=True, overwrite_b=True)
+        C, _, _, _ = lstsq(CG, data, overwrite_a=True, overwrite_b=True)
 
         # Then, do the plane fit on the image
         X, Y = np.meshgrid(self.setpoint_x, self.setpoint_y)
@@ -687,7 +695,7 @@ class ExtendedImageItem(ImageItem):
         logger.debug(f"Calculated limits: y: {(ymin_p, ymax_p)}")
 
         # Get a list of means for that column
-        col_mean = self.image[:,ymin_p:ymax_p]
+        col_mean = self.image[:, ymin_p:ymax_p]
         col_mean = np.mean(col_mean, axis=1)
         col_mean.shape = col_mean.shape + (1,)
 
@@ -732,7 +740,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
 
     def getHistogramLUTItem(self):
         return self._LUTitem
-    
+
     def parentChanged(self):
         super().parentChanged()
         print("Called: Parent is: {}".format(repr(self.parentObject())))

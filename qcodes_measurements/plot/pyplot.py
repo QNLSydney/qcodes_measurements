@@ -54,10 +54,9 @@ def _auto_wrap(f):
     """
     def wrap(*args, **kwargs):
         val = f(*args, **kwargs)
-        try:
-            iterator = iter(val)
-            return tuple(RPGWrappedBase.autowrap(item) for item in iterator)
-        except TypeError:
+        if isinstance(val, (tuple, list)):
+            return tuple(RPGWrappedBase.autowrap(item) for item in val)
+        else:
             return RPGWrappedBase.autowrap(val)
     return wrap
 
@@ -67,7 +66,7 @@ def _start_remote():
         this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
         _set_defaults(this.rpg)
     else:
-        raise ChildProcessImportError(f"Importing pyplot from child process {mp.QtProcess.handlers}")
+        raise ChildProcessImportError(f"Importing pyplot from child process")
 
 def _restart_remote():
     if len(mp.QtProcess.handlers) == 0:
@@ -94,7 +93,7 @@ else:
     app = PyQt5.QtGui.QApplication.instance()
 
 _start_remote()
-    
+
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
     # Keep track of children so they aren't recomputed each time
     _subclass_types = None
@@ -124,7 +123,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             self._base_inst = base
         else:
             raise TypeError("Base instance not defined. Don't know how to create remote object.")
-            
+
     def __wrap__(self):
         # We still want to keep track of new items in wrapped objects
         self._items = []
@@ -141,7 +140,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         # Create an empty instance of RPGWrappedBase,
         # and copy over instance variables
         base_inst = cls.__new__(cls)
-        base_inst.__dict__ = {**base_inst.__dict__, 
+        base_inst.__dict__ = {**base_inst.__dict__,
                               **instance.__dict__}
         base_inst._base_inst = instance
 
@@ -222,14 +221,14 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             raise AttributeError("Ignoring iPython special methods")
         if re.match("_ipython_.*_", name):
             raise AttributeError("Ignoring iPython special methods")
-        
+
         # Check whether this function has been cached
         if name in self._remote_functions:
             return self._remote_functions[name]
 
         # Get attribute from object proxy
         attr = getattr(self._base_inst, name)
-        
+
         # Wrap adders and getters
         if name.startswith("add") and callable(attr):
             return self.wrap_adders(attr)
@@ -257,7 +256,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
 class BasePlotWindow(RPGWrappedBase):
     _base = "GraphicsLayoutWidget"
 
-    def __init__(self, title=None, *args, **kwargs):
+    def __init__(self, *args, title=None, **kwargs):
         """
         Create a new remote plot window, with title and size given
         """
@@ -319,13 +318,13 @@ class PlotWindow(BasePlotWindow):
         return this.rpg.ExtendedPlotWindow.getWindows()
 
     @classmethod
-    def find_by_id(cls, id):
+    def find_by_id(cls, wid):
         windows = cls.getWindows()
         for window in windows:
             items = window.items
             for item in items:
                 if isinstance(item, PlotItem):
-                    if item.plot_title.endswith("(id: {})".format(id)):
+                    if item.plot_title.endswith("(id: {})".format(wid)):
                         return window
         return None
 
@@ -351,11 +350,11 @@ class BasePlotItem(RPGWrappedBase):
 
     def __init__(self, title=None, **kwargs):
         """
-        Create a new plot. This has to be embedded inside 
+        Create a new plot. This has to be embedded inside
         a plot window to actually be visible
         """
         super().__init__(**kwargs)
-        
+
         # Update title if requested
         if title is not None:
             self.plot_title = title
@@ -428,7 +427,7 @@ class BasePlotItem(RPGWrappedBase):
     @property
     def traces(self):
         raise NotImplementedError("Can't get a list of traces from a non-extended plot_item")
-    
+
 
 class PlotItem(BasePlotItem):
     _base = "ExtendedPlotItem"
@@ -547,7 +546,7 @@ class ColorMap(RPGWrappedBase):
 
     @classmethod
     def get_remote_list(cls):
-        remote_list = this.rpg.graphicsItems.GradientEditorItem.__getattr__('Gradients', 
+        remote_list = this.rpg.graphicsItems.GradientEditorItem.__getattr__('Gradients',
                                                                     _returnType="proxy")
         return remote_list
 
@@ -561,20 +560,20 @@ class ColorMap(RPGWrappedBase):
     @property
     def name(self):
         return self._name
-    
+
 ## Transfer color scales to remote process, truncating steps to 16 if necessary
-maps = ColorMap.get_remote_list()._getValue()
+# maps = ColorMap.get_remote_list()._getValue()
 ColorMap.get_remote_list().clear()
-for color in colors.__data__.keys():
-    data = colors.__data__[color]
-    step = ceil(len(data) / 16)
-    rcmap = ColorMap(name=color, 
-                     pos=linspace(0.0, 1.0, len(data[::step])), 
-                     color=data[::step])
+for color, cdata in colors.__data__.items():
+    step = ceil(len(cdata) / 16)
+    rcmap = ColorMap(name=color,
+                     pos=linspace(0.0, 1.0, len(cdata[::step])),
+                     color=cdata[::step])
     if color == 'viridis':
         rcmap = ColorMap(name=color+"_nlin",
-                         pos=[0] + list(1/(x**1.5) for x in range(15,0,-1)),
-                         color=data[::step])
+                         pos=[0] + list(1/(x**1.5) for x in range(15, 0, -1)),
+                         color=cdata[::step])
+    del cdata, step, rcmap, color
 rcmap = ColorMap.get_color_map('viridis')
 
 class PlotData(RPGWrappedBase):
