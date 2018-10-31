@@ -1,7 +1,7 @@
 import logging as log
-import numpy as np
+from inspect import signature
 
-from collections import Iterable
+import numpy as np
 
 from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
@@ -25,7 +25,7 @@ def _flush_buffers(*params):
             inst = param
         else:
             inst = None
-            
+
         if inst is not None and hasattr(inst, 'visa_handle'):
             status_code = inst.visa_handle.clear()
             if status_code is not None:
@@ -33,18 +33,39 @@ def _flush_buffers(*params):
                             "{} with status code {}".format(inst.name,
                                                             status_code))
 
-def _run_functions(functions, err_name="functions"):
+def _run_function(function, param_vals=None):
+    """
+    Run a function, passing param_vals as an optional tuple of (*(param, param_val))
+    Note: This function assumes we've already unwrapped lists using _run_functions.
+    """
+    if callable(function):
+        sig = signature(function)
+        if len(sig) == 1:
+            if param_vals is not None:
+                function(param_vals)
+            else:
+                raise RuntimeError("Function expects parameter values but none were provided")
+        else:
+            function()
+    else:
+        raise TypeError("_run_function expects a function")
+
+def _run_functions(functions, param_vals=None, err_name="functions"):
     """
     Run a function or list of functions
     """
     if functions is not None:
         if callable(functions):
-            functions()
-        elif isinstance(functions, Iterable) and all(callable(x) for x in functions):
-            for func in functions:
-                func()
+            _run_function(functions, param_vals)
         else:
-            raise TypeError("{} must be a function or a list of functions".format(err_name))
+            try:
+                if all(callable(x) for x in functions):
+                    for func in functions:
+                        _run_function(func, param_vals)
+                else:
+                    raise TypeError()
+            except TypeError:
+                raise TypeError("{} must be a function or a list of functions".format(err_name))
 
 def _get_window(append, size=(1000, 600)):
     """
@@ -77,7 +98,7 @@ def _get_window(append, size=(1000, 600)):
     return win
 
 def linear1d(param_set, start, stop, num_points, delay, *param_meas,
-             plot=True, append=None, save=True, 
+             plot=True, append=None, save=True,
              atstart=None, ateach=None, atend=None,
              wallcontrol=None, wallcontrol_slope=None,
              setback=False,
@@ -121,12 +142,12 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 
         ateach (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run after each time the sweep parameter is set. These functions will be run AFTER
-        the delay, and so is suitable if an instrument requires a call to capture a trace before 
+        the delay, and so is suitable if an instrument requires a call to capture a trace before
         the parameter can be read.
 
         atend (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run at the end of a trace. This is run AFTER the data is saved into the database,
-        and after parameters are set back to their starting points (if setback is True), and 
+        and after parameters are set back to their starting points (if setback is True), and
         can therefore be used to read the data that was taken and potentially do some post analysis.
 
         wallcontrol (Optional[Parameter]): An optional parameter that should be compensated as the measurement
@@ -154,13 +175,13 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         win = _get_window(append)
     else:
         win = None
-        
+
     # Register setpoints
     meas = Measurement()
     meas.register_parameter(param_set)
     param_set.post_delay = delay
     set_points = np.linspace(start, stop, num_points)
-    
+
     # Keep track of data and plots
     output = []
     data = []
@@ -174,17 +195,17 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         print(parameter, param_set)
         meas.register_parameter(parameter, setpoints=(param_set,))
         output.append([parameter, None])
-        
+
         if plot:
             # Create plot window
             if append is not None and append:
                 plotitem = win.items[0]
             else:
                 plotitem = win.addPlot(name=parameter.full_name,
-                                   title="%s (%s) v.<br>%s (%s)" % 
-                                   (param_set.full_name, param_set.label, 
-                                    parameter.full_name, parameter.label))
-            
+                                       title="%s (%s) v.<br>%s (%s)" %
+                                       (param_set.full_name, param_set.label,
+                                        parameter.full_name, parameter.label))
+
             # Figure out if we have 1d or 2d data
             shape = getattr(parameter, 'shape', None)
             if shape is not None and shape != tuple():
@@ -197,7 +218,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
             # Add data into the plot window
             plotdata = plotitem.plot(setpoint_x=set_points,
                                      setpoint_y=set_points_y,
-                                     pen=(255,0,0), 
+                                     pen=(255, 0, 0),
                                      name=parameter.name)
             plots.append(plotdata)
 
@@ -223,16 +244,16 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 
         # Then, run the actual sweep
         for i, set_point in enumerate(set_points):
+            param_set.set(set_point)
             if wallcontrol is not None:
                 wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
-            param_set.set(set_point)
-            _run_functions(ateach)
+            _run_functions(ateach, param_vals=((param_set, set_point)))
             # Read out each parameter
             for p, parameter in enumerate(param_meas):
                 output[p][1] = parameter.get()
                 shape = getattr(parameter, 'shape', None)
                 if shape is not None and shape != tuple():
-                    data[p][i,:] = output[p][1] # Update 2D data
+                    data[p][i, :] = output[p][1] # Update 2D data
                     # For a 2D trace, figure out the value for data not yet set if this is the
                     # first column
                     if i == 0:
@@ -240,13 +261,13 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                                        np.max(output[p][1]))/2
                 else:
                     data[p][i] = output[p][1] # Update 1D data
-                
+
                 if plot:
                     # Update live plots
                     plots[p].update(data[p])
             # Save data
             datasaver.add_result((param_set, set_point),
-                                *output)
+                                  *output)
 
     # Set back to start at the end of the measurement
     if setback:
@@ -268,9 +289,9 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 
 def linear2d(param_set1, start1, stop1, num_points1, delay1,
              param_set2, start2, stop2, num_points2, delay2,
-             *param_meas, 
+             *param_meas,
              plot=True, append=False, save=True,
-             atstart=None, ateach=None, atend=None,
+             atstart=None, ateachcol=None, ateach=None, atend=None,
              wallcontrol=None, wallcontrol_slope=None,
              setback=False, write_period=120):
     """
@@ -315,14 +336,18 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         are inserted into the measurement, hence if some parameters require setup before they are run,
         they can be inserted here.
 
+        ateachcol (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
+        to be run after each column of data is complete, useful for example for doing more advanced
+        wall control. These functions are run AFTER the delay.
+
         ateach (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run after each time the sweep parameter is set. These functions will be run AFTER
-        the delay, and so is suitable if an instrument requires a call to capture a trace before 
+        the delay, and so is suitable if an instrument requires a call to capture a trace before
         the parameter can be read.
 
         atend (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run at the end of a trace. This is run AFTER the data is saved into the database,
-        and after parameters are set back to their starting points (if setback is True), and 
+        and after parameters are set back to their starting points (if setback is True), and
         can therefore be used to read the data that was taken and potentially do some post analysis.
 
         wallcontrol (Optional[Parameter]): An optional parameter that should be compensated as the measurement
@@ -346,10 +371,10 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     """
     _flush_buffers(*param_meas)
     if plot:
-        win = _get_window(append, size=(800,800))
+        win = _get_window(append, size=(800, 800))
     else:
         win = None
-    
+
     # Register setpoints
     meas = Measurement()
     # Step Axis
@@ -360,7 +385,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     meas.register_parameter(param_set2)
     param_set2.post_delay = delay2
     set_points2 = np.linspace(start2, stop2, num_points2)
-    
+
     # Keep track of data and plots
     output = []
     data = np.ndarray((len(param_meas), num_points1, num_points2))
@@ -368,20 +393,20 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
 
     # Run @start functions
     _run_functions(atstart)
-    
+
     # Register each parameter
     for p, parameter in enumerate(param_meas):
         meas.register_parameter(parameter, setpoints=(param_set1, param_set2))
         output.append([parameter, None])
-        
+
         # Add Plot item
         if plot:
             if append is not None and append:
                 plotitem = win.items[0]
                 plotdata = plotitem.plot(setpoint_x=set_points1, setpoint_y=set_points2)
             else:
-                plotitem = win.addPlot(name=parameter.full_name, 
-                                       title="%s (%s) v.<br>%s (%s)" % 
+                plotitem = win.addPlot(name=parameter.full_name,
+                                       title="%s (%s) v.<br>%s (%s)" %
                                        (param_set1.full_name, param_set1.label,
                                         param_set2.full_name, param_set2.label))
                 plotdata = plotitem.plot(setpoint_x=set_points1, setpoint_y=set_points2)
@@ -394,35 +419,37 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     if wallcontrol is not None:
         wallcontrol_start = wallcontrol.get()
         step = (stop1-start1)/num_points1
-    
+
     meas.write_period = write_period
     with meas.run() as datasaver:
         # Update plot titles
         win.win_title += "{} ".format(datasaver.run_id)
         for i in range(len(param_meas)):
             plots[i]._parent.plot_title += " (id: %d)" % datasaver.run_id
-        
+
         for i, set_point1 in enumerate(set_points1):
             param_set2.set(start2)
             param_set1.set(set_point1)
             if wallcontrol is not None:
                 wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
+            _run_functions(ateachcol, param_vals=((param_set1, set_point1)))
             for j, set_point2 in enumerate(set_points2):
                 param_set2.set(set_point2)
-                _run_functions(ateach)
+                _run_functions(ateach, param_vals=((param_set1, set_point1),
+                                                   (param_set2, set_point2)))
                 for p, parameter in enumerate(param_meas):
                     output[p][1] = parameter.get()
                     fdata = data[p]
                     fdata[i, j] = output[p][1]
-                    
+
                     if plot:
                         if i == 0:
                             # Calculate z-range of data, and remove NaN's from first column
                             # This sets zero point for rest of data
-                            z_range = (np.nanmin(fdata[i,:j+1]), np.nanmax(fdata[i,:j+1]))
-                            fdata[0,j+1:] = (z_range[0] + z_range[1])/2
-                            fdata[1:,:] = (z_range[0] + z_range[1])/2
-                        
+                            z_range = (np.nanmin(fdata[i, :j+1]), np.nanmax(fdata[i, :j+1]))
+                            fdata[0, j+1:] = (z_range[0] + z_range[1])/2
+                            fdata[1:, :] = (z_range[0] + z_range[1])/2
+
                         # Update plot items, and update range every 10 points
                         if (num_points1*num_points2) < 1000 or (j%20) == 0:
                             plots[p].update(fdata, True)
@@ -431,7 +458,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                 datasaver.add_result((param_set1, set_point1),
                                      (param_set2, set_point2),
                                      *output)
-        
+
         # At the end, do one last update to make sure that all data is displayed.
         if plot:
             for i in range(len(param_meas)):
