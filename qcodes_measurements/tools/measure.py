@@ -40,7 +40,7 @@ def _run_function(function, param_vals=None):
     """
     if callable(function):
         sig = signature(function)
-        if len(sig) == 1:
+        if len(sig.parameters) == 1:
             if param_vals is not None:
                 function(param_vals)
             else:
