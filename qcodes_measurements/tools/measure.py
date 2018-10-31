@@ -267,7 +267,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                     plots[p].update(data[p])
             # Save data
             datasaver.add_result((param_set, set_point),
-                                  *output)
+                                 *output)
 
     # Set back to start at the end of the measurement
     if setback:

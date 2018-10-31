@@ -158,13 +158,13 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         if RPGWrappedBase._subclass_types is None:
             RPGWrappedBase._subclass_types = {}
             def append_subclasses(d, cls):
-                for t in cls.__subclasses__():
-                    append_subclasses(d, t)
-                    base = getattr(t, '_base', None)
+                for typ in cls.__subclasses__():
+                    append_subclasses(d, typ)
+                    base = getattr(typ, '_base', None)
                     if base is None:
                         continue
                     typestr = base
-                    d[typestr] = t
+                    d[typestr] = typ
             append_subclasses(RPGWrappedBase._subclass_types, RPGWrappedBase)
 
         # Then, if we have an object proxy, wrap it if it is in the list of wrappable types
