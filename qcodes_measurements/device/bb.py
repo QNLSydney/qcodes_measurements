@@ -2,11 +2,13 @@ from qcodes import Instrument, InstrumentChannel, ChannelList
 
 
 class BB(Instrument):
-    def __init__(self, name):
+    def __init__(self, name, chan_count=25):
         super().__init__(name)
 
+        self.chan_count = chan_count
+
         channels = ChannelList(self, "channels", BBChan)
-        for i in range(25):
+        for i in range(chan_count):
             channel = BBChan(self, f"ch{i+1:02}")
             channels.append(channel)
             self.add_submodule(f"ch{i+1:02}", channel)
