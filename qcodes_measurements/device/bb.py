@@ -2,6 +2,11 @@ from qcodes import Instrument, InstrumentChannel, ChannelList
 
 
 class BB(Instrument):
+    """
+    Breakout box instance, makes a channel list out of all
+    channels on the breakout box, keeps track of numbering
+    for snapshot purposes
+    """
     def __init__(self, name, chan_count=25):
         super().__init__(name)
 

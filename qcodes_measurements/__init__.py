@@ -1,8 +1,8 @@
-from .plot import ChildProcessImportError
 import logging
 
 logger = logging.getLogger("qcodes_measurements")
 
+from .plot import ChildProcessImportError
 try:
     # Import shortcuts to plot tools
     from .plot import plot_tools, pyplot

@@ -1,5 +1,5 @@
-from .bb import BB, BBChan
 from warnings import warn
+from .bb import BB, BBChan
 
 class BB37(BB):
     def __init__(self, name):
