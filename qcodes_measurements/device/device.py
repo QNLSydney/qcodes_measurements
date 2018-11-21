@@ -50,3 +50,13 @@ class Device(Instrument):
                 self.ohmics.append(BBOhmicWrapper(new_param, name))
             else:
                 self.ohmics.append(OhmicWrapper(new_param, name))
+
+    def get_channel_controller(self, param):
+        """
+        Return the channel controller for a given parameter
+        """
+        if isinstance(param, Gate):
+            return getattr(self.gates, param.name)
+        elif isinstance(param, Ohmic):
+            return getattr(self.ohmics, param.name)
+        return None
