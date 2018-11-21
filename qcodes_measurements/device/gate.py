@@ -10,11 +10,10 @@ from qcodes.utils import validators as vals
 try:
     import MDAC
 except ModuleNotFoundError:
-    class _Blank(object):
-        pass
+    class _Blank():
+        MDACChannel = type(None)
+        MDAC = type(None)
     MDAC = _Blank()
-    MDAC.MDACChannel = type(None)
-    MDAC.MDAC = type(None)
 from .bb import BBChan
 
 __all__ = ["GateMode", "ConnState", "Gate", "GateWrapper", "MDACGateWrapper",
@@ -280,17 +279,15 @@ class Ohmic(Parameter):
             snap['instrument'] = repr(self.instrument)
             snap['label'] = self.label
             return snap
-        else:
-            return super().snapshot_base(update)
+        return super().snapshot_base(update)
 
     @property
     def _latest(self):
         if hasattr(self.source, "voltage"):
             return self.source.voltage._latest
-        else:
-            return {'value': None,
-                    'ts': datetime.now(),
-                    'raw_value': None}
+        return {'value': None,
+                'ts': datetime.now(),
+                'raw_value': None}
     @_latest.setter
     def _latest(self, val):
         pass
