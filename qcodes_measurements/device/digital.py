@@ -30,7 +30,7 @@ class DigitalGate(Parameter):
         v_low: low voltage level
         v_hist: range around v_high/v_low around which a high/low value will be read
     """
-    def __init__(self, source, name, v_high, v_low, v_hist=0.2, label=None):
+    def __init__(self, name, source, v_high, v_low, v_hist=0.2, label=None, **kwargs):
         # Check that the source is a valid voltage source
         if not isinstance(source, (Instrument, InstrumentChannel)):
             raise TypeError("The source must be an instrument or instrument channel.")
@@ -61,6 +61,29 @@ class DigitalGate(Parameter):
         else:
             self.source.voltage(self.v_low)
 
+class DigitalGateWrapper(GateWrapper):
+    """
+    Digital gate wrapper, which allows set/get of state
+    """
+    def __init__(self, parent, name):
+        super().__init__(parent, name, GateType=DigitalGate)
+        self.add_parameter("out",
+                           get_cmd=parent,
+                           set_cmd=parent,
+                           vals=parent.vals)
+
+class MDACDigitalGateWrapper(DigitalGateWrapper, MDACGateWrapper):
+    """
+    Digital gate wrapper of an MDAC, which allows set/get of state
+    """
+    pass
+
+class BBDigitalGateWrapper(DigitalGateWrapper, BBGateWrapper):
+    """
+    Digital gate wrapper of an BB, which allows set/get of state
+    """
+    pass
+
 class DigitalDevice(Device):
     """
     Device which expects digital control as well as potential analog
@@ -70,7 +93,7 @@ class DigitalDevice(Device):
         super().__init__(name)
 
         # Add digital gates to the device
-        digital_gates = ChannelList(self, "digital_gates", GateWrapper)
+        digital_gates = ChannelList(self, "digital_gates", DigitalGateWrapper)
         self.add_submodule("digital_gates", digital_gates)
 
         # Add digital parameters
@@ -97,11 +120,11 @@ class DigitalDevice(Device):
 
         if isinstance(new_param, DigitalGate):
             if isinstance(new_param.source, MDAC.MDACChannel):
-                self.digital_gates.append(MDACGateWrapper(new_param, name))
+                self.digital_gates.append(MDACDigitalGateWrapper(new_param, name))
             elif isinstance(new_param.source, BBChan):
-                self.digital_gates.append(BBGateWrapper(new_param, name))
+                self.digital_gates.append(BBDigitalGateWrapper(new_param, name))
             else:
-                self.digital_gates.append(GateWrapper(new_param, name))
+                self.digital_gates.append(DigitalGateWrapper(new_param, name))
 
     def _update_vhigh(self, new_val):
         for gate in self.digital_gates:
@@ -111,3 +134,11 @@ class DigitalDevice(Device):
         for gate in self.digital_gates:
             gate.v_low = new_val
         self._v_low = new_val
+
+    def get_channel_controller(self, param):
+        """
+        Return the channel controller for a given parameter
+        """
+        if isinstance(param, DigitalGate):
+            return getattr(self.digital_gates, param.name)
+        return super().get_channel_controller(param)

@@ -33,7 +33,7 @@ class Device(Instrument):
         self.add_parameter(name, parameter_class=Ohmic, source=source, **kwargs)
 
     def add_parameter(self, name, parameter_class=Parameter, **kwargs):
-        super().add_parameter(name, parameter_class, **kwargs)
+        super().add_parameter(name, parameter_class=parameter_class, **kwargs)
         new_param = self.parameters[name]
 
         if isinstance(new_param, Gate):
