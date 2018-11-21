@@ -57,7 +57,7 @@ class Gate(Parameter):
         self.source = source
         self.rate = rate
         self.max_step = max_step
-        self.gate_mode = default_mode
+        self._gate_mode = default_mode
 
         # Check whether we have a hardware ramp
         if hasattr(source, "ramp") and hasattr(source, "rate"):
@@ -160,12 +160,13 @@ class Gate(Parameter):
 
 
 class GateWrapper(InstrumentChannel):
-    def __init__(self, parent, name):
+    def __init__(self, parent, name, GateType=Gate):
         super().__init__(parent.source, name)
-        if not isinstance(parent, Gate):
+        if not isinstance(parent, GateType):
             raise TypeError("GateWrapper can only wrap gates")
         self._state = ConnState.UNDEF
-        self.add_parameter('state')
+        self.add_parameter('state',
+                           get_cmd=self.get_state)
 
     def get_state(self):
         return self._state
@@ -184,16 +185,13 @@ class GateWrapper(InstrumentChannel):
 
 
 class MDACGateWrapper(GateWrapper):
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
+    def __init__(self, parent, name, GateType=Gate):
+        super().__init__(parent, name, GateType=GateType)
         if not isinstance(parent.source, MDAC.MDACChannel):
             raise TypeError("MDACGateWrapper must wrap a gate on an MDAC Channel")
 
         # Allow access to gate voltage
         self.parameters['voltage'] = parent
-
-        # Wrap get command for state
-        self.state.get = self.state._wrap_get(self.get_state)
 
     def get_state(self):
         gnd = self.parent.gnd() == 'close'
@@ -213,7 +211,8 @@ class MDACGateWrapper(GateWrapper):
                 state = ConnState.DAC
             elif smc:
                 state = ConnState.SMC
-        self.state._save_val(state)
+            else:
+                state = ConnState.UNDEF
         return state
 
     def ground(self):
@@ -239,10 +238,10 @@ class MDACGateWrapper(GateWrapper):
 
 
 class BBGateWrapper(GateWrapper):
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
+    def __init__(self, parent, name, GateType=Gate):
+        super().__init__(parent, name, GateType=GateType)
         if not isinstance(parent.source, BBChan):
-            raise TypeError("BBGateWrapperWithMDAC must wrap a gate on an breakout box")
+            raise TypeError("BBGateWrapper must wrap a gate on an breakout box")
 
         # Allow access to gate voltage
         self.parameters['voltage'] = parent
@@ -304,7 +303,8 @@ class OhmicWrapper(InstrumentChannel):
         super().__init__(parent.source, name)
         if not isinstance(parent, Ohmic):
             raise TypeError("OhmicWrapper can only wrap ohmics")
-        self.add_parameter('state')
+        self.add_parameter('state',
+                           get_cmd=self.get_state)
 
     def get_state(self):
         return self.state()
@@ -334,9 +334,6 @@ class MDACOhmicWrapper(OhmicWrapper):
         # Allow access to gate voltage
         self.parameters['voltage'] = parent
 
-        # Wrap get command for state
-        self.state.get = self.state._wrap_get(self.get_state)
-
     def get_state(self):
         gnd = self.parent.gnd() == 'close'
         smc = self.parent.smc() == 'close'
@@ -357,7 +354,6 @@ class MDACOhmicWrapper(OhmicWrapper):
                 state = ConnState.SMC
             else:
                 state = ConnState.FLOAT
-        self.state._save_val(state)
         return state
 
     def ground(self):
