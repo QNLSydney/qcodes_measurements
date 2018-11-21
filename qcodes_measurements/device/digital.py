@@ -62,6 +62,10 @@ class DigitalGate(Parameter):
             self.source.voltage(self.v_low)
 
 class DigitalDevice(Device):
+    """
+    Device which expects digital control as well as potential analog
+    voltages
+    """
     def __init__(self, name):
         super().__init__(name)
 
