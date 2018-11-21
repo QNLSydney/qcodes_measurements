@@ -1,3 +1,6 @@
+"""
+Feedback controller
+"""
 import time
 
 class Feedback(object):
