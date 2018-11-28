@@ -71,10 +71,10 @@ class SPIController(InstrumentChannel):
 
     def _ss_on(self, toggle_ss=True):
         if self.ss is not None and toggle_ss:
-            self.ss.out(1)
+            self.ss.out(0)
     def _ss_off(self, toggle_ss=True):
         if self.ss is not None and toggle_ss:
-            self.ss.out(0)
+            self.ss.out(1)
 
     def _get_bit(self, byte, bit):
         if self.bit_order.raw_value:
@@ -98,7 +98,9 @@ class SPIController(InstrumentChannel):
             self._sleep_until(start_time + (baud_time*(i + 1)))
         self.sclk.out(1 if self.clk_polarity() else 0)
 
-        self._ss_off(toggle_ss)
+        if toggle_ss:
+            self._ss_off(toggle_ss)
+            self.mosi.out(0)
 
     def transfer_bytes(self, data_bytes):
         if not isinstance(data_bytes, (bytes, bytearray)):
@@ -108,4 +110,5 @@ class SPIController(InstrumentChannel):
         for byte in data_bytes:
             self.transfer_byte(byte, toggle_ss=False)
         self._ss_off()
+        self.mosi.out(0)
 

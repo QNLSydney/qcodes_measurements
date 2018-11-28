@@ -32,6 +32,7 @@ class ConnState(str, enum.Enum):
     DAC = enum.auto()
     SMC = enum.auto()
     FLOAT = enum.auto()
+    PROBE = enum.auto()
     UNDEF = enum.auto()
 
 
@@ -162,26 +163,47 @@ class Gate(Parameter):
 class GateWrapper(InstrumentChannel):
     def __init__(self, parent, name, GateType=Gate):
         super().__init__(parent.source, name)
+        self.gate = parent
         if not isinstance(parent, GateType):
             raise TypeError("GateWrapper can only wrap gates")
         self._state = ConnState.UNDEF
         self.add_parameter('state',
-                           get_cmd=self.get_state)
+                           get_cmd=self.get_state,
+                           set_cmd=self.set_state)
 
     def get_state(self):
         return self._state
 
+    def set_state(self, val):
+        if val == ConnState.GND:
+            self.ground()
+        elif val == ConnState.BUS:
+            self.bus()
+        elif val == ConnState.SMC:
+            self.open()
+        elif val == ConnState.DAC:
+            self.dac()
+        elif val == ConnState.PROBE:
+            self.probe()
+
     def ground(self):
         print(f"Manually Ground {self.name}")
-        self.state(ConnState.GND)
+        self._state = ConnState.GND
 
     def bus(self):
         print(f"Manually Bus {self.name}")
-        self.state(ConnState.BUS)
+        self._state = ConnState.BUS
+
+    def open(self):
+        print(f'Manually Open {self.name}')
+        self._state = ConnState.SMC
 
     def dac(self):
         print(f"Manually Connect DAC to {self.name}")
-        self.state(ConnState.DAC)
+        self._state = ConnState.DAC
+
+    def probe(self):
+        raise ValueError("Probe doesn't make sense except on a DAC")
 
 
 class MDACGateWrapper(GateWrapper):
@@ -207,8 +229,10 @@ class MDACGateWrapper(GateWrapper):
         else:
             if bus:
                 state = ConnState.BUS
-            elif dac_output:
+            elif dac_output and not smc:
                 state = ConnState.DAC
+            elif dac_output and smc:
+                state = ConnState.PROBE
             elif smc:
                 state = ConnState.SMC
             else:
@@ -236,6 +260,19 @@ class MDACGateWrapper(GateWrapper):
         self.parent.gnd('open')
         self.state._save_val(ConnState.DAC)
 
+    def open(self):
+        self.parent.smc('close')
+        self.parent.dac_output('open')
+        self.parent.bus('open')
+        self.parent.gnd('open')
+        self.state._save_val(ConnState.SMC)
+
+    def probe(self):
+        self.parent.dac_output('close')
+        self.parent.bus('open')
+        self.parent.smc('close')
+        self.parent.gnd('open')
+        self.state._save_val(ConnState.PROBE)
 
 class BBGateWrapper(GateWrapper):
     def __init__(self, parent, name, GateType=Gate):
@@ -308,6 +345,18 @@ class OhmicWrapper(InstrumentChannel):
 
     def get_state(self):
         return self.state()
+
+    def set_state(self, val):
+        if val == ConnState.GND:
+            self.ground()
+        elif val == ConnState.BUS:
+            self.bus()
+        elif val == ConnState.SMC:
+            self.open()
+        elif val == ConnState.DAC:
+            self.dac()
+        else:
+            raise ValueError("Invalid state for ohmic")
 
     def ground(self):
         print(f"Manually Ground {self.name}")
