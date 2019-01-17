@@ -97,6 +97,160 @@ def _get_window(append, size=(1000, 600)):
                          " or true to append to the last plot")
     return win
 
+def do0d(*param_meas,
+         plot=True, append=None, stack=False, legend=False,
+         save=True, atstart=None, ateach=None, atend=None):
+    """
+    Run a sweep of a single parameter, between start and stop, with a delay after settings
+    the point given by delay.
+
+    Args:
+        *param_meas (Iterable[Parameter]): A list of the parameters to be measured at each of the
+        set points. If any of the parameters given are ArrayParameters then a 2D sweep will be
+        taken on that parameter, using the setpoints given in that ArrayParamter.
+        Note: At the current time, there is an assumption that the setpoints do NOT change during
+        a measurement, and that points are uniformly distributed for the purposes of plotting.
+        If the points are not uniformly distributed, data is correctly saved, however the live
+        plot will be distorted.
+
+        plot (Optional[bool]): If this value is set to False, the trace will not be live plotted.
+
+        append (Optional[Union[bool, PlotWindow]]): If this parameter is not false, the trace
+        will be appended to an existing window. Either the plot window should be given, or the
+        last plot window created will be used.
+
+        stack (Optional[bool]): If this parameter is given, all parameters are stacked over
+        each other on a single plot, otherwise separate plots are created for each measured parameter.
+
+        legend (Optional[bool]): If true, a legend is added to each plot item.
+
+        save (Optional[bool]): If this value is True, the plot window at the end will be saved
+        as a png to the figures folder, with the trace id as the filename.
+
+        atstart (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
+        to be run before the measurement is started. The functions will be run BEFORE the parameters
+        are inserted into the measurement, hence if some parameters require setup before they are run,
+        they can be inserted here.
+
+        ateach (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
+        to be run after each time the sweep parameter is set. These functions will be run AFTER
+        the delay, and so is suitable if an instrument requires a call to capture a trace before
+        the parameter can be read.
+
+        atend (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
+        to be run at the end of a trace. This is run AFTER the data is saved into the database,
+        and after parameters are set back to their starting points (if setback is True), and
+        can therefore be used to read the data that was taken and potentially do some post analysis.
+
+    Returns:
+        (id, win): ID is the trace id of the saved wave, win is a handle to the plot window that was created
+        for the purposes of liveplotting.
+
+    """
+
+    _flush_buffers(*param_meas)
+    if plot:
+        win = _get_window(append)
+    else:
+        win = None
+
+    # Register setpoints
+    meas = Measurement()
+
+    # Keep track of data and plots
+    output = []
+    data = []
+    plots = []
+    table = None
+    table_items = {}
+
+    # Run @start functions
+    _run_functions(atstart)
+
+    # Register each of the sweep parameters and set up a plot window for them
+    for p, parameter in enumerate(param_meas):
+        meas.register_parameter(parameter)
+        output.append([parameter, None])
+
+        if plot:
+            # Figure out if we have 1d or 2d data
+            shape = getattr(parameter, 'shape', None)
+            if shape is not None and shape != tuple():
+                set_points = parameter.setpoints[0]
+                data.append(np.ndarray((parameter.shape[0],)))
+            else:
+                set_points = None
+
+            # Create plot window
+            if set_points is not None:
+                if append is not None and append:
+                    plotitem = win.items[0]
+                elif stack and win.items:
+                    plotitem = win.items[0]
+                    plotitem.plot_title += f" {parameter.full_name}"
+                else:
+                    plotitem = win.addPlot(name=parameter.full_name,
+                                           title="%s" %
+                                           (parameter.full_name))
+                    if legend:
+                        plotitem.addLegend()
+
+                # Add data into the plot window
+                plotdata = plotitem.plot(setpoint_x=set_points,
+                                         pen=(255, 0, 0),
+                                         name=parameter.full_name)
+                plots.append(plotdata)
+                plotitem.update_axes(parameter, parameter, param_x_setpoint=True)
+            else:
+                if table is None:
+                    table = pyplot.TableWidget(sortable=False)
+                    t_widget = win.scene().addWidget(table)
+                    t_widget.setMinimumSize(300, 0)
+                    win.addItem(t_widget)
+                table_items[parameter.full_name] = (0,)
+
+    with meas.run() as datasaver:
+        # Update plot titles to include the ID
+        win.win_title += "{} ".format(datasaver.run_id)
+        for plot_item in plots:
+            plot_item._parent.plot_title += " (id: %d)" % datasaver.run_id
+
+        _run_functions(ateach, param_vals=tuple())
+        # Read out each parameter
+        plot_number = 0
+        for p, parameter in enumerate(param_meas):
+            output[p][1] = parameter.get()
+            shape = getattr(parameter, 'shape', None)
+            if shape is not None and shape != tuple():
+                data[p][:] = output[p][1] # Update 2D data
+                if plot:
+                    plots[plot_number].update(data[p])
+                    plot_number += 1
+            else:
+                table_items[parameter.full_name] = (output[p][1],)
+
+        # If stacked, make traces different
+        if stack:
+            plotitem.makeTracesDifferent()
+
+        # Save data
+        datasaver.add_result(*output)
+
+        # Update table
+        if table is not None:
+            table.setData(table_items)
+
+    _run_functions(atend) # Run functions at the end
+
+    if plot and save:
+        try:
+            plot_tools.save_figure(win, datasaver.run_id)
+        except:
+            print(f"Failed to save figure {datasaver.run_id}")
+
+    # Return the dataid, and a handle to the created window
+    return (datasaver.run_id, win)  # can use plot_by_id(dataid)
+
 def linear1d(param_set, start, stop, num_points, delay, *param_meas,
              plot=True, append=None, save=True,
              atstart=None, ateach=None, atend=None,
@@ -239,8 +393,8 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
     with meas.run() as datasaver:
         # Update plot titles to include the ID
         win.win_title += "{} ".format(datasaver.run_id)
-        for i in range(len(param_meas)):
-            plots[i]._parent.plot_title += " (id: %d)" % datasaver.run_id
+        for plot_item in plots:
+            plot_item._parent.plot_title += " (id: %d)" % datasaver.run_id
 
         # Then, run the actual sweep
         for i, set_point in enumerate(set_points):
@@ -424,8 +578,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     with meas.run() as datasaver:
         # Update plot titles
         win.win_title += "{} ".format(datasaver.run_id)
-        for i in range(len(param_meas)):
-            plots[i]._parent.plot_title += " (id: %d)" % datasaver.run_id
+        for plot in plots:
+            plot._parent.plot_title += " (id: %d)" % datasaver.run_id
 
         for i, set_point1 in enumerate(set_points1):
             param_set2.set(start2)

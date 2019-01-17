@@ -25,6 +25,7 @@ def _set_defaults(rpg):
     rpg.setConfigOption('background', 'w')
     rpg.setConfigOption('foreground', 'k')
     rpg.setConfigOption('leftButtonPan', False)
+    rpg.setConfigOption('antialias', True)
     rpg._setProxyOptions(deferGetattr=False)
 
 def _ensure_ndarray(array):
@@ -778,3 +779,9 @@ class ImageItemWithHistogram(ExtendedImageItem):
     @colormap.setter
     def colormap(self, cmap):
         self.histogram.colormap = cmap
+
+class TableWidget(RPGWrappedBase):
+    """
+    Table
+    """
+    _base = "TableWidget"
