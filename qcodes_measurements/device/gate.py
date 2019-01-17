@@ -130,13 +130,13 @@ class Gate(Parameter):
             self.source.voltage.inter_delay = old_delay
 
     # Make getters and setters
-    def get_raw(self):
+    def get_raw(self): #pylint: disable=E0202
         """
         Get refers to the voltage of the underlying source
         """
         return self.source.voltage()
 
-    def set_raw(self, val):
+    def set_raw(self, value): #pylint: disable=E0202
         """
         Set the voltage to the selected value, ramping if the step is
         larger than max_step.
@@ -144,8 +144,8 @@ class Gate(Parameter):
         Validation handled by the set wrapper.
         """
         # Set the value if we are close
-        if isclose(val, self.source.voltage(), abs_tol=self.max_step):
-            self.source.voltage(val)
+        if isclose(value, self.source.voltage(), abs_tol=self.max_step):
+            self.source.voltage(value)
             return
 
         # Otherwise ramp, using the hardware ramp if available
@@ -153,17 +153,17 @@ class Gate(Parameter):
         if self.has_ramp:
             if isinstance(self.source.ramp, Parameter):
                 with self.source.rate.set_to(self.rate):
-                    self.source.ramp(val)
-                    while not isclose(val, self.source.voltage(), abs_tol=1e-4):
+                    self.source.ramp(value)
+                    while not isclose(value, self.source.voltage(), abs_tol=1e-4):
                         sleep(0.005)
             else:
-                self.source.ramp(val, self.rate)
-                while not isclose(val, self.source.voltage(), abs_tol=1e-4):
+                self.source.ramp(value, self.rate)
+                while not isclose(value, self.source.voltage(), abs_tol=1e-4):
                     sleep(0.005)
         else:
             # set up a soft ramp and ramp with that instead
             with self.soft_ramp() as ramp:
-                ramp(val)
+                ramp(value)
 
 
 class GateWrapper(InstrumentChannel):
@@ -342,11 +342,11 @@ class Ohmic(Parameter):
     def _latest(self, val):
         pass
 
-    def get_raw(self):
+    def get_raw(self): #pylint: disable=E0202
         return self.source.voltage()
 
-    def set_raw(self, val):
-        return self.source.voltage(val)
+    def set_raw(self, value): #pylint: disable=E0202
+        return self.source.voltage(value)
 
 
 class OhmicWrapper(InstrumentChannel):

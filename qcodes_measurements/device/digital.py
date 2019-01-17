@@ -98,7 +98,7 @@ class DigitalGate(Parameter):
             self(self())
         self.lock = lock
 
-    def get_raw(self):
+    def get_raw(self): #pylint: disable=E0202
         """
         Return the state of the gate if within the defined setpoints, otherwise return 0
         """
@@ -109,7 +109,7 @@ class DigitalGate(Parameter):
             return 0
         return -1
 
-    def set_raw(self, value):
+    def set_raw(self, value): #pylint: disable=E0202
         """
         Set the output of this digital gate, unless the gate is locked, in which case don't do
         anything

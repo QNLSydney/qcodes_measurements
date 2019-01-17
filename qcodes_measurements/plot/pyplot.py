@@ -8,7 +8,7 @@ import re
 import pyqtgraph.multiprocess as mp
 
 import numpy as np
-from numpy import linspace, min, max, ndarray
+from numpy import linspace, ndarray
 
 from qcodes.instrument.parameter import _BaseParameter
 
@@ -754,7 +754,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
         super().update(data, *args, **kwargs)
         # Only update the range if requested
         if kwargs.get('update_range', True):
-            z_range = (min(data), max(data))
+            z_range = (np.min(data), np.max(data))
             self.histogram.imageChanged()
             self.histogram.setLevels(*z_range)
 
