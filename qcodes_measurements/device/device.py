@@ -60,3 +60,15 @@ class Device(Instrument):
         elif isinstance(param, Ohmic):
             return getattr(self.ohmics, param.name)
         return None
+
+    def ask_raw(self, _):
+        """
+        Can't write to a device
+        """
+        raise RuntimeError("This is a virtual instrument")
+
+    def write_raw(self, _):
+        """
+        Can't write to a device
+        """
+        raise RuntimeError("This is a virtual instrument")
