@@ -20,12 +20,22 @@ from .gate import GateWrapper, MDACGateWrapper, BBGateWrapper
 from .device import Device
 
 class DigitalMode(str, enum.Enum):
+    """
+    Analog to ConnState with states for digital logic
+
+    Note: HIGH/LOW/GND cause the gate value to be locked, and will not
+    allow changes through a set
+    """
     IN = enum.auto() # Connect SMC, Disconnect DAC
     OUT = enum.auto() # Disconnect SMC, Connect DAC
     PROBE_OUT = enum.auto() # Connect SMC, Connect DAC
     HIGH = enum.auto()
     LOW = enum.auto()
     GND = enum.auto()
+
+DigitalMode.OUTPUT_MODES = (DigitalMode.OUT, DigitalMode.PROBE_OUT, DigitalMode.HIGH,
+                            DigitalMode.LOW)
+DigitalMode.INPUT_MODES = (DigitalMode.IN, DigitalMode.GND)
 
 class DigitalGate(Parameter):
     """
@@ -56,23 +66,57 @@ class DigitalGate(Parameter):
                          unit="V",
                          vals=MultiType(Bool(), Numbers()))
         self.source = source
-        self.v_high = v_high
-        self.v_low = v_low
+        self._v_high = v_high
+        self._v_low = v_low
         self.v_hist = v_hist
         self.io_mode = io_mode
 
         # If a gate is locked, it's value won't be changed
         self.lock = False
 
-    def get_raw(self):
-        if abs(self.source.voltage() - self.v_high) < self.v_hist:
-            return 1
-        return 0
+    @property
+    def v_high(self):
+        return self._v_high
+    @v_high.setter
+    def v_high(self, val):
+        self._v_high = val
+        lock = self.lock
+        self.lock = False
+        if self.io_mode in DigitalMode.OUTPUT_MODES:
+            self(self())
+        self.lock = lock
 
-    def set_raw(self, val):
+    @property
+    def v_low(self):
+        return self._v_low
+    @v_low.setter
+    def v_low(self, val):
+        self._v_low = val
+        lock = self.lock
+        self.lock = False
+        if self.io_mode in DigitalMode.OUTPUT_MODES:
+            self(self())
+        self.lock = lock
+
+    def get_raw(self):
+        """
+        Return the state of the gate if within the defined setpoints, otherwise return 0
+        """
+        voltage = self.source.voltage()
+        if abs(voltage - self.v_high) < self.v_hist:
+            return 1
+        elif abs(voltage - self.v_low) < self.v_hist:
+            return 0
+        return -1
+
+    def set_raw(self, value):
+        """
+        Set the output of this digital gate, unless the gate is locked, in which case don't do
+        anything
+        """
         if self.lock: # Don't change value if the gate is locked.
             return
-        if val:
+        if value:
             self.source.voltage(self.v_high)
         else:
             self.source.voltage(self.v_low)
@@ -80,33 +124,41 @@ class DigitalGate(Parameter):
 class DigitalGateWrapper(GateWrapper):
     """
     Digital gate wrapper, which allows set/get of state
+
+    Note: The accesses for various attributes can be confusing here:
+        - self.gate - The underlying DigitalGate
+        - self.parent - The underlying DAC/BB channel
     """
     def __init__(self, parent, name):
         super().__init__(parent, name, GateType=DigitalGate)
         self.add_parameter("out",
                            get_cmd=parent,
                            set_cmd=parent,
-                           vals=parent.vals)
+                           vals=self.gate.vals)
 
         self.add_parameter("io_mode",
-                           get_cmd=lambda: str(parent.io_mode),
+                           get_cmd=lambda: str(self.gate.io_mode),
                            set_cmd=self._set_io_mode,
                            vals=Enum(*DigitalMode))
 
         self.add_parameter("lock",
-                           get_cmd=partial(getattr, parent, "lock"),
-                           set_cmd=partial(setattr, parent, "lock"),
+                           get_cmd=partial(getattr, self.gate, "lock"),
+                           set_cmd=partial(setattr, self.gate, "lock"),
                            vals=Bool())
 
         self.add_parameter("v_high",
-                           get_cmd=partial(getattr, parent, "v_high"),
-                           set_cmd=partial(setattr, parent, "v_high"),
+                           get_cmd=partial(getattr, self.gate, "v_high"),
+                           set_cmd=partial(setattr, self.gate, "v_high"),
                            vals=self.parent.voltage.vals)
 
         self.add_parameter("v_low",
-                           get_cmd=partial(getattr, parent, "v_low"),
-                           set_cmd=partial(setattr, parent, "v_low"),
+                           get_cmd=partial(getattr, self.gate, "v_low"),
+                           set_cmd=partial(setattr, self.gate, "v_low"),
                            vals=self.parent.voltage.vals)
+
+        # Note: we override the voltage parameter here, since by default the GateWrapper
+        # pulls the voltage from self.gate, which for a digital gate returns 0/1
+        self.parameters['voltage'] = self.parent.voltage
 
     def _set_io_mode(self, val):
         self.lock(False)
@@ -126,7 +178,7 @@ class DigitalGateWrapper(GateWrapper):
             self.lock(True)
         elif val == DigitalMode.GND:
             self.ground()
-        self.parent.io_mode = val
+        self.gate.io_mode = val
 
 class MDACDigitalGateWrapper(DigitalGateWrapper, MDACGateWrapper):
     """
@@ -141,7 +193,6 @@ class BBDigitalGateWrapper(DigitalGateWrapper, BBGateWrapper):
     """
     Digital gate wrapper of an BB, which allows set/get of state
     """
-    pass
 
 class DigitalDevice(Device):
     """

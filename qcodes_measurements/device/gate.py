@@ -61,7 +61,7 @@ class Gate(Parameter):
         self._gate_mode = default_mode
 
         # Check whether we have a hardware ramp
-        if hasattr(source, "ramp") and hasattr(source, "rate"):
+        if hasattr(source, "ramp"):
             self.has_ramp = True
         else:
             self.has_ramp = False
@@ -149,9 +149,15 @@ class Gate(Parameter):
             return
 
         # Otherwise ramp, using the hardware ramp if available
+        # Two different ways to do it, with a ramp function or ramp parameter
         if self.has_ramp:
-            with self.source.rate.set_to(self.rate):
-                self.source.ramp(val)
+            if isinstance(self.source.ramp, Parameter):
+                with self.source.rate.set_to(self.rate):
+                    self.source.ramp(val)
+                    while not isclose(val, self.source.voltage(), abs_tol=1e-4):
+                        sleep(0.005)
+            else:
+                self.source.ramp(val, self.rate)
                 while not isclose(val, self.source.voltage(), abs_tol=1e-4):
                     sleep(0.005)
         else:
@@ -161,6 +167,14 @@ class Gate(Parameter):
 
 
 class GateWrapper(InstrumentChannel):
+    """
+    Channel wrapper around a gate object, allowing access of some of the underlying
+    states as parameters.
+
+    Note: The accesses for various attributes can be confusing here:
+        - self.gate - The underlying Gate object
+        - self.parent - The underlying DAC/BB channel
+    """
     def __init__(self, parent, name, GateType=Gate):
         super().__init__(parent.source, name)
         self.gate = parent
@@ -213,7 +227,7 @@ class MDACGateWrapper(GateWrapper):
             raise TypeError("MDACGateWrapper must wrap a gate on an MDAC Channel")
 
         # Allow access to gate voltage
-        self.parameters['voltage'] = parent
+        self.parameters['voltage'] = self.gate
 
     def get_state(self):
         gnd = self.parent.gnd() == 'close'
@@ -340,11 +354,13 @@ class OhmicWrapper(InstrumentChannel):
         super().__init__(parent.source, name)
         if not isinstance(parent, Ohmic):
             raise TypeError("OhmicWrapper can only wrap ohmics")
+        self._state = ConnState.UNDEF
         self.add_parameter('state',
-                           get_cmd=self.get_state)
+                           get_cmd=self.get_state,
+                           set_cmd=self.set_state)
 
     def get_state(self):
-        return self.state()
+        return self._state
 
     def set_state(self, val):
         if val == ConnState.GND:
@@ -360,15 +376,15 @@ class OhmicWrapper(InstrumentChannel):
 
     def ground(self):
         print(f"Manually Ground {self.name}")
-        self.state(ConnState.GND)
+        self._state = ConnState.GND
 
     def bus(self):
         print(f"Manually Bus {self.name}")
-        self.state(ConnState.BUS)
+        self._state = ConnState.BUS
 
     def float(self):
         print(f"Manually Float {self.name}")
-        self.state(ConnState.FLOAT)
+        self._state = ConnState.FLOAT
 
     def smc(self):
         self.float()
