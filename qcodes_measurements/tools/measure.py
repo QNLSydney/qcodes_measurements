@@ -30,8 +30,7 @@ def _flush_buffers(*params):
             status_code = inst.visa_handle.clear()
             if status_code is not None:
                 log.warning("Cleared visa buffer on "
-                            "{} with status code {}".format(inst.name,
-                                                            status_code))
+                            "%s with status code %d", inst.name, status_code)
 
 def _run_function(function, param_vals=None):
     """
@@ -212,8 +211,8 @@ def do0d(*param_meas,
     with meas.run() as datasaver:
         # Update plot titles to include the ID
         win.win_title += "{} ".format(datasaver.run_id)
-        for plot_item in plots:
-            plot_item._parent.plot_title += " (id: %d)" % datasaver.run_id
+        for pi in win.items:
+            pi.plot_title += " (id: %d)" % datasaver.run_id
 
         _run_functions(ateach, param_vals=tuple())
         # Read out each parameter
@@ -633,6 +632,5 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             plot_tools.save_figure(win, datasaver.run_id)
         except:
             print(f"Failed to save figure {datasaver.run_id}")
-
 
     return (datasaver.run_id, win)
