@@ -368,6 +368,8 @@ class OhmicWrapper(InstrumentChannel):
         elif val == ConnState.BUS:
             self.bus()
         elif val == ConnState.SMC:
+            self.smc()
+        elif val == ConnState.FLOAT:
             self.open()
         elif val == ConnState.DAC:
             self.dac()
@@ -382,12 +384,13 @@ class OhmicWrapper(InstrumentChannel):
         print(f"Manually Bus {self.name}")
         self._state = ConnState.BUS
 
-    def float(self):
+    def open(self):
         print(f"Manually Float {self.name}")
         self._state = ConnState.FLOAT
 
     def smc(self):
-        self.float()
+        print(f"Manually Connect SMC to {self.name}")
+        self._state = ConnState.SMC
 
 
 class MDACOhmicWrapper(OhmicWrapper):
@@ -435,7 +438,7 @@ class MDACOhmicWrapper(OhmicWrapper):
         self.parent.dac_output('open')
         self.state._save_val(ConnState.BUS)
 
-    def float(self):
+    def open(self):
         self.parent.dac_output('open')
         self.parent.bus('open')
         self.parent.smc('open')
