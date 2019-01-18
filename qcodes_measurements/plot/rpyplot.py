@@ -501,6 +501,16 @@ class ExtendedPlotItem(PlotItem):
             color = tuple(int(c*255) for c in color)
             trace.setPen(*color)
 
+    def addLegend(self, size=None, offset=(30, 30)):
+        """
+        Reimplement addLegend to check if legend already exists. The default one should do this, but doesn't
+        seem to work on our extended version for some reason?
+        """
+        if self.legend is None:
+            self.legend = LegendItem(size, offset)
+            self.legend.setParentItem(self.vb)
+        return self.legend
+
 class ExtendedPlotDataItem(PlotDataItem):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -544,6 +554,9 @@ class ExtendedPlotDataItem(PlotDataItem):
 
     def update(self, yData):
         self.setData(x=self.xData, y=yData)
+
+    def setName(self, name):
+        self.opts['name'] = str(name)
 
 class ExtendedImageItem(ImageItem):
     colormaps = {}

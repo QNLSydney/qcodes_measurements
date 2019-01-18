@@ -194,7 +194,8 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             if isinstance(res, mp.remoteproxy.ObjectProxy):
                 # Keep track of all objects that are added to a window, since
                 # we can't get them back from the remote later
-                self._items.append(res)
+                if res not in self._items:
+                    self._items.append(res)
             if isinstance(res, RPGWrappedBase):
                 # If we are a managed object, notify that we were added so that items can keep track
                 # of which windows they are in.
@@ -229,6 +230,9 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
 
         # Get attribute from object proxy
         attr = getattr(self._base_inst, name)
+
+        # Check if item is a wrappable type
+        attr = self.autowrap(attr)
 
         # Wrap adders and getters
         if name.startswith("add") and callable(attr):
@@ -576,6 +580,12 @@ for color, cdata in colors.__data__.items():
                          color=cdata[::step])
     del cdata, step, rcmap, color
 rcmap = ColorMap.get_color_map('viridis')
+
+class LegendItem(RPGWrappedBase):
+    """
+    Legend handling code
+    """
+    _base = "LegendItem"
 
 class PlotData(RPGWrappedBase):
     """
