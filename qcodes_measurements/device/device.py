@@ -1,4 +1,5 @@
-from qcodes import Instrument, ChannelList, Parameter
+from qcodes import ChannelList, Parameter
+from qcodes.instrument.base import InstrumentBase
 
 from .gate import Gate, Ohmic, GateWrapper, OhmicWrapper, \
                   MDACGateWrapper, MDACOhmicWrapper, \
@@ -14,7 +15,7 @@ except ModuleNotFoundError:
 from .bb import BBChan
 
 
-class Device(Instrument):
+class Device(InstrumentBase):
     def __init__(self, name):
         super().__init__(name)
 
@@ -60,15 +61,3 @@ class Device(Instrument):
         elif isinstance(param, Ohmic):
             return getattr(self.ohmics, param.name)
         return None
-
-    def ask_raw(self, _):
-        """
-        Can't write to a device
-        """
-        raise RuntimeError("This is a virtual instrument")
-
-    def write_raw(self, _):
-        """
-        Can't write to a device
-        """
-        raise RuntimeError("This is a virtual instrument")

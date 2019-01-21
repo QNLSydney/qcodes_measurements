@@ -2,9 +2,8 @@
 Support functions for digital gates
 """
 from functools import partial
-import enum
 
-from qcodes import Instrument, InstrumentChannel, ChannelList, Parameter
+from qcodes import ChannelList, Parameter
 from qcodes.utils.validators import Numbers, Bool, MultiType, Enum
 
 try:
@@ -16,28 +15,12 @@ except ModuleNotFoundError:
     MDAC = _Blank()
 from .bb import BBChan
 
-from .gate import GateWrapper, MDACGateWrapper, BBGateWrapper
+from .channel_wrapper import ChannelWrapper
+from .gate import Gate, MDACGateWrapper, BBGateWrapper
 from .device import Device
+from .states import DigitalMode, GateMode
 
-class DigitalMode(str, enum.Enum):
-    """
-    Analog to ConnState with states for digital logic
-
-    Note: HIGH/LOW/GND cause the gate value to be locked, and will not
-    allow changes through a set
-    """
-    IN = enum.auto() # Connect SMC, Disconnect DAC
-    OUT = enum.auto() # Disconnect SMC, Connect DAC
-    PROBE_OUT = enum.auto() # Connect SMC, Connect DAC
-    HIGH = enum.auto()
-    LOW = enum.auto()
-    GND = enum.auto()
-
-DigitalMode.OUTPUT_MODES = (DigitalMode.OUT, DigitalMode.PROBE_OUT, DigitalMode.HIGH,
-                            DigitalMode.LOW)
-DigitalMode.INPUT_MODES = (DigitalMode.IN, DigitalMode.GND)
-
-class DigitalGate(Parameter):
+class DigitalGate(Gate):
     """
     Represents a digital gate, i.e. one that has two possible values, v_high and v_low.
     This will usually be part of a DigitalDevice which will control the values
@@ -51,26 +34,19 @@ class DigitalGate(Parameter):
     """
     def __init__(self, name, source, v_high, v_low, v_hist=0.2, label=None,
                  io_mode=DigitalMode.OUT, **kwargs):
-        # Check that the source is a valid voltage source
-        if not isinstance(source, (Instrument, InstrumentChannel)):
-            raise TypeError("The source must be an instrument or instrument channel.")
-        if not hasattr(source, "voltage") or not hasattr(source.voltage, "set"):
-            raise TypeError("The source for a gate must be able to set a voltage")
-
-        if label is None:
-            label = name
-
         # Initialize the parameter
         super().__init__(name=name,
+                         source=source,
                          label=label,
-                         unit="V",
-                         vals=MultiType(Bool(), Numbers()))
-        self.source = source
+                         rate=None,
+                         max_step=None,
+                         default_mode=GateMode.FREE)
+
+        self.vals = MultiType(Bool(), Numbers())
         self._v_high = v_high
         self._v_low = v_low
         self.v_hist = v_hist
         self.io_mode = io_mode
-
         # If a gate is locked, it's value won't be changed
         self.lock = False
 
@@ -105,7 +81,7 @@ class DigitalGate(Parameter):
         voltage = self.source.voltage()
         if abs(voltage - self.v_high) < self.v_hist:
             return 1
-        elif abs(voltage - self.v_low) < self.v_hist:
+        if abs(voltage - self.v_low) < self.v_hist:
             return 0
         return -1
 
@@ -121,7 +97,7 @@ class DigitalGate(Parameter):
         else:
             self.source.voltage(self.v_low)
 
-class DigitalGateWrapper(GateWrapper):
+class DigitalGateWrapper(ChannelWrapper):
     """
     Digital gate wrapper, which allows set/get of state
 
@@ -130,7 +106,10 @@ class DigitalGateWrapper(GateWrapper):
         - self.parent - The underlying DAC/BB channel
     """
     def __init__(self, parent, name):
-        super().__init__(parent, name, GateType=DigitalGate)
+        if not isinstance(parent, DigitalGate):
+            raise TypeError("DigitalGateWrapper can only wrap DigitalGates")
+        super().__init__(parent, name)
+
         self.add_parameter("out",
                            get_cmd=parent,
                            set_cmd=parent,

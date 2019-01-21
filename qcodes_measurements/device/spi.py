@@ -27,7 +27,6 @@ class SPIController(InstrumentChannel):
             SCLK: SCLK DigitalGate
             SS: SS DigitalGate (optional)
             clk_rate: clock_rate in Hz
-            payload_size: number of bits to send
         """
         if not isinstance(mosi, DigitalGate):
             raise TypeError("mosi must be a DigitalGate")
@@ -111,4 +110,3 @@ class SPIController(InstrumentChannel):
             self.transfer_byte(byte, toggle_ss=False)
         self._ss_off()
         self.mosi.out(0)
-
