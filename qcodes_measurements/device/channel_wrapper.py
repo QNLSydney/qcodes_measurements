@@ -40,6 +40,8 @@ class ChannelWrapper(InstrumentChannel):
             self._state = ConnState.FLOAT
         elif val == ConnState.PROBE:
             raise ValueError("Probe doesn't make sense except on a DAC")
+        else:
+            raise ValueError(f"Not sure how to set state {val} on this channel")
 
     def ground(self):
         self.state(ConnState.GND)
@@ -49,6 +51,9 @@ class ChannelWrapper(InstrumentChannel):
 
     def open(self):
         self.state(ConnState.FLOAT)
+
+    def smc(self):
+        self.state(ConnState.SMC)
 
     def dac(self):
         self.state(ConnState.DAC)

@@ -10,6 +10,7 @@ class ConnState(str, enum.Enum):
     BUS = enum.auto()
     GND = enum.auto()
     DAC = enum.auto()
+    DAC_BUS = enum.auto()
     SMC = enum.auto()
     FLOAT = enum.auto()
     PROBE = enum.auto()
@@ -26,10 +27,12 @@ class DigitalMode(str, enum.Enum):
     IN = enum.auto() # Connect SMC, Disconnect DAC
     OUT = enum.auto() # Disconnect SMC, Connect DAC
     PROBE_OUT = enum.auto() # Connect SMC, Connect DAC
+    BUS_OUT = enum.auto()
     HIGH = enum.auto()
     LOW = enum.auto()
     GND = enum.auto()
+    FLOAT = enum.auto()
 
 DigitalMode.OUTPUT_MODES = (DigitalMode.OUT, DigitalMode.PROBE_OUT, DigitalMode.HIGH,
-                            DigitalMode.LOW)
-DigitalMode.INPUT_MODES = (DigitalMode.IN, DigitalMode.GND)
+                            DigitalMode.LOW, DigitalMode.GND)
+DigitalMode.INPUT_MODES = (DigitalMode.IN, DigitalMode.FLOAT)

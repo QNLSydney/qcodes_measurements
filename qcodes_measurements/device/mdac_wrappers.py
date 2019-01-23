@@ -23,7 +23,7 @@ class MDACWrapper(ChannelWrapper):
             elif smc:
                 state = ConnState.SMC
             else:
-                state = ConnState.UNDEF
+                state = ConnState.FLOAT
         return state
 
     def set_state(self, val):
@@ -52,6 +52,18 @@ class MDACWrapper(ChannelWrapper):
             self.parent.smc('close')
             self.parent.bus('open')
             self.parent.gnd('open')
+        elif val == ConnState.FLOAT:
+            self.parent.dac_output('open')
+            self.parent.smc('open')
+            self.parent.bus('open')
+            self.parent.gnd('open')
+        elif val == ConnState.DAC_BUS:
+            self.parent.bus('close')
+            self.parent.dac_output('close')
+            self.parent.smc('open')
+            self.parent.gnd('open')
+        else:
+            super().set_state(val)
 
     def ground(self):
         self.state(ConnState.GND)
@@ -63,6 +75,9 @@ class MDACWrapper(ChannelWrapper):
         self.state(ConnState.DAC)
 
     def open(self):
+        self.state(ConnState.FLOAT)
+
+    def smc(self):
         self.state(ConnState.SMC)
 
     def probe(self):

@@ -18,7 +18,7 @@ from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
 from .gate import Gate, MDACGateWrapper, BBGateWrapper
 from .device import Device
-from .states import DigitalMode, GateMode
+from .states import DigitalMode, GateMode, ConnState
 
 class DigitalGate(Gate):
     """
@@ -142,11 +142,13 @@ class DigitalGateWrapper(ChannelWrapper):
     def _set_io_mode(self, val):
         self.lock(False)
         if val == DigitalMode.IN:
-            self.open()
+            self.smc()
         elif val == DigitalMode.OUT:
             self.dac()
         elif val == DigitalMode.PROBE_OUT:
             self.probe()
+        elif val == DigitalMode.BUS_OUT:
+            self.state(ConnState.DAC_BUS)
         elif val == DigitalMode.HIGH:
             self.dac()
             self.out(1)
@@ -157,6 +159,8 @@ class DigitalGateWrapper(ChannelWrapper):
             self.lock(True)
         elif val == DigitalMode.GND:
             self.ground()
+        elif val == DigitalMode.FLOAT:
+            self.open()
         self.gate.io_mode = val
 
 class MDACDigitalGateWrapper(DigitalGateWrapper, MDACGateWrapper):
@@ -206,17 +210,16 @@ class DigitalDevice(Device):
         gate = self.get_channel_controller(self.parameters[name])
         gate.io_mode(io_mode)
 
-    def add_parameter(self, name, parameter_class=Parameter, **kwargs):
-        super().add_parameter(name, parameter_class, **kwargs)
-        new_param = self.parameters[name]
-
+    def store_new_param(self, new_param):
         if isinstance(new_param, DigitalGate):
             if isinstance(new_param.source, MDAC.MDACChannel):
-                self.digital_gates.append(MDACDigitalGateWrapper(new_param, name))
+                self.digital_gates.append(MDACDigitalGateWrapper(new_param, new_param.name))
             elif isinstance(new_param.source, BBChan):
-                self.digital_gates.append(BBDigitalGateWrapper(new_param, name))
+                self.digital_gates.append(BBDigitalGateWrapper(new_param, new_param.name))
             else:
-                self.digital_gates.append(DigitalGateWrapper(new_param, name))
+                self.digital_gates.append(DigitalGateWrapper(new_param, new_param.name))
+        else:
+            super().store_new_param(new_param)
 
     def _update_vhigh(self, new_val):
         for gate in self.digital_gates:

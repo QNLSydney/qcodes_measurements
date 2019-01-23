@@ -34,23 +34,32 @@ class Device(InstrumentBase):
         self.add_parameter(name, parameter_class=Ohmic, source=source, **kwargs)
 
     def add_parameter(self, name, parameter_class=Parameter, **kwargs):
+        """
+        Add a new parameter to the instrument and store it in an appropriate list, if
+        we are keeping track of gates/ohmics.
+        """
         super().add_parameter(name, parameter_class=parameter_class, **kwargs)
         new_param = self.parameters[name]
+        self.store_new_param(new_param)
 
+    def store_new_param(self, new_param):
+        """
+        Store the new parameter in an appropriate list of gates or ohmics
+        """
         if isinstance(new_param, Gate):
             if isinstance(new_param.source, MDAC.MDACChannel):
-                self.gates.append(MDACGateWrapper(new_param, name))
+                self.gates.append(MDACGateWrapper(new_param, new_param.name))
             elif isinstance(new_param.source, BBChan):
-                self.gates.append(BBGateWrapper(new_param, name))
+                self.gates.append(BBGateWrapper(new_param, new_param.name))
             else:
-                self.gates.append(GateWrapper(new_param, name))
+                self.gates.append(GateWrapper(new_param, new_param.name))
         elif isinstance(new_param, Ohmic):
             if isinstance(new_param.source, MDAC.MDACChannel):
-                self.ohmics.append(MDACOhmicWrapper(new_param, name))
+                self.ohmics.append(MDACOhmicWrapper(new_param, new_param.name))
             elif isinstance(new_param.source, BBChan):
-                self.ohmics.append(BBOhmicWrapper(new_param, name))
+                self.ohmics.append(BBOhmicWrapper(new_param, new_param.name))
             else:
-                self.ohmics.append(OhmicWrapper(new_param, name))
+                self.ohmics.append(OhmicWrapper(new_param, new_param.name))
 
     def get_channel_controller(self, param):
         """
