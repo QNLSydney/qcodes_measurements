@@ -1,8 +1,9 @@
 from warnings import warn
 
-from qcodes import Instrument, InstrumentChannel, ChannelList
+from qcodes import InstrumentChannel, ChannelList
+from qcodes.instrument.base import InstrumentBase
 
-class BB(Instrument):
+class BB(InstrumentBase):
     """
     Breakout box instance, makes a channel list out of all
     channels on the breakout box, keeps track of numbering

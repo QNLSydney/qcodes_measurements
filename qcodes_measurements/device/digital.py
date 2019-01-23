@@ -3,7 +3,7 @@ Support functions for digital gates
 """
 from functools import partial
 
-from qcodes import ChannelList, Parameter
+from qcodes import ChannelList
 from qcodes.utils.validators import Numbers, Bool, MultiType, Enum
 
 try:
