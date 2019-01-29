@@ -6,7 +6,7 @@ from qcodes.dataset.data_export import get_shaped_data_by_runid
 
 from ..plot import pyplot
 
-def save_figure(plot, id, fig_folder=None):
+def save_figure(plot, fname, fig_folder=None):
     """
     Save the figure on screen to the given directory, or by default, figures
     """
@@ -16,7 +16,7 @@ def save_figure(plot, id, fig_folder=None):
     if not os.path.exists(fig_folder):
         os.makedirs(fig_folder)
 
-    path = os.path.join(fig_folder, '{}.png'.format(id))
+    path = os.path.join(fig_folder, '{}.png'.format(fname))
     print("Saving to: {}".format(path))
     plot.export(path)
     time.sleep(1)
@@ -26,8 +26,8 @@ def append_by_id(win, id, param_name=None, force=False):
     Append a 1d trace to a plot
     """
     data = get_shaped_data_by_runid(id)
-    
-    # If there is more than one parameter taken, we need to give the 
+
+    # If there is more than one parameter taken, we need to give the
     # name of the parameter to append
     if len(data) != 1 and param_name is not None:
         raise ValueError("Can only append a single parameter, but there are"
@@ -51,14 +51,14 @@ def append_by_id(win, id, param_name=None, force=False):
                                                                ", ".join(data_names)))
     # Assume that the plot is the first one in the window
     plot = win.items[0]
-    
+
     # Sanity Check: Are axis labels the same?
     if not force:
         assert(plot.left_axis.label == data[1].get('label', ""))
         assert(plot.left_axis.units == data[1].get('unit', "A.U."))
         assert(plot.bot_axis.label == data[0].get('label', ""))
         assert(plot.bot_axis.units == data[0].get('unit', "A.U."))
-    
+
 
     # Do the plot
     plot.plot(setpoint_x=data[0]['data'], data=data[1]['data'], pen='r')
@@ -175,7 +175,7 @@ def plot_by_id(id, save_fig=False, fig_folder=None):
     # Save the figure by id if requested
     if save_fig:
         save_figure(win, id, fig_folder)
-        
+
     return win
 
 def plot_by_run(exp, kt, save_fig, fig_folder=None):
@@ -195,7 +195,7 @@ def plot_Wtext(id, save_fig=False, fig_folder=None):
     add_gate_label(win, id)
     if save_fig:
         save_figure(win, id, fig_folder)
-        
+
     return win
 
 def plot_Wtext_by_run(exp, kt, save_fig=False, fig_folder=None):
