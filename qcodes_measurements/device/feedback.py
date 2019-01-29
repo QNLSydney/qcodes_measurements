@@ -3,7 +3,7 @@ Feedback controller
 """
 import time
 
-class Feedback(object):
+class Feedback:
     """
     Define a feedback object that will do live feedback on a gate during a measurement.
 
