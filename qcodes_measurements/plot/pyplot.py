@@ -194,8 +194,8 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             if isinstance(res, mp.remoteproxy.ObjectProxy):
                 # Keep track of all objects that are added to a window, since
                 # we can't get them back from the remote later
-                if res not in self._items:
-                    self._items.append(res)
+                #if res not in self._items:
+                self._items.append(res)
             if isinstance(res, RPGWrappedBase):
                 # If we are a managed object, notify that we were added so that items can keep track
                 # of which windows they are in.
