@@ -27,11 +27,17 @@ class Device(InstrumentBase):
         ohmics = ChannelList(self, "ohmics", OhmicWrapper)
         self.add_submodule("ohmics", ohmics)
 
-    def add_gate(self, name, source, **kwargs):
+    def add_gate(self, name, source, state=None, **kwargs):
         self.add_parameter(name, parameter_class=Gate, source=source, **kwargs)
+        if state is not None:
+            gate = self.get_channel_controller(self.parameters[name])
+            gate.state(state)
 
-    def add_ohmic(self, name, source, **kwargs):
+    def add_ohmic(self, name, source, state=None, **kwargs):
         self.add_parameter(name, parameter_class=Ohmic, source=source, **kwargs)
+        if state is not None:
+            gate = self.get_channel_controller(self.parameters[name])
+            gate.state(state)
 
     def add_parameter(self, name, parameter_class=Parameter, **kwargs):
         """

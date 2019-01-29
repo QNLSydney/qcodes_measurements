@@ -16,6 +16,8 @@ class ConnState(str, enum.Enum):
     PROBE = enum.auto()
     UNDEF = enum.auto()
 
+ConnState.OUTPUT_MODES = (ConnState.GND, ConnState.DAC, ConnState.DAC_BUS, ConnState.PROBE)
+ConnState.INPUT_MODES  = (ConnState.BUS, ConnState.SMC, ConnState.FLOAT)
 
 class DigitalMode(str, enum.Enum):
     """
@@ -32,6 +34,29 @@ class DigitalMode(str, enum.Enum):
     LOW = enum.auto()
     GND = enum.auto()
     FLOAT = enum.auto()
+    UNDEF = enum.auto()
+
+    @staticmethod
+    def map_conn_state_to_digital_mode(conn_state):
+        """
+        Convert ConnState to DigitalMode
+        """
+        if conn_state == ConnState.BUS:
+            return DigitalMode.IN
+        elif conn_state == ConnState.GND:
+            return DigitalMode.GND
+        elif conn_state == ConnState.DAC:
+            return DigitalMode.OUT
+        elif conn_state == ConnState.DAC_BUS:
+            return DigitalMode.BUS_OUT
+        elif conn_state == ConnState.SMC:
+            return DigitalMode.OUT
+        elif conn_state == ConnState.FLOAT:
+            return DigitalMode.FLOAT
+        elif conn_state == ConnState.PROBE:
+            return DigitalMode.PROBE_OUT
+        else:
+            return DigitalMode.UNDEF
 
 DigitalMode.OUTPUT_MODES = (DigitalMode.OUT, DigitalMode.PROBE_OUT, DigitalMode.HIGH,
                             DigitalMode.LOW, DigitalMode.GND)
