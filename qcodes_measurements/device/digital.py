@@ -33,7 +33,7 @@ class DigitalGate(Gate):
         v_hist: range around v_high/v_low around which a high/low value will be read
     """
     def __init__(self, name, source, v_high, v_low, v_hist=0.2, label=None,
-                 io_mode=DigitalMode.OUT, **kwargs):
+                 io_mode=None, **kwargs):
         # Initialize the parameter
         super().__init__(name=name,
                          source=source,
@@ -46,6 +46,8 @@ class DigitalGate(Gate):
         self._v_high = v_high
         self._v_low = v_low
         self.v_hist = v_hist
+        if io_mode is None:
+            io_mode = DigitalMode.UNDEF
         self.io_mode = io_mode
         # If a gate is locked, it's value won't be changed
         self.lock = False
@@ -139,6 +141,13 @@ class DigitalGateWrapper(ChannelWrapper):
         # pulls the voltage from self.gate, which for a digital gate returns 0/1
         self.parameters['voltage'] = self.parent.voltage
 
+        # Once this object has been created, we can check the state of the underlying
+        # gate and fill it in for the gate, it if is currently unknown
+        if self.gate.io_mode == DigitalMode.UNDEF:
+            state = self.state()
+            self.gate.io_mode = DigitalMode.map_conn_state_to_digital_mode(state)
+
+
     def _set_io_mode(self, val):
         self.lock(False)
         if val == DigitalMode.IN:
@@ -203,12 +212,13 @@ class DigitalDevice(Device):
                            set_cmd=self._update_vlow,
                            vals=Numbers())
 
-    def add_digital_gate(self, name, source, io_mode=DigitalMode.OUT, **kwargs):
+    def add_digital_gate(self, name, source, io_mode=None, **kwargs):
         self.add_parameter(name, parameter_class=DigitalGate, source=source,
                            v_high=self.v_high(), v_low=self.v_low(), io_mode=io_mode,
                            **kwargs)
-        gate = self.get_channel_controller(self.parameters[name])
-        gate.io_mode(io_mode)
+        if io_mode is not None:
+            gate = self.get_channel_controller(self.parameters[name])
+            gate.io_mode(io_mode)
 
     def store_new_param(self, new_param):
         if isinstance(new_param, DigitalGate):
