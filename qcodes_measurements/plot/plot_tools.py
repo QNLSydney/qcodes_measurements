@@ -44,6 +44,7 @@ def append_by_id(win, id, param_name=None, force=False):
             data_name = data[i][-1]['name']
             if data_name == param_name:
                 data = data[i]
+                break
             data_names.append(data_name)
         else:
             raise ValueError("Cannot find {} in data."
@@ -146,7 +147,7 @@ def plot_by_id(id, save_fig=False, fig_folder=None):
     data = get_shaped_data_by_runid(id)
 
     # Plot each line in the data
-    for data_num, plot_data in enumerate(data):
+    for _, plot_data in enumerate(data):
         plot = win.addPlot()
 
         if len(plot_data) == 2:
