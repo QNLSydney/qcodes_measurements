@@ -445,6 +445,11 @@ class PlotItem(BasePlotItem):
     def traces(self):
         return self.listDataItems(proxy=True)
 
+    @property
+    @_auto_wrap
+    def items(self):
+        return self.listItems(proxy=True)
+
 class TextItem(RPGWrappedBase):
     _base = "DraggableTextItem"
     _ANCHORS = {'tl': (0,0),

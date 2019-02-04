@@ -106,6 +106,7 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
             anchory = 1 if offset[1] <= 0 else 0
             anchor = (anchorx, anchory)
             self.anchor(itemPos=anchor, parentPos=anchor, offset=offset)
+        p.items.append(self)
         return ret
 
     def paint(self, p, *args):
@@ -453,6 +454,16 @@ class ExtendedPlotItem(PlotItem):
         if isinstance(item, ImageItem):
             # addItem does not keep track of images, let's add it ourselves
             self.dataItems.append(item)
+
+    def listItems(self, proxy=False):
+        """
+        Create a pickleable list of items in the plot
+        """
+        if proxy:
+            items = [mp.proxy(item) for item in self.items]
+        else:
+            items = self.items
+        return items
 
     def listDataItems(self, proxy=False):
         """
