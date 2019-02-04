@@ -36,12 +36,6 @@ class Gate(Parameter):
         if label is None:
             label = name
 
-        # Initialize the parameter
-        super().__init__(name=name,
-                         label=label,
-                         unit="V",
-                         vals=source.voltage.vals,
-                         **kwargs)
         self.source = source
         self.rate = rate
         self.max_step = max_step
@@ -53,6 +47,12 @@ class Gate(Parameter):
         else:
             self.has_ramp = False
 
+        # Initialize the parameter
+        super().__init__(name=name,
+                         label=label,
+                         unit="V",
+                         vals=source.voltage.vals,
+                         **kwargs)
 
     @property
     def gate_mode(self):
