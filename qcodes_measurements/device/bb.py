@@ -46,7 +46,7 @@ class BBChan(InstrumentChannel):
         return self
 
     def dummy_voltage(self, val=None):
-        if val is not None:
+        if val is not None and val != 0:
             raise NotImplementedError("This gate is not connected to a DAC!")
         return 0
 
