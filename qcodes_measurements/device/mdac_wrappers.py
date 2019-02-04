@@ -27,6 +27,8 @@ class MDACWrapper(ChannelWrapper):
         return state
 
     def set_state(self, val):
+        if val in ConnState.INPUT_MODES:
+            self.parent.voltage(0)
         if val == ConnState.GND:
             self.parent.gnd('close')
             self.parent.smc('open')
