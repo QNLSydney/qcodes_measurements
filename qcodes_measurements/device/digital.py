@@ -150,6 +150,8 @@ class DigitalGateWrapper(ChannelWrapper):
 
     def _set_io_mode(self, val):
         self.lock(False)
+        if val in DigitalMode.INPUT_MODES:
+            self.voltage(0)
         if val == DigitalMode.IN:
             self.smc()
         elif val == DigitalMode.OUT:
@@ -170,6 +172,8 @@ class DigitalGateWrapper(ChannelWrapper):
             self.ground()
         elif val == DigitalMode.FLOAT:
             self.open()
+        else:
+            raise ValueError("Invalid IO Mode")
         self.gate.io_mode = val
 
 class MDACDigitalGateWrapper(DigitalGateWrapper, MDACGateWrapper):
@@ -213,12 +217,19 @@ class DigitalDevice(Device):
                            vals=Numbers())
 
     def add_digital_gate(self, name, source, io_mode=None, **kwargs):
+        if "initial_value" in kwargs and io_mode is not None:
+            initial_value = kwargs["initial_value"]
+            del kwargs["initial_value"]
+        else:
+            initial_value = None
         self.add_parameter(name, parameter_class=DigitalGate, source=source,
                            v_high=self.v_high(), v_low=self.v_low(), io_mode=io_mode,
                            **kwargs)
         if io_mode is not None:
             gate = self.get_channel_controller(self.parameters[name])
             gate.io_mode(io_mode)
+            if initial_value is not None:
+                self.parameters[name](initial_value)
 
     def store_new_param(self, new_param):
         if isinstance(new_param, DigitalGate):

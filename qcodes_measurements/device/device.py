@@ -28,10 +28,17 @@ class Device(InstrumentBase):
         self.add_submodule("ohmics", ohmics)
 
     def add_gate(self, name, source, state=None, **kwargs):
+        if "initial_value" in kwargs and state is not None:
+            initial_value = kwargs["initial_value"]
+            del kwargs["initial_value"]
+        else:
+            initial_value = None
         self.add_parameter(name, parameter_class=Gate, source=source, **kwargs)
         if state is not None:
             gate = self.get_channel_controller(self.parameters[name])
             gate.state(state)
+        if initial_value is not None:
+            self.parameters[name](initial_value)
 
     def add_ohmic(self, name, source, state=None, **kwargs):
         self.add_parameter(name, parameter_class=Ohmic, source=source, **kwargs)
