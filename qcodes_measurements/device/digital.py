@@ -227,7 +227,8 @@ class DigitalDevice(Device):
                            **kwargs)
         if io_mode is not None:
             gate = self.get_channel_controller(self.parameters[name])
-            gate.io_mode(io_mode)
+            if gate.io_mode() != io_mode:
+                gate.io_mode(io_mode)
             if initial_value is not None:
                 self.parameters[name](initial_value)
 

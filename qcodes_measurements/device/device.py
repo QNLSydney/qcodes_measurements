@@ -36,7 +36,8 @@ class Device(InstrumentBase):
         self.add_parameter(name, parameter_class=Gate, source=source, **kwargs)
         if state is not None:
             gate = self.get_channel_controller(self.parameters[name])
-            gate.state(state)
+            if gate.state() != state:
+                gate.state(state)
         if initial_value is not None:
             self.parameters[name](initial_value)
 
