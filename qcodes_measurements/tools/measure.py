@@ -141,7 +141,7 @@ def _plot_sweep(sweep_func):
                         plot_tools.save_figure(win, run_id)
                     except Exception:
                         print(f"Failed to save figure {run_id}")
-            return run_id, win
+        return run_id, win
     return _plot_wrapper
 
 LivePlotDataItem = namedtuple("LivePlotDataItem", ("plot", "plotdata", "data"))
