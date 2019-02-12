@@ -19,8 +19,8 @@ def _flush_buffers(*params):
     """
 
     for param in params:
-        if hasattr(param, '_instrument'):
-            inst = param._instrument
+        if hasattr(param, 'root_instrument'):
+            inst = param.root_instrument
         elif isinstance(param, VisaInstrument):
             inst = param
         else:
@@ -96,9 +96,56 @@ def _get_window(append, size=(1000, 600)):
                          " or true to append to the last plot")
     return win
 
+def _plot_sweep(sweep_func):
+    """
+    Save figure at end of sweep, irrespective of whether the sweep is cancelled.
+    """
+    def _plot_wrapper(*args, plot=True, append=None, save=True, **kwargs):
+        """
+        Save figure at the end of a sweep. Wraps plotting functions.
+
+        Args:
+            save (Optional[bool]): Whether or not a figure should be saved. If this is true,
+            the result of the sweep is saved into the "figures" folder.
+
+            plot (Optional[bool]): If this value is set to False, the trace will not be live plotted.
+
+            append (Optional[Union[bool, PlotWindow]]): If this parameter is not false, the trace
+            will be appended to an existing window. Either the plot window should be given, or the
+            last plot window created will be used.
+
+            *args, **kwargs: Parameters passed to the sweep function
+        """
+        # Create a plot window
+        if plot:
+            win = _get_window(append)
+        else:
+            win = None
+
+        # Try run the sweep, passing the plot window to the sweep function for update
+        run_id = None
+        try:
+            if append is not None and append:
+                append = True
+            run_id = sweep_func(*args, win=win, append=append, **kwargs)
+        finally:
+            # Save the plot if a save was requested
+            if win is not None and save:
+                # Check if the sweep completed successfully. If not, try and pull the run_id from the window.
+                # If it is still none, no data was taken, let's just bail out without saving
+                if run_id is None:
+                    run_id = getattr(win, "run_id", None)
+                if run_id is not None:
+                    try:
+                        plot_tools.save_figure(win, run_id)
+                    except Exception:
+                        print(f"Failed to save figure {run_id}")
+    return _plot_wrapper
+
+@_plot_sweep
 def do0d(*param_meas,
-         plot=True, append=None, stack=False, legend=False,
-         save=True, atstart=None, ateach=None, atend=None):
+         win=None, append=False, stack=False, legend=False,
+         atstart=None, ateach=None, atend=None):
     """
     Run a sweep of a single parameter, between start and stop, with a delay after settings
     the point given by delay.
@@ -112,19 +159,15 @@ def do0d(*param_meas,
         If the points are not uniformly distributed, data is correctly saved, however the live
         plot will be distorted.
 
-        plot (Optional[bool]): If this value is set to False, the trace will not be live plotted.
+        win (Optional[PlotWindow]): The plot window to add plots to. If this value is None, the sweep
+        will not be live plotted.
 
-        append (Optional[Union[bool, PlotWindow]]): If this parameter is not false, the trace
-        will be appended to an existing window. Either the plot window should be given, or the
-        last plot window created will be used.
+        append (bool): If this parameter is true, the trace will be appended to an existing window.
 
         stack (Optional[bool]): If this parameter is given, all parameters are stacked over
         each other on a single plot, otherwise separate plots are created for each measured parameter.
 
         legend (Optional[bool]): If true, a legend is added to each plot item.
-
-        save (Optional[bool]): If this value is True, the plot window at the end will be saved
-        as a png to the figures folder, with the trace id as the filename.
 
         atstart (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run before the measurement is started. The functions will be run BEFORE the parameters
@@ -144,14 +187,8 @@ def do0d(*param_meas,
     Returns:
         (id, win): ID is the trace id of the saved wave, win is a handle to the plot window that was created
         for the purposes of liveplotting.
-
     """
-
     _flush_buffers(*param_meas)
-    if plot:
-        win = _get_window(append)
-    else:
-        win = None
 
     # Register setpoints
     meas = Measurement()
@@ -171,7 +208,7 @@ def do0d(*param_meas,
         meas.register_parameter(parameter)
         output.append([parameter, None])
 
-        if plot:
+        if win is not None:
             # Figure out if we have 1d or 2d data
             shape = getattr(parameter, 'shape', None)
             if shape is not None and shape != tuple():
@@ -182,7 +219,7 @@ def do0d(*param_meas,
 
             # Create plot window
             if set_points is not None:
-                if append is not None and append:
+                if append:
                     plotitem = win.items[0]
                 elif stack and win.items:
                     plotitem = win.items[0]
@@ -208,50 +245,47 @@ def do0d(*param_meas,
                     win.addItem(t_widget)
                 table_items[parameter.full_name] = (0,)
 
-    with meas.run() as datasaver:
-        # Update plot titles to include the ID
-        win.win_title += "{} ".format(datasaver.run_id)
-        for pi in win.items:
-            pi.plot_title += " (id: %d)" % datasaver.run_id
+    try:
+        with meas.run() as datasaver:
+            # Update plot titles to include the ID
+            win.run_id = datasaver.run_id
+            win.win_title += "{} ".format(datasaver.run_id)
+            for plot_item in win.items:
+                plot_item.plot_title += " (id: %d)" % datasaver.run_id
 
-        _run_functions(ateach, param_vals=tuple())
-        # Read out each parameter
-        plot_number = 0
-        for p, parameter in enumerate(param_meas):
-            output[p][1] = parameter.get()
-            shape = getattr(parameter, 'shape', None)
-            if shape is not None and shape != tuple():
-                data[p][:] = output[p][1] # Update 2D data
-                if plot:
-                    plots[plot_number].update(data[p])
-                    plot_number += 1
-            else:
-                table_items[parameter.full_name] = (output[p][1],)
+            _run_functions(ateach, param_vals=tuple())
+            # Read out each parameter
+            plot_number = 0
+            for p, parameter in enumerate(param_meas):
+                output[p][1] = parameter.get()
+                shape = getattr(parameter, 'shape', None)
+                if shape is not None and shape != tuple():
+                    data[p][:] = output[p][1] # Update 2D data
+                    if win is not None:
+                        plots[plot_number].update(data[p])
+                        plot_number += 1
+                else:
+                    table_items[parameter.full_name] = (output[p][1],)
 
-        # If stacked, make traces different
-        if stack:
-            plotitem.makeTracesDifferent()
+            # If stacked, make traces different
+            if stack:
+                plotitem.makeTracesDifferent()
 
-        # Save data
-        datasaver.add_result(*output)
+            # Save data
+            datasaver.add_result(*output)
 
-        # Update table
-        if table is not None:
-            table.setData(table_items)
+            # Update table
+            if table is not None:
+                table.setData(table_items)
+    finally:
+        _run_functions(atend) # Run functions at the end
 
-    _run_functions(atend) # Run functions at the end
+    # Return the dataid
+    return datasaver.run_id  # can use plot_by_id(dataid)
 
-    if plot and save:
-        try:
-            plot_tools.save_figure(win, datasaver.run_id)
-        except:
-            print(f"Failed to save figure {datasaver.run_id}")
-
-    # Return the dataid, and a handle to the created window
-    return (datasaver.run_id, win)  # can use plot_by_id(dataid)
-
+@_plot_sweep
 def linear1d(param_set, start, stop, num_points, delay, *param_meas,
-             plot=True, append=None, save=True,
+             win=None, append=False,
              atstart=None, ateach=None, atend=None,
              wallcontrol=None, wallcontrol_slope=None,
              setback=False,
@@ -279,14 +313,10 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         If the points are not uniformly distributed, data is correctly saved, however the live
         plot will be distorted.
 
-        plot (Optional[bool]): If this value is set to False, the trace will not be live plotted.
+        win (Optional[PlotWindow]): The plot window to add plots to. If this value is None, the sweep
+        will not be live plotted.
 
-        append (Optional[Union[bool, PlotWindow]]): If this parameter is not false, the trace
-        will be appended to an existing window. Either the plot window should be given, or the
-        last plot window created will be used.
-
-        save (Optional[bool]): If this value is True, the plot window at the end will be saved
-        as a png to the figures folder, with the trace id as the filename.
+        append (bool): If this parameter is true, the trace will be appended to an existing window.
 
         atstart (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run before the measurement is started. The functions will be run BEFORE the parameters
@@ -322,12 +352,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         for the purposes of liveplotting.
 
     """
-
     _flush_buffers(*param_meas)
-    if plot:
-        win = _get_window(append)
-    else:
-        win = None
 
     # Register setpoints
     meas = Measurement()
@@ -345,13 +370,12 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 
     # Register each of the sweep parameters and set up a plot window for them
     for p, parameter in enumerate(param_meas):
-        print(parameter, param_set)
         meas.register_parameter(parameter, setpoints=(param_set,))
         output.append([parameter, None])
 
-        if plot:
+        if win is not None:
             # Create plot window
-            if append is not None and append:
+            if append:
                 plotitem = win.items[0]
             else:
                 plotitem = win.addPlot(name=parameter.full_name,
@@ -389,61 +413,58 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 
     # Run the sweep
     meas.write_period = write_period
-    with meas.run() as datasaver:
-        # Update plot titles to include the ID
-        win.win_title += "{} ".format(datasaver.run_id)
-        for plot_item in plots:
-            plot_item._parent.plot_title += " (id: %d)" % datasaver.run_id
+    try:
+        with meas.run() as datasaver:
+            # Update plot titles to include the ID
+            win.run_id = datasaver.run_id
+            win.win_title += "{} ".format(datasaver.run_id)
+            for plot_item in plots:
+                plot_item._parent.plot_title += " (id: %d)" % datasaver.run_id
 
-        # Then, run the actual sweep
-        for i, set_point in enumerate(set_points):
-            param_set.set(set_point)
+            # Then, run the actual sweep
+            for i, set_point in enumerate(set_points):
+                param_set.set(set_point)
+                if wallcontrol is not None:
+                    wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
+                _run_functions(ateach, param_vals=((param_set, set_point)))
+                # Read out each parameter
+                for p, parameter in enumerate(param_meas):
+                    output[p][1] = parameter.get()
+                    shape = getattr(parameter, 'shape', None)
+                    if shape is not None and shape != tuple():
+                        data[p][i, :] = output[p][1] # Update 2D data
+                        # For a 2D trace, figure out the value for data not yet set if this is the
+                        # first column
+                        if i == 0:
+                            data[p][1:] = (np.min(output[p][1]) +
+                                           np.max(output[p][1]))/2
+                    else:
+                        data[p][i] = output[p][1] # Update 1D data
+
+                    if win is not None:
+                        # Update live plots
+                        plots[p].update(data[p])
+                # Save data
+                datasaver.add_result((param_set, set_point),
+                                     *output)
+    finally:
+        # Set back to start at the end of the measurement
+        if setback:
+            # Reset wall control
             if wallcontrol is not None:
-                wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
-            _run_functions(ateach, param_vals=((param_set, set_point)))
-            # Read out each parameter
-            for p, parameter in enumerate(param_meas):
-                output[p][1] = parameter.get()
-                shape = getattr(parameter, 'shape', None)
-                if shape is not None and shape != tuple():
-                    data[p][i, :] = output[p][1] # Update 2D data
-                    # For a 2D trace, figure out the value for data not yet set if this is the
-                    # first column
-                    if i == 0:
-                        data[p][1:] = (np.min(output[p][1]) +
-                                       np.max(output[p][1]))/2
-                else:
-                    data[p][i] = output[p][1] # Update 1D data
+                wallcontrol.set(wallcontrol_start)
+            param_set.set(start)
 
-                if plot:
-                    # Update live plots
-                    plots[p].update(data[p])
-            # Save data
-            datasaver.add_result((param_set, set_point),
-                                 *output)
+        _run_functions(atend) # Run functions at the end
 
-    # Set back to start at the end of the measurement
-    if setback:
-        # Reset wall control
-        if wallcontrol is not None:
-            wallcontrol.set(wallcontrol_start)
-        param_set.set(start)
+    # Return the dataid
+    return datasaver.run_id  # can use plot_by_id(dataid)
 
-    _run_functions(atend) # Run functions at the end
-
-    if plot and save:
-        try:
-            plot_tools.save_figure(win, datasaver.run_id)
-        except:
-            print(f"Failed to save figure {datasaver.run_id}")
-
-    # Return the dataid, and a handle to the created window
-    return (datasaver.run_id, win)  # can use plot_by_id(dataid)
-
+@_plot_sweep
 def linear2d(param_set1, start1, stop1, num_points1, delay1,
              param_set2, start2, stop2, num_points2, delay2,
              *param_meas,
-             plot=True, append=False, save=True,
+             win=None, append=False,
              atstart=None, ateachcol=None, ateach=None, atend=None,
              wallcontrol=None, wallcontrol_slope=None,
              setback=False, write_period=120):
@@ -475,14 +496,10 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         *param_meas (Iterable[Parameter]): A list of the parameters to be measured at each of the
         set points. These must be single valued for live plotting to work
 
-        plot (Optional[bool]): If this value is set to False, the trace will not be live plotted.
+        win (Optional[PlotWindow]): The plot window to add plots to. If this value is None, the sweep
+        will not be live plotted.
 
-        append (Optional[Union[bool, PlotWindow]]): If this parameter is not false, the trace
-        will be appended to an existing window. Either the plot window should be given, or the
-        last plot window created will be used.
-
-        save (Optional[bool]): If this value is True, the plot window at the end will be saved
-        as a png to the figures folder, with the trace id as the filename.
+        append (bool): If this parameter is true, the trace will be appended to an existing window.
 
         atstart (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run before the measurement is started. The functions will be run BEFORE the parameters
@@ -523,10 +540,6 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
 
     """
     _flush_buffers(*param_meas)
-    if plot:
-        win = _get_window(append, size=(800, 800))
-    else:
-        win = None
 
     # Register setpoints
     meas = Measurement()
@@ -553,8 +566,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         output.append([parameter, None])
 
         # Add Plot item
-        if plot:
-            if append is not None and append:
+        if win is not None:
+            if append:
                 plotitem = win.items[0]
                 plotdata = plotitem.plot(setpoint_x=set_points1, setpoint_y=set_points2)
             else:
@@ -574,63 +587,59 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         step = (stop1-start1)/num_points1
 
     meas.write_period = write_period
-    with meas.run() as datasaver:
-        # Update plot titles
-        win.win_title += "{} ".format(datasaver.run_id)
-        for plot in plots:
-            plot._parent.plot_title += " (id: %d)" % datasaver.run_id
+    try:
+        with meas.run() as datasaver:
+            # Update plot titles
+            win.run_id = datasaver.run_id
+            win.win_title += "{} ".format(datasaver.run_id)
+            for plotitem in plots:
+                plotitem._parent.plot_title += " (id: %d)" % datasaver.run_id
 
-        for i, set_point1 in enumerate(set_points1):
-            param_set2.set(start2)
-            param_set1.set(set_point1)
+            for i, set_point1 in enumerate(set_points1):
+                param_set2.set(start2)
+                param_set1.set(set_point1)
+                if wallcontrol is not None:
+                    wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
+                _run_functions(ateachcol, param_vals=((param_set1, set_point1)))
+                for j, set_point2 in enumerate(set_points2):
+                    param_set2.set(set_point2)
+                    _run_functions(ateach, param_vals=((param_set1, set_point1),
+                                                       (param_set2, set_point2)))
+                    for p, parameter in enumerate(param_meas):
+                        output[p][1] = parameter.get()
+                        fdata = data[p]
+                        fdata[i, j] = output[p][1]
+
+                        if win is not None:
+                            if i == 0:
+                                # Calculate z-range of data, and remove NaN's from first column
+                                # This sets zero point for rest of data
+                                z_range = (np.nanmin(fdata[i, :j+1]), np.nanmax(fdata[i, :j+1]))
+                                fdata[0, j+1:] = (z_range[0] + z_range[1])/2
+                                fdata[1:, :] = (z_range[0] + z_range[1])/2
+
+                            # Update plot items, and update range every 10 points
+                            if (num_points1*num_points2) < 1000 or (j%20) == 0:
+                                plots[p].update(fdata, True)
+
+                    # Save data
+                    datasaver.add_result((param_set1, set_point1),
+                                         (param_set2, set_point2),
+                                         *output)
+
+            # At the end, do one last update to make sure that all data is displayed.
+            if win is not None:
+                for i in range(len(param_meas)):
+                    fdata = data[i]
+                    plots[i].update(fdata, True)
+    finally:
+        # Set paramters back to start
+        if setback:
             if wallcontrol is not None:
-                wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
-            _run_functions(ateachcol, param_vals=((param_set1, set_point1)))
-            for j, set_point2 in enumerate(set_points2):
-                param_set2.set(set_point2)
-                _run_functions(ateach, param_vals=((param_set1, set_point1),
-                                                   (param_set2, set_point2)))
-                for p, parameter in enumerate(param_meas):
-                    output[p][1] = parameter.get()
-                    fdata = data[p]
-                    fdata[i, j] = output[p][1]
+                wallcontrol.set(wallcontrol_start)
+            param_set1.set(start1)
+            param_set2.set(start2)
 
-                    if plot:
-                        if i == 0:
-                            # Calculate z-range of data, and remove NaN's from first column
-                            # This sets zero point for rest of data
-                            z_range = (np.nanmin(fdata[i, :j+1]), np.nanmax(fdata[i, :j+1]))
-                            fdata[0, j+1:] = (z_range[0] + z_range[1])/2
-                            fdata[1:, :] = (z_range[0] + z_range[1])/2
+        _run_functions(atend)
 
-                        # Update plot items, and update range every 10 points
-                        if (num_points1*num_points2) < 1000 or (j%20) == 0:
-                            plots[p].update(fdata, True)
-
-                # Save data
-                datasaver.add_result((param_set1, set_point1),
-                                     (param_set2, set_point2),
-                                     *output)
-
-        # At the end, do one last update to make sure that all data is displayed.
-        if plot:
-            for i in range(len(param_meas)):
-                fdata = data[i]
-                plots[i].update(fdata, True)
-
-    # Set paramters back to start
-    if setback:
-        if wallcontrol is not None:
-            wallcontrol.set(wallcontrol_start)
-        param_set1.set(start1)
-        param_set2.set(start2)
-
-    _run_functions(atend)
-
-    if plot and save:
-        try:
-            plot_tools.save_figure(win, datasaver.run_id)
-        except:
-            print(f"Failed to save figure {datasaver.run_id}")
-
-    return (datasaver.run_id, win)
+    return datasaver.run_id
