@@ -21,14 +21,19 @@ def list_instruments(snap):
     """
     List instruments from a snapshot
     """
-    return list(snap['station']['instruments'].keys())
+    return (list(snap['station']['instruments'].keys()) +
+            list(snap['station']['components'].keys()))
 
 def get_instr_snap(snap, instr):
     """
     Retrieve an instrument from a snapshot
     """
-    instrs = snap['station']['instruments']
-    return instrs[instr]
+    try:
+        instrs = snap['station']['instruments']
+        return instrs[instr]
+    except KeyError:
+        instrs = snap['station']['components']
+        return instrs[instr]
 
 def extract_gate_desc(gate):
     """
