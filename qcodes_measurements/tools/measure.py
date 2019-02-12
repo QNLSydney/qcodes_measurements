@@ -1,5 +1,6 @@
 import logging as log
 from inspect import signature
+from collections import namedtuple
 
 import numpy as np
 
@@ -142,6 +143,8 @@ def _plot_sweep(sweep_func):
                         print(f"Failed to save figure {run_id}")
     return _plot_wrapper
 
+LivePlotDataItem = namedtuple("LivePlotDataItem", ("plot", "plotdata", "data"))
+
 @_plot_sweep
 def do0d(*param_meas,
          win=None, append=False, stack=False, legend=False,
@@ -195,7 +198,6 @@ def do0d(*param_meas,
 
     # Keep track of data and plots
     output = []
-    data = []
     plots = []
     table = None
     table_items = {}
@@ -213,7 +215,7 @@ def do0d(*param_meas,
             shape = getattr(parameter, 'shape', None)
             if shape is not None and shape != tuple():
                 set_points = parameter.setpoints[0]
-                data.append(np.ndarray((parameter.shape[0],)))
+                data = np.ndarray((parameter.shape[0],))
             else:
                 set_points = None
 
@@ -235,8 +237,8 @@ def do0d(*param_meas,
                 plotdata = plotitem.plot(setpoint_x=set_points,
                                          pen=(255, 0, 0),
                                          name=parameter.full_name)
-                plots.append(plotdata)
                 plotitem.update_axes(parameter, parameter, param_x_setpoint=True)
+                plots.append(LivePlotDataItem(plotitem, plotdata, data))
             else:
                 if table is None:
                     table = pyplot.TableWidget(sortable=False)
@@ -247,11 +249,12 @@ def do0d(*param_meas,
 
     try:
         with meas.run() as datasaver:
-            # Update plot titles to include the ID
-            win.run_id = datasaver.run_id
-            win.win_title += "{} ".format(datasaver.run_id)
-            for plot_item in win.items:
-                plot_item.plot_title += " (id: %d)" % datasaver.run_id
+            if win is not None:
+                # Update plot titles to include the ID
+                win.run_id = datasaver.run_id
+                win.win_title += "{} ".format(datasaver.run_id)
+                for plot_item in win.items:
+                    plot_item.plot_title += " (id: %d)" % datasaver.run_id
 
             _run_functions(ateach, param_vals=tuple())
             # Read out each parameter
@@ -259,13 +262,13 @@ def do0d(*param_meas,
             for p, parameter in enumerate(param_meas):
                 output[p][1] = parameter.get()
                 shape = getattr(parameter, 'shape', None)
-                if shape is not None and shape != tuple():
-                    data[p][:] = output[p][1] # Update 2D data
-                    if win is not None:
-                        plots[plot_number].update(data[p])
+                if win is not None:
+                    if shape is not None and shape != tuple():
+                        plots[plot_number].data[:] = output[p][1] # Update 2D data
+                        plots[plot_number].plotdata.update(plots[plot_number].data)
                         plot_number += 1
-                else:
-                    table_items[parameter.full_name] = (output[p][1],)
+                    else:
+                        table_items[parameter.full_name] = (output[p][1],)
 
             # If stacked, make traces different
             if stack:
@@ -362,7 +365,6 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 
     # Keep track of data and plots
     output = []
-    data = []
     plots = []
 
     # Run @start functions
@@ -387,17 +389,17 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
             shape = getattr(parameter, 'shape', None)
             if shape is not None and shape != tuple():
                 set_points_y = parameter.setpoints[0]
-                data.append(np.ndarray((num_points, parameter.shape[0])))
+                data = np.ndarray((num_points, parameter.shape[0]))
             else:
                 set_points_y = None
-                data.append(np.full(num_points, np.nan))
+                data = np.full(num_points, np.nan)
 
             # Add data into the plot window
             plotdata = plotitem.plot(setpoint_x=set_points,
                                      setpoint_y=set_points_y,
                                      pen=(255, 0, 0),
                                      name=parameter.name)
-            plots.append(plotdata)
+            plots.append(LivePlotDataItem(plotitem, plotdata, data))
 
             # Update axes
             if set_points_y is not None:
@@ -415,11 +417,12 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
     meas.write_period = write_period
     try:
         with meas.run() as datasaver:
-            # Update plot titles to include the ID
-            win.run_id = datasaver.run_id
-            win.win_title += "{} ".format(datasaver.run_id)
-            for plot_item in plots:
-                plot_item._parent.plot_title += " (id: %d)" % datasaver.run_id
+            if win is not None:
+                # Update plot titles to include the ID
+                win.run_id = datasaver.run_id
+                win.win_title += "{} ".format(datasaver.run_id)
+                for plotitem in win.items:
+                    plotitem.plot_title += " (id: %d)" % datasaver.run_id
 
             # Then, run the actual sweep
             for i, set_point in enumerate(set_points):
@@ -432,18 +435,18 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                     output[p][1] = parameter.get()
                     shape = getattr(parameter, 'shape', None)
                     if shape is not None and shape != tuple():
-                        data[p][i, :] = output[p][1] # Update 2D data
+                        plots[p].data[i, :] = output[p][1] # Update 2D data
                         # For a 2D trace, figure out the value for data not yet set if this is the
                         # first column
                         if i == 0:
-                            data[p][1:] = (np.min(output[p][1]) +
-                                           np.max(output[p][1]))/2
+                            plots[p].data[1:] = (np.min(output[p][1]) +
+                                                 np.max(output[p][1]))/2
                     else:
-                        data[p][i] = output[p][1] # Update 1D data
+                        plots[p].data[i] = output[p][1] # Update 1D data
 
                     if win is not None:
                         # Update live plots
-                        plots[p].update(data[p])
+                        plots[p].plotdata.update(plots[p].data[p])
                 # Save data
                 datasaver.add_result((param_set, set_point),
                                      *output)
@@ -554,7 +557,6 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
 
     # Keep track of data and plots
     output = []
-    data = np.ndarray((len(param_meas), num_points1, num_points2))
     plots = []
 
     # Run @start functions
@@ -578,7 +580,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                 plotdata = plotitem.plot(setpoint_x=set_points1, setpoint_y=set_points2)
                 plotitem.update_axes(param_set1, param_set2)
                 plotdata.update_histogram_axis(parameter)
-            plots.append(plotdata)
+            plots.append(LivePlotDataItem(plotitem, plotdata, np.ndarray((num_points1, num_points2))))
 
 
     # Set wall control parameters if necessary
@@ -592,8 +594,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             # Update plot titles
             win.run_id = datasaver.run_id
             win.win_title += "{} ".format(datasaver.run_id)
-            for plotitem in plots:
-                plotitem._parent.plot_title += " (id: %d)" % datasaver.run_id
+            for plotitem in win.items:
+                plotitem.plot_title += " (id: %d)" % datasaver.run_id
 
             for i, set_point1 in enumerate(set_points1):
                 param_set2.set(start2)
@@ -607,7 +609,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                                                        (param_set2, set_point2)))
                     for p, parameter in enumerate(param_meas):
                         output[p][1] = parameter.get()
-                        fdata = data[p]
+                        fdata = plots[p].data
                         fdata[i, j] = output[p][1]
 
                         if win is not None:
@@ -620,7 +622,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
 
                             # Update plot items, and update range every 10 points
                             if (num_points1*num_points2) < 1000 or (j%20) == 0:
-                                plots[p].update(fdata, True)
+                                plots[p].plotdata.update(fdata, True)
 
                     # Save data
                     datasaver.add_result((param_set1, set_point1),
@@ -630,8 +632,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             # At the end, do one last update to make sure that all data is displayed.
             if win is not None:
                 for i in range(len(param_meas)):
-                    fdata = data[i]
-                    plots[i].update(fdata, True)
+                    plots[i].update(plots[i].data, True)
     finally:
         # Set paramters back to start
         if setback:
