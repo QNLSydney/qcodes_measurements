@@ -447,7 +447,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 
                     if win is not None:
                         # Update live plots
-                        plots[p].plotdata.update(plots[p].data[p])
+                        plots[p].plotdata.update(plots[p].data)
                 # Save data
                 datasaver.add_result((param_set, set_point),
                                      *output)
