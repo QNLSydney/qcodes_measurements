@@ -119,6 +119,11 @@ class Register:
         for i, index in enumerate(indices):
             bval = (val >> i) & 1
             field_name = self.bits[index]
+            if field_name is None:
+                if bval:
+                    raise ValueError("Can't set a bit outside a specified field")
+                else:
+                    continue
             field = self.fields[field_name]
             bloc = index - field.start_bit
             if bval:
