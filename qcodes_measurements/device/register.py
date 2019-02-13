@@ -53,7 +53,8 @@ class Register(Metadatable):
         return self.value.to_bytes(self.length//8, "big")
 
     def __repr__(self):
-        return f"<Register({self.name})@0x{self.address:X} 0x{bytes(self).hex().upper()}>"
+        d_flag = "D" if self.dirty else ""
+        return f"<Register({self.name})@0x{self.address:X} 0x{bytes(self).hex().upper()}{d_flag}>"
 
     def snapshot_base(self, update=False, params_to_skip_update=None):
         """
