@@ -2,22 +2,8 @@
 Represents a dense bitfield register within a digital device
 """
 from collections import namedtuple
-from functools import wraps
 
 RegisterField = namedtuple("RegisterField", ("start_bit", "end_bit", "value"))
-
-def _check_change(f):
-    """
-    Check whether the value of this register changed after running
-    the wrapped function, and mark dirty if necessary.
-    """
-    @wraps(f)
-    def check_change_wrapper(self, *args, **kwargs):
-        old_val = self.value
-        f(self, *args, **kwargs)
-        if old_val != self.value:
-            self._dirty = True
-    return check_change_wrapper
 
 class Register:
     """
@@ -28,6 +14,7 @@ class Register:
     def __init__(self, name, address, fields, length=32, require_sync=False):
         """
         Initialize a register.
+        Note: To start off with, the register is marked DIRTY.
 
         Args:
             name (str): The name of the register
@@ -44,16 +31,20 @@ class Register:
         self.length = length
         self.address = address
         self.require_sync = require_sync
-        self._dirty = False
+        self.committed_val = None
 
         self.fields = {}
         self.bits = [None]*self.length
-        for name, start_bit, end_bit in fields:
-            self.fields[name] = RegisterField(start_bit, end_bit+1, 0)
+        for field_name, start_bit, end_bit in fields:
+            if start_bit < 0 or start_bit > length:
+                raise ValueError(f"start_bit ({start_bit}) for field {field_name} out of bounds for register of length {length}.")
+            if end_bit < 0 or end_bit > length:
+                raise ValueError(f"end_bit ({end_bit}) for field {field_name} out of bounds for register of length {length}.")
+            self.fields[field_name] = RegisterField(start_bit, end_bit+1, 0)
             for bit in range(start_bit, end_bit+1):
                 if self.bits[bit] is not None:
                     raise ValueError("Overlapping bit ranges in register")
-                self.bits[bit] = name
+                self.bits[bit] = field_name
 
     def __bytes__(self):
         return self.value.to_bytes(self.length//8, "big")
@@ -62,31 +53,41 @@ class Register:
         return f"<Register({self.name})@0x{self.address:X} 0x{bytes(self).hex().upper()}>"
 
     def get_by_field(self, name):
+        """
+        Return value of field in register by name
+        """
         if not isinstance(name, str):
             raise TypeError("Field names must be strings")
         return self.fields[name].value
 
     def get_by_bitind(self, ind):
+        """
+        Return bit values in register by index or slice
+        """
         if isinstance(ind, int):
+            if ind > self.length:
+                raise IndexError(f"Index out of bounds for register of length {self.length}.")
             return (self.value >> (ind % self.length)) & 1
-        elif isinstance(ind, slice):
+        if isinstance(ind, slice):
             if ind.step is not None and ind.step != 1:
                 raise IndexError("Registers do not support steps other than 1 in a slice")
             # Calculate bit indices
             start, stop, _ = ind.indices(self.length)
             # Retrieve range from register
             return (self.value >> start) & ((1 << (stop-start))-1)
+        raise TypeError("Index must be an integer or a slice")
 
     def __getitem__(self, ind):
         if isinstance(ind, str):
             return self.get_by_field(ind)
-        elif isinstance(ind, (int, slice)):
+        if isinstance(ind, (int, slice)):
             return self.get_by_bitind(ind)
-        else:
-            raise TypeError("Can retrieve by field name, or with regular indexing only")
+        raise TypeError("Can retrieve by field name, or with regular indexing only")
 
-    @_check_change
     def set_by_field(self, name, val):
+        """
+        Set value of register by field name
+        """
         max_val = self.fields[name].end_bit - self.fields[name].start_bit
         max_val = (1 << max_val)-1
         if not isinstance(val, int):
@@ -95,8 +96,10 @@ class Register:
             raise ValueError(f"Value out of range for {name}. Should be in range 0 - {max_val}, got {val}.")
         self.fields[name] = self.fields[name]._replace(value=val)
 
-    @_check_change
     def set_by_bitind(self, ind, val):
+        """
+        Set value of bits in register by index or slice
+        """
         # Calculate bit indices in register
         if isinstance(ind, int):
             indices = (ind, )
@@ -106,6 +109,7 @@ class Register:
             indices = range(*ind.indices(self.length))
 
         # Validate value
+        val = int(val)
         start, stop = indices[0], indices[-1]+1
         max_val = (1 << (stop-start))-1
         if val > max_val:
@@ -133,6 +137,9 @@ class Register:
 
     @property
     def value(self):
+        """
+        Return register value as integer
+        """
         value = 0
         for field in self.fields.values():
             value |= (field.value << field.start_bit)
@@ -145,10 +152,17 @@ class Register:
         """
         if not self.require_sync:
             return False
-        return self._dirty
+        return (self.committed_val is None) or (self.value != self.committed_val)
+
+    def mark_dirty(self):
+        """
+        Forcibly marks the register dirty.
+        NOTE: This has no effect if self.require_sync is False.
+        """
+        self.committed_val = None
 
     def commit(self):
         """
         Marks the register as clean (committed to the device).
         """
-        self._dirty = False
+        self.committed_val = self.value
