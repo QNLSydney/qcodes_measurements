@@ -54,6 +54,9 @@ class DigitalGate(Gate):
 
     @property
     def v_high(self):
+        """
+        Get/Set high voltage level
+        """
         return self._v_high
     @v_high.setter
     def v_high(self, val):
@@ -66,6 +69,9 @@ class DigitalGate(Gate):
 
     @property
     def v_low(self):
+        """
+        Get/Set low voltage level
+        """
         return self._v_low
     @v_low.setter
     def v_low(self, val):
