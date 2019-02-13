@@ -2,10 +2,11 @@
 Represents a dense bitfield register within a digital device
 """
 from collections import namedtuple
+from qcodes.utils.metadata import Metadatable
 
 RegisterField = namedtuple("RegisterField", ("start_bit", "end_bit", "value"))
 
-class Register:
+class Register(Metadatable):
     """
     Create a register with a certain set of named fields. This class keeps
     track of the contents of a register, including whether the register is
@@ -46,11 +47,29 @@ class Register:
                     raise ValueError("Overlapping bit ranges in register")
                 self.bits[bit] = field_name
 
+        super().__init__()
+
     def __bytes__(self):
         return self.value.to_bytes(self.length//8, "big")
 
     def __repr__(self):
         return f"<Register({self.name})@0x{self.address:X} 0x{bytes(self).hex().upper()}>"
+
+    def snapshot_base(self, update=False, params_to_skip_update=None):
+        """
+        Create a snapshot of the register
+        """
+        snap = {}
+        snap['name'] = self.name
+        snap['address'] = self.address
+        snap['length'] = self.length
+        snap['require_sync'] = self.require_sync
+        if self.require_sync:
+            snap['committed_val'] = self.committed_val
+        snap['fields'] = tuple((name, start_bit, stop_bit, value) for
+                               name, (start_bit, stop_bit, value) in self.fields.items())
+        snap['value'] = self.value
+        return snap
 
     def get_by_field(self, name):
         """
