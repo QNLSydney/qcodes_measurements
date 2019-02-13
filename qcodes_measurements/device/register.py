@@ -32,7 +32,7 @@ class Register(Metadatable):
         self.length = length
         self.address = address
         self.require_sync = require_sync
-        self.committed_val = None
+        self._committed_val = None
 
         self.fields = {}
         self.bits = [None]*self.length
@@ -171,6 +171,15 @@ class Register(Metadatable):
         return value & ((1 << self.length)-1)
 
     @property
+    def committed_val(self):
+        """
+        Returns the last committed value.
+        """
+        if not self.require_sync:
+            return self.value
+        return self._committed_val
+
+    @property
     def dirty(self):
         """
         Checks whether the register is in sync with the device.
@@ -190,4 +199,4 @@ class Register(Metadatable):
         """
         Marks the register as clean (committed to the device).
         """
-        self.committed_val = self.value
+        self._committed_val = self.value
