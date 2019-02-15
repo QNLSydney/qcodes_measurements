@@ -254,8 +254,8 @@ def do0d(*param_meas,
                 # Update plot titles to include the ID
                 win.run_id = datasaver.run_id
                 win.win_title += "{} ".format(datasaver.run_id)
-                for plot_item in win.items:
-                    plot_item.plot_title += " (id: %d)" % datasaver.run_id
+                for plotitem in plots:
+                    plotitem.plot_title += " (id: %d)" % datasaver.run_id
 
             _run_functions(ateach, param_vals=tuple())
             # Read out each parameter
@@ -422,7 +422,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                 # Update plot titles to include the ID
                 win.run_id = datasaver.run_id
                 win.win_title += "{} ".format(datasaver.run_id)
-                for plotitem in win.items:
+                for plotitem, _, _ in plots:
                     plotitem.plot_title += " (id: %d)" % datasaver.run_id
 
             # Then, run the actual sweep
@@ -595,7 +595,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             # Update plot titles
             win.run_id = datasaver.run_id
             win.win_title += "{} ".format(datasaver.run_id)
-            for plotitem in win.items:
+            for plotitem, _, _ in plots:
                 plotitem.plot_title += " (id: %d)" % datasaver.run_id
 
             for i, set_point1 in enumerate(set_points1):
@@ -632,8 +632,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
 
             # At the end, do one last update to make sure that all data is displayed.
             if win is not None:
-                for i in range(len(param_meas)):
-                    plots[i].update(plots[i].data, True)
+                for plotitem, plotdata, data in plots:
+                    plotdata.update(data, True)
     finally:
         # Set paramters back to start
         if setback:
