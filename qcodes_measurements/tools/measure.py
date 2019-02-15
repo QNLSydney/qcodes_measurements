@@ -9,6 +9,8 @@ from qcodes.dataset.measurements import Measurement
 
 from .. import pyplot, plot_tools
 
+Setpoint = namedtuple("Setpoint", ("param", "index", "value"))
+
 def _flush_buffers(*params):
     """
     If possible, flush the VISA buffer of the instrument of the
@@ -35,7 +37,7 @@ def _flush_buffers(*params):
 
 def _run_function(function, param_vals=None):
     """
-    Run a function, passing param_vals as an optional tuple of (*(param, param_val))
+    Run a function, passing param_vals as an optional tuple of (*(Setpoint(param, index, param_val)))
     Note: This function assumes we've already unwrapped lists using _run_functions.
     """
     if callable(function):
@@ -430,7 +432,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                 param_set.set(set_point)
                 if wallcontrol is not None:
                     wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
-                _run_functions(ateach, param_vals=((param_set, set_point)))
+                _run_functions(ateach, param_vals=(Setpoint(param_set, i, set_point),))
                 # Read out each parameter
                 for p, parameter in enumerate(param_meas):
                     output[p][1] = parameter.get()
@@ -603,11 +605,11 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                 param_set1.set(set_point1)
                 if wallcontrol is not None:
                     wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
-                _run_functions(ateachcol, param_vals=((param_set1, set_point1)))
+                _run_functions(ateachcol, param_vals=(Setpoint(param_set1, i, set_point1),))
                 for j, set_point2 in enumerate(set_points2):
                     param_set2.set(set_point2)
-                    _run_functions(ateach, param_vals=((param_set1, set_point1),
-                                                       (param_set2, set_point2)))
+                    _run_functions(ateach, param_vals=(Setpoint(param_set1, i, set_point1),
+                                                       Setpoint(param_set2, j, set_point2)))
                     for p, parameter in enumerate(param_meas):
                         output[p][1] = parameter.get()
                         fdata = plots[p].data
