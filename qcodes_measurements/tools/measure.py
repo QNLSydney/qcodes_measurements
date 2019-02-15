@@ -2,6 +2,7 @@ import logging as log
 from inspect import signature
 from collections import namedtuple
 
+from wrapt import decorator
 import numpy as np
 
 from qcodes.instrument.visa import VisaInstrument
@@ -10,6 +11,7 @@ from qcodes.dataset.measurements import Measurement
 from .. import pyplot, plot_tools
 
 Setpoint = namedtuple("Setpoint", ("param", "index", "value"))
+LivePlotDataItem = namedtuple("LivePlotDataItem", ("plot", "plotdata", "data"))
 
 def _flush_buffers(*params):
     """
@@ -99,54 +101,54 @@ def _get_window(append, size=(1000, 600)):
                          " or true to append to the last plot")
     return win
 
-def _plot_sweep(sweep_func):
+@decorator
+def _plot_sweep(sweep_func, _, args, kwargs):
     """
-    Save figure at end of sweep, irrespective of whether the sweep is cancelled.
+    Create plot window and save figure at end irrespective of whether the sweep is cancelled.
+
+    Args:
+        save (Optional[bool]): Whether or not a figure should be saved. If this is true,
+        the result of the sweep is saved into the "figures" folder.
+
+        plot (Optional[bool]): If this value is set to False, the trace will not be live plotted.
+
+        append (Optional[Union[bool, PlotWindow]]): If this parameter is not false, the trace
+        will be appended to an existing window. Either the plot window should be given, or the
+        last plot window created will be used.
+
+        *args, **kwargs: Parameters passed to the sweep function
     """
-    def _plot_wrapper(*args, plot=True, append=None, save=True, **kwargs):
-        """
-        Save figure at the end of a sweep. Wraps plotting functions.
+    plot = kwargs.get("plot", True)
+    append = kwargs.get("append", None)
+    save = kwargs.get("save", True)
 
-        Args:
-            save (Optional[bool]): Whether or not a figure should be saved. If this is true,
-            the result of the sweep is saved into the "figures" folder.
+    # Create a plot window
+    if plot:
+        win = _get_window(append)
+    else:
+        win = None
 
-            plot (Optional[bool]): If this value is set to False, the trace will not be live plotted.
-
-            append (Optional[Union[bool, PlotWindow]]): If this parameter is not false, the trace
-            will be appended to an existing window. Either the plot window should be given, or the
-            last plot window created will be used.
-
-            *args, **kwargs: Parameters passed to the sweep function
-        """
-        # Create a plot window
-        if plot:
-            win = _get_window(append)
-        else:
-            win = None
-
-        # Try run the sweep, passing the plot window to the sweep function for update
-        run_id = None
-        try:
-            if append is not None and append:
-                append = True
-            run_id = sweep_func(*args, win=win, append=append, **kwargs)
-        finally:
-            # Save the plot if a save was requested
-            if win is not None and save:
-                # Check if the sweep completed successfully. If not, try and pull the run_id from the window.
-                # If it is still none, no data was taken, let's just bail out without saving
-                if run_id is None:
-                    run_id = getattr(win, "run_id", None)
-                if run_id is not None:
-                    try:
-                        plot_tools.save_figure(win, run_id)
-                    except Exception:
-                        print(f"Failed to save figure {run_id}")
-        return run_id, win
-    return _plot_wrapper
-
-LivePlotDataItem = namedtuple("LivePlotDataItem", ("plot", "plotdata", "data"))
+    # Try run the sweep, passing the plot window to the sweep function for update
+    run_id = None
+    try:
+        if append is not None and append:
+            append = True
+        kwargs["win"] = win
+        kwargs["append"] = append
+        run_id = sweep_func(*args, **kwargs)
+    finally:
+        # Save the plot if a save was requested
+        if win is not None and save:
+            # Check if the sweep completed successfully. If not, try and pull the run_id from the window.
+            # If it is still none, no data was taken, let's just bail out without saving
+            if run_id is None:
+                run_id = getattr(win, "run_id", None)
+            if run_id is not None:
+                try:
+                    plot_tools.save_figure(win, run_id)
+                except Exception:
+                    print(f"Failed to save figure {run_id}")
+    return run_id, win
 
 @_plot_sweep
 def do0d(*param_meas,
@@ -293,7 +295,6 @@ def do0d(*param_meas,
 def linear1d(param_set, start, stop, num_points, delay, *param_meas,
              win=None, append=False,
              atstart=None, ateach=None, atend=None,
-             wallcontrol=None, wallcontrol_slope=None,
              setback=False,
              write_period=120):
     """
@@ -338,13 +339,6 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         to be run at the end of a trace. This is run AFTER the data is saved into the database,
         and after parameters are set back to their starting points (if setback is True), and
         can therefore be used to read the data that was taken and potentially do some post analysis.
-
-        wallcontrol (Optional[Parameter]): An optional parameter that should be compensated as the measurement
-        is performed. For example, this is useful for applying a compensating voltage on a sensor while other
-        gates are swept.
-
-        wallcontrol_slope (Optional[Union[int, float]]): The value of the compensation that should be
-        applied to the wallcontrol parameter. Note: This must be given if wallcontrol is set.
 
         setback (Optional[bool]): If this is True, the setpoint parameter is returned to its starting
         value at the end of the sweep.
@@ -411,11 +405,6 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
             else:
                 plotitem.update_axes(param_set, parameter)
 
-    # Save wall control parameters if wall control is requested
-    if wallcontrol is not None:
-        wallcontrol_start = wallcontrol.get()
-        step = (stop-start)/num_points
-
     # Run the sweep
     meas.write_period = write_period
     try:
@@ -430,8 +419,6 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
             # Then, run the actual sweep
             for i, set_point in enumerate(set_points):
                 param_set.set(set_point)
-                if wallcontrol is not None:
-                    wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
                 _run_functions(ateach, param_vals=(Setpoint(param_set, i, set_point),))
                 # Read out each parameter
                 for p, parameter in enumerate(param_meas):
@@ -456,9 +443,6 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
     finally:
         # Set back to start at the end of the measurement
         if setback:
-            # Reset wall control
-            if wallcontrol is not None:
-                wallcontrol.set(wallcontrol_start)
             param_set.set(start)
 
         _run_functions(atend) # Run functions at the end
@@ -472,7 +456,6 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
              *param_meas,
              win=None, append=False,
              atstart=None, ateachcol=None, ateach=None, atend=None,
-             wallcontrol=None, wallcontrol_slope=None,
              setback=False, write_period=120):
     """
     Run a sweep of a single parameter, between start and stop, with a delay after settings
@@ -526,13 +509,6 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         and after parameters are set back to their starting points (if setback is True), and
         can therefore be used to read the data that was taken and potentially do some post analysis.
 
-        wallcontrol (Optional[Parameter]): An optional parameter that should be compensated as the measurement
-        is performed. For example, this is useful for applying a compensating voltage on a sensor while other
-        gates are swept.
-
-        wallcontrol_slope (Optional[Union[int, float]]): The value of the compensation that should be
-        applied to the wallcontrol parameter. Note: This must be given if wallcontrol is set.
-
         setback (Optional[bool]): If this is True, the setpoint parameter is returned to its starting
         value at the end of the sweep.
 
@@ -585,12 +561,6 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                 plotdata.update_histogram_axis(parameter)
             plots.append(LivePlotDataItem(plotitem, plotdata, np.ndarray((num_points1, num_points2))))
 
-
-    # Set wall control parameters if necessary
-    if wallcontrol is not None:
-        wallcontrol_start = wallcontrol.get()
-        step = (stop1-start1)/num_points1
-
     meas.write_period = write_period
     try:
         with meas.run() as datasaver:
@@ -603,8 +573,6 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             for i, set_point1 in enumerate(set_points1):
                 param_set2.set(start2)
                 param_set1.set(set_point1)
-                if wallcontrol is not None:
-                    wallcontrol.set(wallcontrol_start + i*step*wallcontrol_slope)
                 _run_functions(ateachcol, param_vals=(Setpoint(param_set1, i, set_point1),))
                 for j, set_point2 in enumerate(set_points2):
                     param_set2.set(set_point2)
@@ -639,8 +607,6 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     finally:
         # Set paramters back to start
         if setback:
-            if wallcontrol is not None:
-                wallcontrol.set(wallcontrol_start)
             param_set1.set(start1)
             param_set2.set(start2)
 
