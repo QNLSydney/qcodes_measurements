@@ -259,7 +259,7 @@ def do0d(*param_meas,
                 win.run_id = datasaver.run_id
                 win.win_title += "{} ".format(datasaver.run_id)
                 for plotitem in plots:
-                    plotitem.plot_title += " (id: %d)" % datasaver.run_id
+                    plotitem.plot.plot_title += " (id: %d)" % datasaver.run_id
 
             _run_functions(ateach, param_vals=tuple())
             # Read out each parameter
@@ -413,8 +413,8 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                 # Update plot titles to include the ID
                 win.run_id = datasaver.run_id
                 win.win_title += "{} ".format(datasaver.run_id)
-                for plotitem, _, _ in plots:
-                    plotitem.plot_title += " (id: %d)" % datasaver.run_id
+                for plotitem in plots:
+                    plotitem.plot.plot_title += " (id: %d)" % datasaver.run_id
 
             # Then, run the actual sweep
             for i, set_point in enumerate(set_points):
@@ -567,8 +567,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             # Update plot titles
             win.run_id = datasaver.run_id
             win.win_title += "{} ".format(datasaver.run_id)
-            for plotitem, _, _ in plots:
-                plotitem.plot_title += " (id: %d)" % datasaver.run_id
+            for plotitem in plots:
+                plotitem.plot.plot_title += " (id: %d)" % datasaver.run_id
 
             for i, set_point1 in enumerate(set_points1):
                 param_set2.set(start2)
