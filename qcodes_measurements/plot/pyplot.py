@@ -61,39 +61,7 @@ def _auto_wrap(f):
             return RPGWrappedBase.autowrap(val)
     return wrap
 
-def _start_remote():
-    if len(mp.QtProcess.handlers) == 0:
-        proc = mp.QtProcess()
-        this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
-        _set_defaults(this.rpg)
-    else:
-        raise ChildProcessImportError(f"Importing pyplot from child process")
 
-def _restart_remote():
-    if len(mp.QtProcess.handlers) == 0:
-        _start_remote()
-    else:
-        for pid in mp.QtProcess.handlers:
-            try:
-                proc = mp.QtProcess.handlers[pid]
-                if isinstance(proc, mp.QtProcess):
-                    if not proc.exited:
-                        mp.QtProcess.handlers[pid].join()
-                else:
-                    raise ChildProcessImportError(f"Importing pyplot from child process")
-            except mp.ClosedError:
-                continue
-        mp.QtProcess.handlers.clear()
-        _start_remote()
-
-# --- ON STARTUP - Create a remote Qt process used for plotting in the background
-# Check if a QApplication exists. It will not if we are not running from spyder...
-if PyQt5.QtGui.QApplication.instance() is None:
-    app = PyQt5.QtGui.QApplication([])
-else:
-    app = PyQt5.QtGui.QApplication.instance()
-
-_start_remote()
 
 class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
     # Keep track of children so they aren't recomputed each time
@@ -573,18 +541,18 @@ class ColorMap(RPGWrappedBase):
 
 ## Transfer color scales to remote process, truncating steps to 16 if necessary
 # maps = ColorMap.get_remote_list()._getValue()
-ColorMap.get_remote_list().clear()
-for color, cdata in colors.__data__.items():
-    step = ceil(len(cdata) / 16)
-    rcmap = ColorMap(name=color,
-                     pos=linspace(0.0, 1.0, len(cdata[::step])),
-                     color=cdata[::step])
-    if color == 'viridis':
-        rcmap = ColorMap(name=color+"_nlin",
-                         pos=[0] + list(1/(x**1.5) for x in range(15, 0, -1)),
-                         color=cdata[::step])
-    del cdata, step, rcmap, color
-rcmap = ColorMap.get_color_map('viridis')
+#ColorMap.get_remote_list().clear()
+#for color, cdata in colors.__data__.items():
+#    step = ceil(len(cdata) / 16)
+#    rcmap = ColorMap(name=color,
+#                     pos=linspace(0.0, 1.0, len(cdata[::step])),
+#                     color=cdata[::step])
+#    if color == 'viridis':
+#        rcmap = ColorMap(name=color+"_nlin",
+#                         pos=[0] + list(1/(x**1.5) for x in range(15, 0, -1)),
+#                         color=cdata[::step])
+#    del cdata, step, rcmap, color
+#rcmap = ColorMap.get_color_map('viridis')
 
 class LegendItem(RPGWrappedBase):
     """
@@ -738,13 +706,15 @@ class ImageItemWithHistogram(ExtendedImageItem):
     # Local Variables
     _histogram = None
 
-    def __init__(self, setpoint_x, setpoint_y, colormap=rcmap, *args, **kwargs):
+    def __init__(self, setpoint_x, setpoint_y, colormap=None, *args, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
         self._histogram = None
 
         # Set colormap
         if colormap is not None:
             self.colormap = colormap
+        else:
+            self.colormap = this.rcmap
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
@@ -800,3 +770,52 @@ class TableWidget(RPGWrappedBase):
     Table
     """
     _base = "TableWidget"
+
+def _start_remote():
+    if len(mp.QtProcess.handlers) == 0:
+        proc = mp.QtProcess()
+        this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
+        _set_defaults(this.rpg)
+
+        ## Transfer color scales to remote process, truncating steps to 16 if necessary
+        # maps = ColorMap.get_remote_list()._getValue()
+        ColorMap.get_remote_list().clear()
+        for color, cdata in colors.__data__.items():
+            step = ceil(len(cdata) / 16)
+            rcmap = ColorMap(name=color,
+                            pos=linspace(0.0, 1.0, len(cdata[::step])),
+                            color=cdata[::step])
+            if color == 'viridis':
+                rcmap = ColorMap(name=color+"_nlin",
+                                pos=[0] + list(1/(x**1.5) for x in range(15, 0, -1)),
+                                color=cdata[::step])
+            del cdata, step, rcmap, color
+        this.rcmap = ColorMap.get_color_map('viridis')
+    else:
+        raise ChildProcessImportError(f"Importing pyplot from child process")
+
+def _restart_remote():
+    if len(mp.QtProcess.handlers) == 0:
+        _start_remote()
+    else:
+        for pid in mp.QtProcess.handlers:
+            try:
+                proc = mp.QtProcess.handlers[pid]
+                if isinstance(proc, mp.QtProcess):
+                    if not proc.exited:
+                        mp.QtProcess.handlers[pid].join()
+                else:
+                    raise ChildProcessImportError(f"Importing pyplot from child process")
+            except mp.ClosedError:
+                continue
+        mp.QtProcess.handlers.clear()
+        _start_remote()
+
+# --- ON STARTUP - Create a remote Qt process used for plotting in the background
+# Check if a QApplication exists. It will not if we are not running from spyder...
+if PyQt5.QtGui.QApplication.instance() is None:
+    this.app = PyQt5.QtGui.QApplication([])
+else:
+    this.app = PyQt5.QtGui.QApplication.instance()
+
+_start_remote()
