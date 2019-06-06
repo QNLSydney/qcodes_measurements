@@ -23,7 +23,8 @@ setup(
         'wrapt>=1.10.11',
         'PyQt5>=5.10.1',
         'scipy>=1.1.0',
-        'numpy>=1.14.3'
+        'numpy>=1.14.3',
+        'tabulate>=0.8.3'
     ],
     python_requires='>=3'
 )
