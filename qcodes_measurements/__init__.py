@@ -10,6 +10,7 @@ try:
     # Import shortcuts to measurements
     from .tools.midas import midasLinear1d
     from .tools.measure import do0d, linear1d, linear2d
+    from .tools.time import sweep_time
     from .tools.parameters import FilterWrapper, CutWrapper, SmoothFilter, DiffFilter, MeanFilter, ReduceFilterWrapper
     from .tools.snapshot import get_snapshot, pprint_dev_gates
 
