@@ -160,12 +160,8 @@ def do0d(*param_meas,
 
     Args:
         *param_meas (Iterable[Parameter]): A list of the parameters to be measured at each of the
-        set points. If any of the parameters given are ArrayParameters then a 2D sweep will be
+        set points. If any of the parameters given are ArrayParameters then a 1D sweep will be
         taken on that parameter, using the setpoints given in that ArrayParamter.
-        Note: At the current time, there is an assumption that the setpoints do NOT change during
-        a measurement, and that points are uniformly distributed for the purposes of plotting.
-        If the points are not uniformly distributed, data is correctly saved, however the live
-        plot will be distorted.
 
         win (Optional[PlotWindow]): The plot window to add plots to. If this value is None, the sweep
         will not be live plotted.
