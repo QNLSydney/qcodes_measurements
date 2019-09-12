@@ -86,7 +86,7 @@ def _get_window(append, size=(1000, 600)):
         is not false, this parameter has no effect.
     """
     # Set up a plotting window
-    if append is None or not append:
+    if append is None or append is False:
         win = pyplot.PlotWindow()
         win.win_title = 'ID: '
         win.resize(*size)
