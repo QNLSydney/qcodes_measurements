@@ -5,13 +5,12 @@ from math import ceil
 import PyQt5
 import re
 
-import pyqtgraph.multiprocess as mp
-
 import numpy as np
 from numpy import linspace, ndarray
 
 from qcodes.instrument.parameter import _BaseParameter
 
+from . import remote
 from ..plot import ChildProcessImportError, colors
 
 # Get access to module level variables
@@ -44,7 +43,7 @@ def _ensure_val(f):
     """
     def wrap(*args, **kwargs):
         val = f(*args, **kwargs)
-        if isinstance(val, mp.remoteproxy.ObjectProxy):
+        if isinstance(val, remote.ObjectProxy):
             return val._getValue()
         return val
     return wrap
@@ -62,8 +61,7 @@ def _auto_wrap(f):
     return wrap
 
 
-
-class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
+class RPGWrappedBase(remote.ObjectProxy):
     # Keep track of children so they aren't recomputed each time
     _subclass_types = None
 
@@ -81,14 +79,16 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
         self._parent = None
         self._remote_functions = {}
         self._remote_function_options = {}
+
+        # Check that the remote process has been started, and is still alive
+        if getattr(this, "rpg", None) is None:
+            _start_remote()
+        if this.rpg._handler.proc.is_alive() is False:
+            _restart_remote()
+
         if '_base' in self.__class__.__dict__:
-            try:
-                base = getattr(this.rpg, self.__class__._base)
-                base = base(*args, **kwargs)
-            except mp.ClosedError:
-                _restart_remote()
-                base = getattr(this.rpg, self.__class__._base)
-                base = base(*args, **kwargs)
+            base = getattr(this.rpg, self.__class__._base)
+            base = base(*args, **kwargs)
             self._base_inst = base
         else:
             raise TypeError("Base instance not defined. Don't know how to create remote object.")
@@ -103,7 +103,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
 
     @classmethod
     def wrap(cls, instance, *args, **kwargs):
-        if not isinstance(instance, mp.remoteproxy.ObjectProxy):
+        if not isinstance(instance, remote.ObjectProxy):
             raise TypeError("We can only wrap ObjectProxies")
 
         # Create an empty instance of RPGWrappedBase,
@@ -137,7 +137,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             append_subclasses(RPGWrappedBase._subclass_types, RPGWrappedBase)
 
         # Then, if we have an object proxy, wrap it if it is in the list of wrappable types
-        if isinstance(inst, mp.remoteproxy.ObjectProxy):
+        if isinstance(inst, remote.ObjectProxy):
             if isinstance(inst, RPGWrappedBase):
                 return inst
             typestr = inst._typeStr.split()[0].strip('< ').split('.')[-1]
@@ -159,7 +159,7 @@ class RPGWrappedBase(mp.remoteproxy.ObjectProxy):
             # Try to translate to one of the friendly names
             res = RPGWrappedBase.autowrap(res)
             # Add the result to the items list if returned
-            if isinstance(res, mp.remoteproxy.ObjectProxy):
+            if isinstance(res, remote.ObjectProxy):
                 # Keep track of all objects that are added to a window, since
                 # we can't get them back from the remote later
                 #if res not in self._items:
@@ -772,50 +772,44 @@ class TableWidget(RPGWrappedBase):
     _base = "TableWidget"
 
 def _start_remote():
-    if len(mp.QtProcess.handlers) == 0:
-        proc = mp.QtProcess()
-        this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
-        _set_defaults(this.rpg)
-
-        ## Transfer color scales to remote process, truncating steps to 16 if necessary
-        # maps = ColorMap.get_remote_list()._getValue()
-        ColorMap.get_remote_list().clear()
-        for color, cdata in colors.__data__.items():
-            step = ceil(len(cdata) / 16)
-            rcmap = ColorMap(name=color,
-                            pos=linspace(0.0, 1.0, len(cdata[::step])),
-                            color=cdata[::step])
-            if color == 'viridis':
-                rcmap = ColorMap(name=color+"_nlin",
-                                pos=[0] + list(1/(x**1.5) for x in range(15, 0, -1)),
-                                color=cdata[::step])
-            del cdata, step, rcmap, color
-        this.rcmap = ColorMap.get_color_map('viridis')
+    # Check that a QApplication has been created
+    if PyQt5.QtGui.QApplication.instance() is None:
+        this.app = PyQt5.QtGui.QApplication([])
     else:
-        raise ChildProcessImportError(f"Importing pyplot from child process")
+        this.app = PyQt5.QtGui.QApplication.instance()
+
+    proc = remote.QtProcess(debug=True)
+    this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
+    _set_defaults(this.rpg)
+
+    ## Transfer color scales to remote process, truncating steps to 16 if necessary
+    # maps = ColorMap.get_remote_list()._getValue()
+    ColorMap.get_remote_list().clear()
+    for color, cdata in colors.__data__.items():
+        step = ceil(len(cdata) / 16)
+        rcmap = ColorMap(name=color,
+                        pos=linspace(0.0, 1.0, len(cdata[::step])),
+                        color=cdata[::step])
+        if color == 'viridis':
+            rcmap = ColorMap(name=color+"_nlin",
+                            pos=[0] + list(1/(x**1.5) for x in range(15, 0, -1)),
+                            color=cdata[::step])
+        del cdata, step, rcmap, color
+    this.rcmap = ColorMap.get_color_map('viridis')
 
 def _restart_remote():
-    if len(mp.QtProcess.handlers) == 0:
+    if len(remote.QtProcess.handlers) == 0:
         _start_remote()
     else:
-        for pid in mp.QtProcess.handlers:
+        for pid in remote.QtProcess.handlers:
             try:
-                proc = mp.QtProcess.handlers[pid]
-                if isinstance(proc, mp.QtProcess):
+                proc = remote.QtProcess.handlers[pid]
+                if isinstance(proc, remote.QtProcess):
                     if not proc.exited:
-                        mp.QtProcess.handlers[pid].join()
+                        remote.QtProcess.handlers[pid].join()
                 else:
                     raise ChildProcessImportError(f"Importing pyplot from child process")
-            except mp.ClosedError:
+            except remote.ClosedError:
                 continue
-        mp.QtProcess.handlers.clear()
+        remote.QtProcess.handlers.clear()
         _start_remote()
-
-# --- ON STARTUP - Create a remote Qt process used for plotting in the background
-# Check if a QApplication exists. It will not if we are not running from spyder...
-if PyQt5.QtGui.QApplication.instance() is None:
-    this.app = PyQt5.QtGui.QApplication([])
-else:
-    this.app = PyQt5.QtGui.QApplication.instance()
-
-_start_remote()
