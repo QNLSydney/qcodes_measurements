@@ -778,7 +778,7 @@ def _start_remote():
     else:
         this.app = PyQt5.QtGui.QApplication.instance()
 
-    proc = remote.QtProcess(debug=True)
+    proc = remote.QtProcess(debug=False)
     this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
     _set_defaults(this.rpg)
 
