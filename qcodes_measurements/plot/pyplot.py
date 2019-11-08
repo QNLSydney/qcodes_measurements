@@ -11,7 +11,7 @@ from numpy import linspace, ndarray
 from qcodes.instrument.parameter import _BaseParameter
 
 from . import remote
-from ..plot import ChildProcessImportError, colors
+from ..plot import colors
 
 # Get access to module level variables
 this = sys.modules[__name__]
@@ -807,8 +807,6 @@ def _restart_remote():
                 if isinstance(proc, remote.QtProcess):
                     if not proc.exited:
                         remote.QtProcess.handlers[pid].join()
-                else:
-                    raise ChildProcessImportError(f"Importing pyplot from child process")
             except remote.ClosedError:
                 continue
         remote.QtProcess.handlers.clear()

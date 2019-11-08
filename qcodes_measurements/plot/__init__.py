@@ -1,3 +1,0 @@
-
-class ChildProcessImportError(RuntimeError):
-    pass
