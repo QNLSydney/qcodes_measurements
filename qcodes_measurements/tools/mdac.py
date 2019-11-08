@@ -8,7 +8,7 @@ from MDAC import MDACChannel
 
 from qdev_wrappers.parameters import DelegateParameter
 
-from .. import linear1d, linear2d
+from .measure import linear1d, linear2d
 from ..plot import plot_tools
 
 def setup(mdac, ohmics, gates, shorts, bias=None, trigger=None, microd_high=48):
@@ -165,88 +165,6 @@ def ramp(mdac_channel, to, sure=False):
         mdac_channel = mdac_channel.voltage
     while not np.isclose(to, mdac_channel(), 1e-3):
         time.sleep(0.01)
-
-def linear1d_ramp(mdac_channel, start, stop, num_points, delay, *param_meas,
-                  rampback=False, wallcontrol=None, **kwargs):
-    """
-    Pull out the ramp parameter from the mdac and do a 1d sweep
-    """
-
-    # Save wallcontrol parameters
-    if wallcontrol is not None:
-        wallcontrol_start = wallcontrol()
-
-    ramp(mdac_channel, start)
-    trace_id = linear1d(mdac_channel, start, stop, num_points, delay, *param_meas, **kwargs, wallcontrol=wallcontrol, save=False)
-
-    # Add gate labels
-    run_id, win = trace_id
-    if "append" not in kwargs or not kwargs['append']:
-        plot_tools.add_gate_label(win, run_id)
-    plot_tools.save_figure(win, run_id)
-
-    # Rampback if requested
-    if rampback:
-        ramp(mdac_channel, start)
-        if wallcontrol:
-            ramp(wallcontrol, wallcontrol_start)
-            wallcontrol()
-        mdac_channel()
-
-    return trace_id
-
-def linear2d_ramp(mdac_channel1, start1, stop1, num_points1, delay1,
-             mdac_channel2, start2, stop2, num_points2, delay2,
-             *param_meas, rampback=False, wallcontrol=None, **kwargs):
-
-    # Save wallcontrol parameters
-    if wallcontrol is not None:
-        wallcontrol_start = wallcontrol()
-
-    # Pull out MDAC chanels
-    ch1 = ensure_channel(mdac_channel1)
-    ch2 = ensure_channel(mdac_channel2)
-
-    # Do some validation
-    if start1 == stop1:
-        raise ValueError("Start and stop are the same for ch1")
-    if start2 == stop2:
-        raise ValueError("Start and stop are the same for ch2")
-    if ch1 == ch2:
-        raise ValueError("ch1 and ch2 are the same")
-
-    # Set labels correctly
-    old_label = (mdac_channel1.label, mdac_channel2.label)
-    ch1.ramp.label = mdac_channel1.label
-    ch2.ramp.label = mdac_channel2.label
-
-    try:
-        ramp(mdac_channel1, start1)
-        ramp(mdac_channel2, start2)
-        range2 = abs(start2 - stop2)
-        delay1 += range2/ch2.rate()
-        trace_id = linear2d(mdac_channel1, start1, stop1, num_points1, delay1,
-                            ch2.ramp, start2, stop2, num_points2, delay2,
-                            *param_meas, **kwargs, wallcontrol=wallcontrol, save=False)
-    finally:
-        # Restore labels
-        ch1.ramp.label = old_label[0]
-        ch2.ramp.label = old_label[1]
-
-    # Add gate labels
-    run_id, win = trace_id
-    if "append" not in kwargs or not kwargs['append']:
-        plot_tools.add_gate_label(win, run_id)
-    plot_tools.save_figure(win, run_id)
-
-    # Rampback if requested
-    if rampback:
-        ramp(mdac_channel1, start1)
-        ramp(mdac_channel2, start2)
-        if wallcontrol:
-            ramp(wallcontrol, wallcontrol_start)
-
-    return trace_id
 
 def change_filter_all(mdac, filter):
     """
