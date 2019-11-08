@@ -8,7 +8,7 @@ import numpy as np
 from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
 
-from .. import pyplot, plot_tools
+from ..plot import pyplot, plot_tools
 
 Setpoint = namedtuple("Setpoint", ("param", "index", "value"))
 LivePlotDataItem = namedtuple("LivePlotDataItem", ("plot", "plotdata", "data"))

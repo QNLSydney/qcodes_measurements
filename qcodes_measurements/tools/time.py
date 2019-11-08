@@ -3,7 +3,7 @@ import numpy as np
 
 from qcodes.dataset.measurements import Measurement
 
-from .. import pyplot, plot_tools
+from ..plot import pyplot, plot_tools
 from .measure import Setpoint, _flush_buffers, _run_functions, _plot_sweep, _get_window
 
 @_plot_sweep

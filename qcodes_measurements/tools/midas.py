@@ -6,7 +6,7 @@ from collections import Iterable
 from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
 
-from .. import pyplot, plot_tools
+from ..plot import pyplot, plot_tools
 from qcodes_measurements.tools.measure import _run_functions
 
 run_id = 0
