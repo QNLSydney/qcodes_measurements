@@ -273,7 +273,7 @@ def do0d(*param_meas,
 
             # If stacked, make traces different
             if stack:
-                plotitem.makeTracesDifferent()
+                plots[0].plot.makeTracesDifferent()
 
             # Save data
             datasaver.add_result(*output)
