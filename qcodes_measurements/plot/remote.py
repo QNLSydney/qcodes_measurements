@@ -79,11 +79,17 @@ class Process(RemoteEventHandler):
             ppid=pid,
             debug=procDebug,
             )
+
+        # Start the process. We'll set the file that multiprocessing loads to this file
+        old_main = getattr(sys.modules['__main__'], '__file__', None)
+        sys.modules['__main__'].__file__ = __file__
         self.proc = multiprocessing.Process(target=target, kwargs=data)
         self.proc.start()
+        if old_main is not None:
+            sys.modules['__main__'].__file__ = old_main
         
         ## open connection for remote process
-        self.debugMsg('Listening for child process on port %d, authkey=%s..' % (port, repr(authkey)))
+        self.debugMsg('Listening for child process (pid: %d) on port %d, authkey=%s' % (self.proc.pid, port, repr(authkey)))
         while True:
             try:
                 conn = l.accept()
@@ -120,9 +126,25 @@ class Process(RemoteEventHandler):
 def startEventLoop(name, port, authkey, ppid, debug=False):
     if debug:
         import os
+        import sys
+        sys.stdout = open("debug.txt", "w")
+        sys.stderr = sys.stdout
         cprint.cout(debug, '[%d] connecting to server at port localhost:%d, authkey=%s..\n' 
                     % (os.getpid(), port, repr(authkey)), -1)
-    conn = multiprocessing.connection.Client(('localhost', int(port)), authkey=authkey)
+    tries = 0
+    while True:
+        try:
+            conn = multiprocessing.connection.Client(('localhost', int(port)), authkey=authkey)
+        except (ConnectionRefusedError, ConnectionResetError):
+            tries += 1
+            if tries == 3:
+                if debug:
+                    cprint.cout(debug, '[%d] failed to connect to parent\n' % os.getpid(), -1)
+                return
+            else:
+                time.sleep(1)
+                continue
+        break
     if debug:
         cprint.cout(debug, '[%d] connected; starting remote proxy.\n' % os.getpid(), -1)
 
@@ -217,8 +239,26 @@ class QtProcess(Process):
 def startQtEventLoop(name, port, authkey, ppid, debug=False):
     if debug:
         import os
+        import sys
+        sys.stdout = open("debug.txt", "w")
+        sys.stderr = sys.stdout
         cprint.cout(debug, '[%d] connecting to server at port localhost:%d, authkey=%s..\n' % (os.getpid(), port, repr(authkey)), -1)
-    conn = multiprocessing.connection.Client(('localhost', int(port)), authkey=authkey)
+    tries = 0
+    while True:
+        try:
+            conn = multiprocessing.connection.Client(('localhost', int(port)), authkey=authkey)
+        except (ConnectionRefusedError, ConnectionResetError) as e:
+            tries += 1
+            if tries == 3:
+                if debug:
+                    cprint.cout(debug, '[%d] failed to connect to parent\n' % os.getpid(), -1)
+                return
+            else:
+                if debug:
+                    cprint.cout(debug, "[%d] failed to connect to parent %d times, with exception %r" % (os.getpid(), tries, e), -1)
+                time.sleep(1)
+                continue
+        break
     if debug:
         cprint.cout(debug, '[%d] connected; starting remote proxy.\n' % os.getpid(), -1)
     from pyqtgraph.Qt import QtGui, QtCore
