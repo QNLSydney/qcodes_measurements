@@ -533,6 +533,9 @@ class ExtendedPlotDataItem(PlotDataItem):
         self.colorDialog.setOption(QtGui.QColorDialog.DontUseNativeDialog, True)
         self.colorDialog.colorSelected.connect(self.colorSelected)
 
+        # Store x-setpoint, since we may add nan values back in
+        self.setpoint_x = None
+
     def getContextMenus(self, *, rect=None, event=None):
         if self.menu is None:
             self.menu = QtGui.QMenu()
@@ -564,7 +567,21 @@ class ExtendedPlotDataItem(PlotDataItem):
         self.setPen(color)
 
     def update(self, yData):
-        self.setData(x=self.xData, y=yData)
+        # Filter out nan values, due to https://github.com/pyqtgraph/pyqtgraph/issues/1057
+        if not isinstance(yData, np.ndarray):
+            yData = np.array(yData)
+        notnan = ~(np.isnan(self.setpoint_x) | np.isnan(yData))
+        xData = self.setpoint_x[notnan]
+        yData = yData[notnan]
+
+        # Figure out which points are separated by nan values
+        nanind = np.where(~notnan)[0]
+        dontconnect = nanind + np.cumsum(np.full_like(nanind, -1))
+        connect = np.ones_like(xData, dtype=np.int32)
+        connect[dontconnect] = 0
+
+        # Update data
+        self.setData(x=xData, y=yData, connect=connect)
 
     def setName(self, name):
         self.opts['name'] = str(name)

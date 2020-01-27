@@ -619,6 +619,33 @@ class PlotDataItem(PlotData):
 class ExtendedPlotDataItem(PlotDataItem):
     _base = "ExtendedPlotDataItem"
 
+    def __init__(self, setpoint_x=None, *args, **kwargs):
+        super().__init__(setpoint_x, *args, **kwargs)
+        self.setpoint_x = _ensure_ndarray(setpoint_x)
+    
+    def __wrap__(self, *args, **kwargs):
+        super().__wrap__(*args, **kwargs)
+        if 'setpoint_x' in kwargs:
+            # If we know what our setpoints are, use them
+            self.setpoint_x = _ensure_ndarray(kwargs['setpoint_x'])
+
+    @property
+    def setpoint_x(self):
+        return self.setpoint_x
+    @setpoint_x.setter
+    def setpoint_x(self, val):
+        self._base_inst.setpoint_x = _ensure_ndarray(val)
+
+    @property
+    @_ensure_val
+    def xData(self):
+        return self._base_inst.xData
+    @xData.setter
+    def xData(self, val):
+        val = _ensure_ndarray(val)
+        self._base_inst.xData = val
+        self._base_inst.setpoint_x = val
+
     def update(self, data, *args, **kwargs):
         self._base_inst.update(data)
 
