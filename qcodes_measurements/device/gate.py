@@ -51,7 +51,7 @@ class Gate(Parameter):
         super().__init__(name=name,
                          label=label,
                          unit="V",
-                         vals=source.voltage.vals,
+                         vals=vals.Numbers(-2.5, 0),
                          **kwargs)
 
     @property
