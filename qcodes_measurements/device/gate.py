@@ -39,7 +39,7 @@ class Gate(Parameter):
         self.source = source
         self.rate = rate
         self.max_step = max_step
-        self._gate_mode = default_mode
+        self.gate_mode = default_mode
 
         # Check whether we have a hardware ramp
         if hasattr(source, "ramp"):
@@ -51,7 +51,7 @@ class Gate(Parameter):
         super().__init__(name=name,
                          label=label,
                          unit="V",
-                         vals=vals.Numbers(-2.5, 0),
+                         vals=self.vals,
                          **kwargs)
 
     @property
@@ -64,9 +64,11 @@ class Gate(Parameter):
 
     @gate_mode.setter
     def gate_mode(self, val):
-        if isinstance(val, str):
+        if isinstance(val, GateMode):
+            pass
+        elif isinstance(val, str):
             val = GateMode[val]
-        if not isinstance(val, GateMode):
+        else:
             raise TypeError(f"Invalid gate mode. Must be one of {tuple(GateMode)}.")
 
         self._gate_mode = val
@@ -90,7 +92,7 @@ class Gate(Parameter):
 
     @property
     def _latest(self):
-        return self.source.voltage._latest
+        return self.source.voltage.cache.get()
     @_latest.setter
     def _latest(self, val):
         pass
@@ -134,21 +136,22 @@ class Gate(Parameter):
         Validation handled by the set wrapper.
         """
         # Set the value if we are close
-        if isclose(value, self.source.voltage(), abs_tol=self.max_step):
+        if abs(value - self.source.voltage()) <= self.max_step:
             self.source.voltage(value)
             return
 
         # Otherwise ramp, using the hardware ramp if available
         # Two different ways to do it, with a ramp function or ramp parameter
+        scale = getattr(self, "scale", 1)
         if self.has_ramp:
             if isinstance(self.source.ramp, Parameter):
                 with self.source.rate.set_to(self.rate):
                     self.source.ramp(value)
-                    while not isclose(value, self.source.voltage(), abs_tol=1e-4):
+                    while not isclose(value/scale, self.get(), abs_tol=1e-4):
                         sleep(0.005)
             else:
                 self.source.ramp(value, self.rate)
-                while not isclose(value, self.source.voltage(), abs_tol=1e-4):
+                while not isclose(value/scale, self.get(), abs_tol=1e-4):
                     sleep(0.005)
         else:
             # set up a soft ramp and ramp with that instead
@@ -226,7 +229,7 @@ class Ohmic(Parameter):
     @property
     def _latest(self):
         if hasattr(self.source, "voltage"):
-            return self.source.voltage._latest
+            return self.source.voltage.cache.get()
         return {'value': None,
                 'ts': datetime.now(),
                 'raw_value': None}
