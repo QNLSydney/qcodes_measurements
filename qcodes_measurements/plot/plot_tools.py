@@ -55,10 +55,10 @@ def append_by_id(win, id, param_name=None, force=False):
 
     # Sanity Check: Are axis labels the same?
     if not force:
-        assert(plot.left_axis.label == data[1].get('label', ""))
-        assert(plot.left_axis.units == data[1].get('unit', "A.U."))
-        assert(plot.bot_axis.label == data[0].get('label', ""))
-        assert(plot.bot_axis.units == data[0].get('unit', "A.U."))
+        assert plot.left_axis.label == data[1].get('label', "")
+        assert plot.left_axis.units == data[1].get('unit', "A.U.")
+        assert plot.bot_axis.label == data[0].get('label', "")
+        assert plot.bot_axis.units == data[0].get('unit', "A.U.")
 
 
     # Do the plot
@@ -112,8 +112,8 @@ def add_line_plot(plot, x, y, title=None):
     # Set Axis Labels
     plot.left_axis.label = y.get('label', "")
     plot.left_axis.units = y.get('unit', "A.U.")
-    plot.bot_axis.label  = x.get('label', "")
-    plot.bot_axis.units  = x.get('unit', "A.U.")
+    plot.bot_axis.label = x.get('label', "")
+    plot.bot_axis.units = x.get('unit', "A.U.")
 
     # Give back plot
     return lplot
@@ -129,12 +129,12 @@ def add_image_plot(plot, x, y, z, title=None):
     implot = plot.plot(setpoint_x=x['data'], setpoint_y=y['data'], data=z['data'])
 
     # Set Axis Labels
-    plot.left_axis.label   = y.get('label', "")
-    plot.left_axis.units   = y.get('unit', "A.U.")
-    plot.bot_axis.label    = x.get('label', "")
-    plot.bot_axis.units    = x.get('unit', "A.U.")
-    implot.histogram.label = z.get('label', "")
-    implot.histogram.units = z.get('unit', "A.U.")
+    plot.left_axis.label = y.get('label', "")
+    plot.left_axis.units = y.get('unit', "A.U.")
+    plot.bot_axis.label = x.get('label', "")
+    plot.bot_axis.units = x.get('unit', "A.U.")
+    implot.histogram.axis.label = z.get('label', "")
+    implot.histogram.axis.units = z.get('unit', "A.U.")
 
     # Give back the image plot
     return implot
@@ -212,4 +212,3 @@ def find_by_id(id):
     """
     win = pyplot.PlotWindow.find_by_id(id)
     return win
-
