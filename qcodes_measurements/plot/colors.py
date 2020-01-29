@@ -12,7 +12,14 @@
 # You should have received a copy of the CC0 legalcode along with this
 # work.  If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 
-_magma_data = ((0.001462, 0.000466, 0.013866),
+from math import ceil
+from numpy import linspace
+from pyqtgraph import ColorMap
+from pyqtgraph.graphicsItems import GradientEditorItem
+
+__all__ = ["COLORMAPS", "DEFAULT_CMAP"]
+
+_MAGMA_DATA = ((0.001462, 0.000466, 0.013866),
                (0.002258, 0.001295, 0.018331),
                (0.003279, 0.002305, 0.023708),
                (0.004512, 0.003490, 0.029965),
@@ -269,7 +276,7 @@ _magma_data = ((0.001462, 0.000466, 0.013866),
                (0.987387, 0.984288, 0.742002),
                (0.987053, 0.991438, 0.749504))
 
-_inferno_data = ((0.001462, 0.000466, 0.013866),
+_INFERNO_DATA = ((0.001462, 0.000466, 0.013866),
                  (0.002267, 0.001270, 0.018570),
                  (0.003299, 0.002249, 0.024239),
                  (0.004547, 0.003392, 0.030909),
@@ -526,7 +533,7 @@ _inferno_data = ((0.001462, 0.000466, 0.013866),
                  (0.982257, 0.994109, 0.631017),
                  (0.988362, 0.998364, 0.644924))
 
-_plasma_data = ((0.050383, 0.029803, 0.527975),
+_PLASMA_DATA = ((0.050383, 0.029803, 0.527975),
                 (0.063536, 0.028426, 0.533124),
                 (0.075353, 0.027206, 0.538007),
                 (0.086222, 0.026125, 0.542658),
@@ -783,7 +790,7 @@ _plasma_data = ((0.050383, 0.029803, 0.527975),
                 (0.941896, 0.968590, 0.140956),
                 (0.940015, 0.975158, 0.131326))
 
-_viridis_data = ((0.267004, 0.004874, 0.329415),
+_VIRIDIS_DATA = ((0.267004, 0.004874, 0.329415),
                  (0.268510, 0.009605, 0.335427),
                  (0.269944, 0.014625, 0.341379),
                  (0.271305, 0.019942, 0.347269),
@@ -1039,10 +1046,34 @@ _viridis_data = ((0.267004, 0.004874, 0.329415),
                  (0.974417, 0.903590, 0.130215),
                  (0.983868, 0.904867, 0.136897),
                  (0.993248, 0.906157, 0.143936))
-_grey_data = ((0,0,0),
-              (1,1,1))
-__data__ = {'magma': _magma_data,
-            'inferno': _inferno_data,
-            'plasma': _plasma_data,
-            'viridis': _viridis_data,
-            'grey': _grey_data}
+_GREY_DATA = ((0, 0, 0),
+              (1, 1, 1))
+__data__ = {'magma': _MAGMA_DATA,
+            'inferno': _INFERNO_DATA,
+            'plasma': _PLASMA_DATA,
+            'viridis': _VIRIDIS_DATA,
+            'grey': _GREY_DATA}
+
+COLORMAPS = {}
+GRADIENTS = GradientEditorItem.Gradients
+GRADIENTS.clear()
+for name, data in __data__.items():
+    step = ceil(len(data) / 16)
+    pos = linspace(0.0, 1.0, len(data[::step]))
+    data = list((int(r*255), int(g*255), int(b*255)) for r, g, b in data)
+    rcmap = ColorMap(pos=pos, color=data[::step])
+    GRADIENTS[name] = {
+        'ticks': list(zip(pos, data[::step])),
+        'mode': 'rgb'
+    }
+    COLORMAPS[name] = rcmap
+    if name == "viridis":
+        pos = [0] + list(1/(x**1.5) for x in range(15, 0, -1))
+        rcmap = ColorMap(pos=pos, color=data[::step])
+        GRADIENTS[name+"_nlin"] = {
+            'ticks': list(zip(pos, data[::step])),
+            'mode': 'rgb'
+        }
+        COLORMAPS[name+"_nlin"] = rcmap
+    del name, data, step, pos, rcmap
+DEFAULT_CMAP = 'viridis'

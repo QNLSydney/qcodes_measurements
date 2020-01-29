@@ -1,34 +1,29 @@
 # -*- coding: utf-8 -*-
-
-from math import ceil
-import warnings
-from functools import partial
-import weakref
-from collections import namedtuple
-import colorsys
-
-from pyqtgraph import *
-# from pyqtgraph import GraphicsObject, GraphicsWidget, GraphicsWidgetAnchor, \
-#                       GraphicsLayoutWidget, graphicsItems, mkPen, mkColor, \
-#                       mkBrush, ImageItem, PlotItem, PlotDataItem, PlotCurveItem, \
-#                       HistogramLUTItem, ColorMap, LabelItem, Point, ViewBox, \
-#                       setConfigOption, setConfigOptions, getConfigOption, \
-#                       AxisItem
-from pyqtgraph.exporters import ImageExporter, SVGExporter
-import pyqtgraph.multiprocess as mp
-from pyqtgraph.GraphicsScene.mouseEvents import MouseClickEvent
-
-from PyQt5.QtWidgets import QApplication, QMessageBox, QMainWindow, QAction, \
-                            QGraphicsSceneMouseEvent
-from PyQt5 import QtGui, QtCore
-
-import numpy as np
-from numpy import linspace, min, max, ndarray, searchsorted
-from scipy.linalg import lstsq
-
+# pylint: disable=invalid-name
 import logging
 import sys
 import traceback
+from functools import partial
+import colorsys
+
+import numpy as np
+from numpy import min, max, searchsorted
+from scipy.linalg import lstsq
+
+#from pyqtgraph import *
+from pyqtgraph import GraphicsObject, GraphicsWidget, GraphicsWidgetAnchor, \
+                      GraphicsLayoutWidget, graphicsItems, mkPen, mkColor, \
+                      mkBrush, ImageItem, PlotItem, PlotDataItem, PlotCurveItem, \
+                      HistogramLUTItem, ColorMap, LabelItem, Point, ViewBox, \
+                      setConfigOption, setConfigOptions, getConfigOption, \
+                      GraphicsItem, LegendItem
+from pyqtgraph.exporters import ImageExporter, SVGExporter
+import pyqtgraph.multiprocess as mp
+
+from PyQt5.QtWidgets import QAction, QGraphicsItem
+from PyQt5 import QtGui, QtCore
+
+from .colors import COLORMAPS, DEFAULT_CMAP
 
 logger = logging.getLogger("rpyplot")
 logger.setLevel(logging.DEBUG)
@@ -38,7 +33,7 @@ log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messa
 log_handler.setFormatter(log_format)
 logger.addHandler(log_handler)
 def exc(e_type, value, tb):
-    logger.exception(f"Uncaught Exception: {value}\n{''.join(traceback.format_tb(tb))}")
+    logger.exception("Uncaught Exception: {%r}\n{''.join(traceback.format_tb(tb))}", value)
     traceback.print_exc()
 
 sys.excepthook = exc
@@ -342,15 +337,15 @@ class CustomViewBox(PlotMenu, ViewBox):
         self.makeTracesDifferentAction.triggered.connect(self.makeTracesDifferent)
 
     def mouseClickEvent(self, ev):
-        if (ev.button() & QtCore.Qt.LeftButton):
-            if (self.scaleBox.isVisible()):
+        if ev.button() & QtCore.Qt.LeftButton:
+            if self.scaleBox.isVisible():
                 rect = self.scaleBox.mapRectToScene(self.scaleBox.boundingRect())
                 pos = ev.scenePos()
                 if not rect.contains(pos):
                     ev.accept()
                     self.scaleBox.hide()
                     return True
-        if (ev.button() & QtCore.Qt.RightButton):
+        if ev.button() & QtCore.Qt.RightButton:
             ev.accept()
             self.raiseContextMenu(ev)
             return True
@@ -393,7 +388,8 @@ class CustomViewBox(PlotMenu, ViewBox):
                 return True
 
             # Get a list of the items near this event
-            itemNumbers = [x for x in self.addedItems if isinstance(x, PlotDataItem) or isinstance(x, ImageItem)]
+            itemNumbers = [x for x in self.addedItems if 
+                            isinstance(x, PlotDataItem) or isinstance(x, ImageItem)]
             itemNumbers = dict((x[1], x[0]) for x in enumerate(itemNumbers))
             items = filter(filterNear, self.scene().itemsNearEvent(event))
             self.addPlotContextMenus(items, itemNumbers, self.menu)
@@ -514,7 +510,8 @@ class ExtendedPlotItem(PlotItem):
 
     def addLegend(self, size=None, offset=(30, 30)):
         """
-        Reimplement addLegend to check if legend already exists. The default one should do this, but doesn't
+        Reimplement addLegend to check if legend already exists. 
+        The default one should do this, but doesn't
         seem to work on our extended version for some reason?
         """
         if self.legend is None:
@@ -587,14 +584,17 @@ class ExtendedPlotDataItem(PlotDataItem):
         self.opts['name'] = str(name)
 
 class ExtendedImageItem(ImageItem):
-    colormaps = {}
-
-    def __init__(self, setpoint_x, setpoint_y, *args, **kwargs):
+    def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.setpoint_x = setpoint_x
         self.setpoint_y = setpoint_y
         self.menu = None
         self.gradientSelectorMenu = None
+        self.cmap = None
+        if colormap is not None:
+            self.changeColorScale(name=colormap)
+        else:
+            self.changeColorScale(name=DEFAULT_CMAP)
 
         self.rescale()
 
@@ -613,14 +613,14 @@ class ExtendedImageItem(ImageItem):
             self.gradientSelectorMenu.setTitle("Color Scale")
             gradients = graphicsItems.GradientEditorItem.Gradients
             for g in gradients:
-                if g in ExtendedImageItem.colormaps:
-                    cmap = ExtendedImageItem.colormaps[g]
+                if g in COLORMAPS:
+                    cmap = COLORMAPS[g]
                 else:
                     pos = [x[0] for x in gradients[g]['ticks']]
                     colors = [x[1] for x in gradients[g]['ticks']]
                     mode = ColorMap.RGB if gradients[g]['mode'] == 'rgb' else ColorMap.HSV_POS
                     cmap = ColorMap(pos, colors, mode=mode)
-                    self.colormaps[g] = cmap
+                    COLORMAPS[g] = cmap
 
                 px = QtGui.QPixmap(l, 15)
                 p = QtGui.QPainter(px)
@@ -662,8 +662,8 @@ class ExtendedImageItem(ImageItem):
     def changeColorScale(self, checked=False, name=None):
         if name is None:
             raise ValueError("Name of color map must be given")
-        cmap = self.colormaps[name]
-        self.setLookupTable(cmap.getLookupTable(0.0, 1.0, alpha=False))
+        self.cmap = name
+        self.setLookupTable(COLORMAPS[self.cmap].getLookupTable(0.0, 1.0, alpha=False))
 
     def getLimits(self, data, limits):
         """
@@ -687,8 +687,8 @@ class ExtendedImageItem(ImageItem):
         xmin_p, xmax_p = self.getLimits(self.setpoint_x, (xmin, xmax))
         ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
 
-        logger.info(f"Doing a levelColumns between x: {xrange}, y: {yrange}")
-        logger.debug(f"Calculated limits: x: {(xmin_p, xmax_p)}, y: {(ymin_p, ymax_p)}")
+        logger.info("Doing a levelColumns between x: %e, y: %e", xrange, yrange)
+        logger.debug("Calculated limits: x: (%d, %d), y: (%d, %d)", xmin_p, xmax_p, ymin_p, ymax_p)
 
         # Then calculate the min/max range of the array
         data = self.image[xmin_p:xmax_p, ymin_p:ymax_p]
@@ -704,8 +704,8 @@ class ExtendedImageItem(ImageItem):
         xmin_p, xmax_p = self.getLimits(self.setpoint_x, (xmin, xmax))
         ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
 
-        logger.info(f"Doing a planeFit between x: {xrange}, y: {yrange}")
-        logger.debug(f"Calculated limits: x: {(xmin_p, xmax_p)}, y: {(ymin_p, ymax_p)}")
+        logger.info("Doing a planeFit between x: %e, y: %e", xrange, yrange)
+        logger.debug("Calculated limits: x: (%d, %d), y: (%d, %d)", xmin_p, xmax_p, ymin_p, ymax_p)
 
         # Get the coordinate grid
         X, Y = np.meshgrid(self.setpoint_x[xmin_p:xmax_p], self.setpoint_y[ymin_p:ymax_p])
@@ -754,12 +754,14 @@ class ExtendedImageItem(ImageItem):
 
 class ImageItemWithHistogram(ExtendedImageItem):
     def __init__(self, setpoint_x, setpoint_y, *args, colormap, **kwargs):
-        super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
         # Create the attached histogram
         self._LUTitem = HistogramLUTItem()
+        
+        # Initialize self
+        super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
+        
+        # Update _LUTitem
         self._LUTitem.setImageItem(self)
-        if colormap is not None:
-            self._LUTitem.gradient.setColorMap(colormap)
         self._LUTitem.autoHistogramRange() # enable autoscaling
 
         # Attach a signal handler on parent changed
@@ -776,8 +778,8 @@ class ImageItemWithHistogram(ExtendedImageItem):
     def changeColorScale(self, checked=False, name=None):
         if name is None:
             raise ValueError("Name of color map must be given")
-        cmap = self.colormaps[name]
-        self._LUTitem.gradient.setColorMap(cmap)
+        self.cmap = name
+        self._LUTitem.gradient.setColorMap(COLORMAPS[name])
 
     def getHistogramLUTItem(self):
         return self._LUTitem

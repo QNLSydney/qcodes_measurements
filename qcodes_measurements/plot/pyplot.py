@@ -1,17 +1,14 @@
 # -*- coding: utf-8 -*-
 
 import sys
-from math import ceil
-import PyQt5
 import re
+import PyQt5
 
 import numpy as np
-from numpy import linspace, ndarray
 
 from qcodes.instrument.parameter import _BaseParameter
 
 from . import remote
-from ..plot import colors
 
 # Get access to module level variables
 this = sys.modules[__name__]
@@ -33,16 +30,16 @@ def _ensure_ndarray(array):
     """
     if array is None:
         return None
-    if not isinstance(array, ndarray):
+    if not isinstance(array, np.ndarray):
         return np.array(array)
     return array
 
-def _ensure_val(f):
+def _ensure_val(func):
     """
     Decorator to ensure that a result is returned by value rather than as a proxy
     """
     def wrap(*args, **kwargs):
-        val = f(*args, **kwargs)
+        val = func(*args, **kwargs)
         if isinstance(val, remote.ObjectProxy):
             return val._getValue()
         return val
@@ -464,12 +461,8 @@ class TextItem(RPGWrappedBase):
 class HistogramLUTItem(RPGWrappedBase):
     _base = "HistogramLUTItem"
 
-    # Reserve names of local variables
-    _cmap = None
-
     def __init__(self, *args, allowAdd=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self._cmap = None
         self.allowAdd = allowAdd
         self._remote_function_options['setLevels'] = {'callSync': 'off'}
         self._remote_function_options['imageChanged'] = {'callSync': 'off'}
@@ -539,21 +532,6 @@ class ColorMap(RPGWrappedBase):
     def name(self):
         return self._name
 
-## Transfer color scales to remote process, truncating steps to 16 if necessary
-# maps = ColorMap.get_remote_list()._getValue()
-#ColorMap.get_remote_list().clear()
-#for color, cdata in colors.__data__.items():
-#    step = ceil(len(cdata) / 16)
-#    rcmap = ColorMap(name=color,
-#                     pos=linspace(0.0, 1.0, len(cdata[::step])),
-#                     color=cdata[::step])
-#    if color == 'viridis':
-#        rcmap = ColorMap(name=color+"_nlin",
-#                         pos=[0] + list(1/(x**1.5) for x in range(15, 0, -1)),
-#                         color=cdata[::step])
-#    del cdata, step, rcmap, color
-#rcmap = ColorMap.get_color_map('viridis')
-
 class LegendItem(RPGWrappedBase):
     """
     Legend handling code
@@ -580,7 +558,7 @@ class PlotData(RPGWrappedBase):
 class PlotDataItem(PlotData):
     _base = "PlotDataItem"
 
-    def __init__(self, setpoint_x=None, *args, **kwargs):
+    def __init__(self, setpoint_x, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.xData = _ensure_ndarray(setpoint_x)
         self._remote_function_options['setData'] = {'callSync': 'off'}
@@ -619,10 +597,10 @@ class PlotDataItem(PlotData):
 class ExtendedPlotDataItem(PlotDataItem):
     _base = "ExtendedPlotDataItem"
 
-    def __init__(self, setpoint_x=None, *args, **kwargs):
+    def __init__(self, setpoint_x, *args, **kwargs):
         super().__init__(setpoint_x, *args, **kwargs)
         self.setpoint_x = _ensure_ndarray(setpoint_x)
-    
+
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
         if 'setpoint_x' in kwargs:
@@ -701,7 +679,7 @@ class ExtendedImageItem(ImageItem):
     _base = "ExtendedImageItem"
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
-        super().__init__(setpoint_x, setpoint_y, *args, colormap, **kwargs)
+        super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
         self.setpoint_x = setpoint_x
         self.setpoint_y = setpoint_y
 
@@ -733,15 +711,9 @@ class ImageItemWithHistogram(ExtendedImageItem):
     # Local Variables
     _histogram = None
 
-    def __init__(self, setpoint_x, setpoint_y, colormap=None, *args, **kwargs):
-        super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
+    def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
+        super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
         self._histogram = None
-
-        # Set colormap
-        if colormap is not None:
-            self.colormap = colormap
-        else:
-            self.colormap = this.rcmap
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
@@ -753,7 +725,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
         """
         try:
             self._base_inst.sigImageChanged.disconnect()
-        except:
+        except AttributeError:
             pass
 
     def resume_update(self):
@@ -787,10 +759,10 @@ class ImageItemWithHistogram(ExtendedImageItem):
 
     @property
     def colormap(self):
-        return self.histogram.colormap
+        return self.cmap
     @colormap.setter
     def colormap(self, cmap):
-        self.histogram.colormap = cmap
+        self.changeColorScale(name=cmap)
 
 class TableWidget(RPGWrappedBase):
     """
@@ -808,21 +780,6 @@ def _start_remote():
     proc = remote.QtProcess(debug=False)
     this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
     _set_defaults(this.rpg)
-
-    ## Transfer color scales to remote process, truncating steps to 16 if necessary
-    # maps = ColorMap.get_remote_list()._getValue()
-    ColorMap.get_remote_list().clear()
-    for color, cdata in colors.__data__.items():
-        step = ceil(len(cdata) / 16)
-        rcmap = ColorMap(name=color,
-                        pos=linspace(0.0, 1.0, len(cdata[::step])),
-                        color=cdata[::step])
-        if color == 'viridis':
-            rcmap = ColorMap(name=color+"_nlin",
-                            pos=[0] + list(1/(x**1.5) for x in range(15, 0, -1)),
-                            color=cdata[::step])
-        del cdata, step, rcmap, color
-    this.rcmap = ColorMap.get_color_map('viridis')
 
 def _restart_remote():
     if len(remote.QtProcess.handlers) == 0:
