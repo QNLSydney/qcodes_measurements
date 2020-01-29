@@ -20,7 +20,7 @@ def _flush_buffers(*params):
     This ensures there is no stale data read off...
 
     Supposed to be called inside linearNd like so:
-    _flush_buffers(inst_set, *inst_meas)
+    _flush_buffers(*params)
     """
 
     for param in params:
