@@ -3,6 +3,7 @@ from inspect import signature
 from collections import namedtuple
 
 from wrapt import decorator
+from tqdm import tqdm
 import numpy as np
 
 from qcodes.instrument.visa import VisaInstrument
@@ -403,6 +404,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 
     # Run the sweep
     meas.write_period = write_period
+    pbar = None
     try:
         with meas.run() as datasaver:
             if win is not None:
@@ -413,6 +415,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                     plotitem.plot.plot_title += " (id: %d)" % datasaver.run_id
 
             # Then, run the actual sweep
+            pbar = tqdm(total=num_points, unit="pt", position=0, leave=True)
             for i, set_point in enumerate(set_points):
                 param_set.set(set_point)
                 _run_functions(ateach, param_vals=(Setpoint(param_set, i, set_point),))
@@ -436,10 +439,15 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                 # Save data
                 datasaver.add_result((param_set, set_point),
                                      *output)
+                pbar.update(1)
     finally:
         # Set back to start at the end of the measurement
         if setback:
             param_set.set(start)
+
+        # Close the progress bar
+        if pbar is not None:
+            pbar.close()
 
         _run_functions(atend) # Run functions at the end
 
@@ -558,6 +566,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             plots.append(LivePlotDataItem(plotitem, plotdata, np.ndarray((num_points1, num_points2))))
 
     meas.write_period = write_period
+    pbar = None
     try:
         with meas.run() as datasaver:
             # Update plot titles
@@ -566,6 +575,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             for plotitem in plots:
                 plotitem.plot.plot_title += " (id: %d)" % datasaver.run_id
 
+            pbar = tqdm(total=num_points1, unit="col", position=0, leave=True)
             for i, set_point1 in enumerate(set_points1):
                 param_set2.set(start2)
                 param_set1.set(set_point1)
@@ -595,6 +605,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                     datasaver.add_result((param_set1, set_point1),
                                          (param_set2, set_point2),
                                          *output)
+                pbar.update(1)
 
             # At the end, do one last update to make sure that all data is displayed.
             if win is not None:
@@ -605,6 +616,10 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         if setback:
             param_set1.set(start1)
             param_set2.set(start2)
+
+        # Close progress bar
+        if pbar is not None:
+            pbar.close()
 
         _run_functions(atend)
 

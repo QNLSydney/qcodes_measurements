@@ -24,7 +24,8 @@ setup(
         'PyQt5>=5.10.1',
         'scipy>=1.1.0',
         'numpy>=1.14.3',
-        'tabulate>=0.8.3'
+        'tabulate>=0.8.3',
+        'tqdm>=4.41.1'
     ],
     python_requires='>=3'
 )
