@@ -17,6 +17,12 @@ from numpy import linspace
 from pyqtgraph import ColorMap
 from pyqtgraph.graphicsItems import GradientEditorItem
 
+# In addition, try and load extra matplotlib colormaps
+try:
+    from matplotlib import cm
+except ImportError:
+    cm = None
+
 __all__ = ["COLORMAPS", "DEFAULT_CMAP"]
 
 _MAGMA_DATA = ((0.001462, 0.000466, 0.013866),
@@ -1053,6 +1059,24 @@ __data__ = {'magma': _MAGMA_DATA,
             'plasma': _PLASMA_DATA,
             'viridis': _VIRIDIS_DATA,
             'grey': _GREY_DATA}
+
+# Add some extra matplotlib colors
+if cm is not None:
+    gradient = linspace(0, 1, 256)
+    # More perceptually uniform color schemes
+    __data__['cividis'] = cm.cmap_d['cividis'](gradient)[:,0:3]
+    # Diverging color schemes
+    __data__['twilight'] = cm.cmap_d['twilight'](gradient)[:,0:3]
+    __data__['twilight_shifted'] = cm.cmap_d['twilight_shifted'](gradient)[:,0:3]
+    __data__['Spectral'] = cm.cmap_d["Spectral"](gradient)[:,0:3]
+    __data__['coolwarm'] = cm.cmap_d["coolwarm"](gradient)[:,0:3]
+    __data__['bwr'] = cm.cmap_d["bwr"](gradient)[:,0:3]
+    __data__['RdBu'] = cm.cmap_d["RdBu"](gradient)[:,0:3]
+    # Others
+    __data__['ocean'] = cm.cmap_d["ocean"](gradient)[:,0:3]
+    __data__['gist_earth'] = cm.cmap_d["gist_earth"](gradient)[:,0:3]
+    __data__['terrain'] = cm.cmap_d["terrain"](gradient)[:,0:3]
+
 
 COLORMAPS = {}
 GRADIENTS = GradientEditorItem.Gradients
