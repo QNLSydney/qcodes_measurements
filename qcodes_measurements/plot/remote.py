@@ -228,7 +228,7 @@ class QtProcess(Process):
         if self._processRequests:
             self.startRequestProcessing()
 
-    def startRequestProcessing(self, interval=0.01):
+    def startRequestProcessing(self, interval=0.001):
         """Start listening for requests coming from the child process.
         This allows signals to be connected from the child process to the parent.
         """
