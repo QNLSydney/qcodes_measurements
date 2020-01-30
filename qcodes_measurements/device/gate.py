@@ -3,8 +3,15 @@ from time import sleep
 from contextlib import contextmanager
 from datetime import datetime
 
+from typing import Optional, Sequence, TYPE_CHECKING, Union, Callable, List, \
+    Dict, Any, Sized, Iterable, cast, Type, Tuple, Iterator #pylint: disable=unused-import
+# for now the type the parameter may contain is not restricted at all
+ParamDataType = Any
+ParamRawDataType = Any
+
 from qcodes import InstrumentChannel, Parameter
 from qcodes.instrument.base import InstrumentBase
+from qcodes.instrument.parameter import _Cache
 from qcodes.utils import validators as vals
 
 try:
@@ -54,6 +61,9 @@ class Gate(Parameter):
                          vals=self.vals,
                          **kwargs)
 
+        # Set the cache to a wrapped Gate cache
+        self.cache = _GateCache(self)
+
     @property
     def gate_mode(self):
         """
@@ -89,13 +99,6 @@ class Gate(Parameter):
         snap['instrument'] = repr(self.instrument)
         snap['label'] = self.label
         return snap
-
-    @property
-    def _latest(self):
-        return self.source.voltage.cache.get()
-    @_latest.setter
-    def _latest(self, val):
-        pass
 
     @contextmanager
     def soft_ramp(self, rate=None, step=None):
@@ -136,22 +139,21 @@ class Gate(Parameter):
         Validation handled by the set wrapper.
         """
         # Set the value if we are close
-        if abs(value - self.source.voltage()) <= self.max_step:
+        if abs(value - self.cache.raw_value) <= self.max_step:
             self.source.voltage(value)
             return
 
         # Otherwise ramp, using the hardware ramp if available
         # Two different ways to do it, with a ramp function or ramp parameter
-        scale = getattr(self, "scale", 1)
         if self.has_ramp:
             if isinstance(self.source.ramp, Parameter):
                 with self.source.rate.set_to(self.rate):
                     self.source.ramp(value)
-                    while not isclose(value/scale, self.get(), abs_tol=1e-4):
+                    while not isclose(value, self._from_value_to_raw_value(self.get()), abs_tol=1e-4):
                         sleep(0.005)
             else:
                 self.source.ramp(value, self.rate)
-                while not isclose(value/scale, self.get(), abs_tol=1e-4):
+                while not isclose(value, self._from_value_to_raw_value(self.get()), abs_tol=1e-4):
                     sleep(0.005)
         else:
             # set up a soft ramp and ramp with that instead
@@ -213,6 +215,9 @@ class Ohmic(Parameter):
                          **kwargs)
         self.source = source
 
+        # Create a wrapped cache
+        self.cache = _GateCache(self)
+
     # Overwrite snapshot so that we pass the call onto the underlying voltage
     # parameter. Further, we'll force an update since other types of set often
     # cause this parameter to be overwritten
@@ -269,3 +274,72 @@ class BBOhmicWrapper(OhmicWrapper):
 
         # Allow access to gate voltage
         self.parameters['voltage'] = parent
+
+class _GateCache(_Cache):
+    """
+    Cache object for a wrapped parameter to hold its value and raw value
+
+    It also implements ``set`` method for setting parameter's value without
+    invoking its ``set_cmd``, and ``get`` method that allows to retrieve the
+    cached value of the parameter without calling ``get_cmd`` might be called
+    unless the cache is invalid. This parameter is wrapped to correctly use
+    the cached value from the wrapped parameter while applying the correct
+    scaling factor.
+
+    Args:
+         parameter: instance of the parameter that this cache belongs to.
+         max_val_age: Max time (in seconds) to trust a value stored in cache.
+            If the parameter has not been set or measured more recently than
+            this, an additional measurement will be performed in order to
+            update the cached value. If it is ``None``, this behavior is
+            disabled. ``max_val_age`` should not be used for a parameter
+            that does not have a get function.
+    """
+    def __init__(self,
+                 parameter: Union[Gate, Ohmic],
+                 max_val_age: Optional[float] = None):
+        if not isinstance(parameter, (Gate, Ohmic)):
+            raise TypeError(f"GateCache can only wrap Gates or Ohmics, got {type(parameter)}")
+        super().__init__(parameter, max_val_age)
+
+    @property
+    def raw_value(self) -> ParamRawDataType:
+        """Raw value of the parameter"""
+        return self._parameter.source.voltage.cache.get()
+
+    @property
+    def timestamp(self) -> Optional[datetime]:
+        """
+        Timestamp of the moment when cache was last updated
+
+        If ``None``, the cache hasn't been updated yet and shall be seen as
+        "invalid".
+        """
+        return self._parameter.source.voltage.cache.timestamp
+
+    def set(self, value: ParamDataType) -> None:
+        """
+        Set the cached value of the parameter without invoking the
+        ``set_cmd`` of the parameter (if it has one). This is forwarded
+        onto the underlying parameter
+
+        Args:
+            value: new value for the parameter
+        """
+        self._parameter.validate(value)
+        raw_value = self._parameter._from_value_to_raw_value(value)
+        self._parameter.source.voltage.cache.set(raw_value)
+
+    def get(self, get_if_invalid: bool = True) -> ParamDataType:
+        """
+        Return cached value of the underlying parameter, with correct scaling
+        applied.
+
+        Args:
+            get_if_invalid: if set to ``True``, ``get()`` on a parameter
+                will be performed in case the cached value is invalid (for
+                example, due to ``max_val_age``, or because the parameter has
+                never been captured)
+        """
+        return self._parameter._from_raw_value_to_value(
+            self._parameter.source.voltage.cache.get(get_if_invalid))

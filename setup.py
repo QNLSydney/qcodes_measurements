@@ -19,9 +19,9 @@ setup(
     install_requires=[
         'matplotlib>=2.0.2',
         'pyqtgraph>=0.10.0',
-        'qcodes>=0.1.3',
+        'qcodes>=0.8.0',
         'wrapt>=1.10.11',
-        'PyQt5>=5.10.1',
+        'PyQt5>=5.12.2',
         'scipy>=1.1.0',
         'numpy>=1.14.3',
         'tabulate>=0.8.3',
