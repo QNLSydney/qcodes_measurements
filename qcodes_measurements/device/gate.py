@@ -98,6 +98,9 @@ class Gate(Parameter):
         snap['name'] = self.name
         snap['instrument'] = repr(self.instrument)
         snap['label'] = self.label
+        snap['value'] = self._from_raw_value_to_value(snap['value'])
+        snap['raw_value'] = snap['value']
+        snap['scale'] = getattr(self, "scale", None)
         return snap
 
     @contextmanager
@@ -228,6 +231,9 @@ class Ohmic(Parameter):
             snap['name'] = self.name
             snap['instrument'] = repr(self.instrument)
             snap['label'] = self.label
+            snap['value'] = self._from_raw_value_to_value(snap['value'])
+            snap['raw_value'] = snap['value']
+            snap['scale'] = getattr(self, "scale", None)
             return snap
         return super().snapshot_base(update)
 
