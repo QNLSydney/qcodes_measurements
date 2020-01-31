@@ -178,14 +178,15 @@ class GateWrapper(ChannelWrapper):
             raise TypeError("GateWrapper can only wrap gates")
         super().__init__(parent, name)
 
+
+        # Allow access to gate voltage
+        self.parameters['voltage'] = parent
+
 class MDACGateWrapper(MDACWrapper, GateWrapper):
     def __init__(self, parent, name):
         super().__init__(parent, name)
         if not isinstance(parent.source, MDAC.MDACChannel):
             raise TypeError("MDACGateWrapper must wrap a gate on an MDAC Channel")
-
-        # Allow access to gate voltage
-        self.parameters['voltage'] = self.gate
 
 
 class BBGateWrapper(GateWrapper):
@@ -193,9 +194,6 @@ class BBGateWrapper(GateWrapper):
         super().__init__(parent, name)
         if not isinstance(parent.source, BBChan):
             raise TypeError("BBGateWrapper must wrap a gate on an breakout box")
-
-        # Allow access to gate voltage
-        self.parameters['voltage'] = parent
 
 
 class Ohmic(Parameter):
@@ -250,15 +248,15 @@ class OhmicWrapper(ChannelWrapper):
             raise TypeError("OhmicWrapper can only wrap ohmics")
         super().__init__(parent, name)
 
+        if hasattr(parent.source, "voltage"):
+            self.parameters["voltage"] = parent
+
 
 class MDACOhmicWrapper(MDACWrapper, OhmicWrapper):
     def __init__(self, parent, name):
         super().__init__(parent, name)
         if not isinstance(parent.source, MDAC.MDACChannel):
             raise TypeError("MDACGateWrapper must wrap a gate on an MDAC Channel")
-
-        # Allow access to gate voltage
-        self.parameters['voltage'] = parent
 
 
 class BBOhmicWrapper(OhmicWrapper):
@@ -267,8 +265,6 @@ class BBOhmicWrapper(OhmicWrapper):
         if not isinstance(parent.source, BBChan):
             raise TypeError("BBGateWrapperWithMDAC must wrap a gate on an breakout box")
 
-        # Allow access to gate voltage
-        self.parameters['voltage'] = parent
 
 class _GateCache(_Cache):
     """
