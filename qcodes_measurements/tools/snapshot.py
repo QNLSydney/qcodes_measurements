@@ -50,11 +50,12 @@ def pprint_dev_gates(snap, dev):
     GATE_ORDERS = ("LW", "LP", "C", "RP", "RW", "N")
 
     device = get_instr_snap(snap, dev)
-    gates = device['submodules']['gates']['channels']
+    gates = device['parameters']
 
     ordered_gates = []
     for gate in gates:
-        _, _, name = extract_gate_desc(gate)
+        name = gate
+        #_, _, name = extract_gate_desc(gate)
         for i, prefix in enumerate(GATE_ORDERS):
             if name.startswith(prefix) and name[-1].isnumeric():
                 ordered_gates.append((int(name[-1]), i, name, gate))
@@ -66,11 +67,9 @@ def pprint_dev_gates(snap, dev):
 
     output = []
     for _, _, name, gate in ordered_gates:
-        print(gates[gate]['parameters'])
-        if "voltage" in gates[gate]['parameters']:
-            voltage = gates[gate]['parameters']['voltage']['value']
-            if voltage != 0:
-                output.append((name, voltage))
+        voltage = gates[gate]['value']
+        if voltage != 0:
+            output.append((name, voltage))
     print(tabulate.tabulate(output,
                             headers=("Gate Name", "Voltage (V)"),
                             floatfmt=".3f"))
