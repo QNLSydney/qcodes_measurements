@@ -39,7 +39,8 @@ def extract_gate_desc(gate):
     """
     Import the location of a gate from the name of the gate channel
     """
-    src, ch, name = re.findall("([^_]+)", gate)
+    src, ch, *name = re.findall("([^_]+)", gate)
+    name = "_".join(name)
     return src, ch, name
 
 def pprint_dev_gates(snap, dev):
@@ -55,7 +56,7 @@ def pprint_dev_gates(snap, dev):
     for gate in gates:
         _, _, name = extract_gate_desc(gate)
         for i, prefix in enumerate(GATE_ORDERS):
-            if name.startswith(prefix):
+            if name.startswith(prefix) and name[-1].isnumeric():
                 ordered_gates.append((int(name[-1]), i, name, gate))
                 break
         else:
@@ -65,9 +66,11 @@ def pprint_dev_gates(snap, dev):
 
     output = []
     for _, _, name, gate in ordered_gates:
-        voltage = gates[gate]['parameters']['voltage']['value']
-        if voltage != 0:
-            output.append((name, voltage))
+        print(gates[gate]['parameters'])
+        if "voltage" in gates[gate]['parameters']:
+            voltage = gates[gate]['parameters']['voltage']['value']
+            if voltage != 0:
+                output.append((name, voltage))
     print(tabulate.tabulate(output,
                             headers=("Gate Name", "Voltage (V)"),
                             floatfmt=".3f"))
