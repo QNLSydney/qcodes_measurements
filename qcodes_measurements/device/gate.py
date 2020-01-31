@@ -237,17 +237,6 @@ class Ohmic(Parameter):
             return snap
         return super().snapshot_base(update)
 
-    @property
-    def _latest(self):
-        if hasattr(self.source, "voltage"):
-            return self.source.voltage.cache.get()
-        return {'value': None,
-                'ts': datetime.now(),
-                'raw_value': None}
-    @_latest.setter
-    def _latest(self, val):
-        pass
-
     def get_raw(self): #pylint: disable=E0202
         return self.source.voltage()
 
