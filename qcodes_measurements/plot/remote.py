@@ -38,7 +38,7 @@ class Process(RemoteEventHandler):
 
     _process_count = 1
 
-    def __init__(self, name=None, target=None, debug=False, timeout=20):
+    def __init__(self, name=None, target=None, debug=False):
         """
         ==============  =============================================================
         **Arguments:**
@@ -59,12 +59,8 @@ class Process(RemoteEventHandler):
             name = str(self)
         self.debug = 7 if debug is True else False  # 7 causes printing in white
 
-        ## random authentication key
-        authkey = os.urandom(20)
-
-        ## Listen for connection from remote process (and find free port number)
-        listener = multiprocessing.connection.Listener(('localhost', 0), authkey=authkey)
-        port = listener.address[1]
+        ## Create a connection for the client/server
+        self.conn, child_conn = multiprocessing.Pipe(True)
 
         self.debugMsg('Starting child process')
 
@@ -81,8 +77,7 @@ class Process(RemoteEventHandler):
         ## Send everything the remote process needs to start correctly
         data = dict(
             name=name+'_child',
-            port=port,
-            authkey=authkey,
+            conn=child_conn,
             ppid=pid,
             debug=proc_debug,
             )
@@ -95,20 +90,12 @@ class Process(RemoteEventHandler):
         if old_main is not None:
             sys.modules['__main__'].__file__ = old_main
 
-        ## open connection for remote process
-        self.debugMsg('Listening for child process (pid: %d) on port %d, authkey=%s' %
-                      (self.proc.pid, port, repr(authkey)))
-        while True:
-            try:
-                conn = listener.accept()
-                break
-            except IOError as err:
-                if err.errno == 4:  # interrupted; try again
-                    continue
-                else:
-                    raise
+        ## Close one end of pipe to ensure there is only one writer per pipe
+        child_conn.close()
 
-        RemoteEventHandler.__init__(self, conn, name+'_parent', pid=self.proc.pid, debug=self.debug)
+        ## Connect the child process event handler to self.conn
+        RemoteEventHandler.__init__(self, self.conn, name+'_parent',
+                                    pid=self.proc.pid, debug=self.debug)
         self.debugMsg('Connected to child process.')
 
         atexit.register(self.join)
@@ -122,7 +109,7 @@ class Process(RemoteEventHandler):
             while self.proc.is_alive():
                 if timeout is not None and time.time() - start > timeout:
                     raise Exception('Timed out waiting for remote process to end.')
-                time.sleep(0.05)
+                self.proc.join(0.05)
             self.conn.close()
 
         self.debugMsg('Child process exited. (%d)' % self.proc.exitcode)
@@ -131,27 +118,10 @@ class Process(RemoteEventHandler):
         RemoteEventHandler.debugMsg(self, msg, *args)
 
 
-def startEventLoop(name, port, authkey, ppid, debug=False):
+def startEventLoop(name, conn, ppid, debug=False):
     if debug:
         sys.stdout = open("debug.txt", "w")
         sys.stderr = sys.stdout
-        cprint.cout(debug, '[%d] connecting to server at port localhost:%d, authkey=%s..\n'
-                    % (os.getpid(), port, repr(authkey)), -1)
-    tries = 0
-    while True:
-        try:
-            conn = multiprocessing.connection.Client(('localhost', int(port)), authkey=authkey)
-        except (ConnectionRefusedError, ConnectionResetError):
-            tries += 1
-            if tries == 3:
-                if debug:
-                    cprint.cout(debug, '[%d] failed to connect to parent\n' % os.getpid(), -1)
-                return
-            else:
-                time.sleep(1)
-                continue
-        break
-    if debug:
         cprint.cout(debug, '[%d] connected; starting remote proxy.\n' % os.getpid(), -1)
 
     handler = RemoteEventHandler(conn, name, ppid, debug=debug)
@@ -175,16 +145,15 @@ class RemoteQtEventHandler(RemoteEventHandler):
         from pyqtgraph.Qt import QtCore
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.processRequests)
-        self.timer.start(10)
+        self.timer.start(1)
 
     def processRequests(self):
         try:
             RemoteEventHandler.processRequests(self)
         except ClosedError:
             from pyqtgraph.Qt import QtGui
-            QtGui.QApplication.instance().quit()
             self.timer.stop()
-            #raise SystemExit
+            QtGui.QApplication.instance().quit()
 
 class QtProcess(Process):
     """
@@ -228,7 +197,7 @@ class QtProcess(Process):
         if self._processRequests:
             self.startRequestProcessing()
 
-    def startRequestProcessing(self, interval=0.001):
+    def startRequestProcessing(self, interval=0.01):
         """Start listening for requests coming from the child process.
         This allows signals to be connected from the child process to the parent.
         """
@@ -244,30 +213,10 @@ class QtProcess(Process):
         except ClosedError:
             self.timer.stop()
 
-def startQtEventLoop(name, port, authkey, ppid, debug=False):
+def startQtEventLoop(name, conn, ppid, debug=False):
     if debug:
         sys.stdout = open("debug.txt", "w")
         sys.stderr = sys.stdout
-        cprint.cout(debug, '[%d] connecting to server at port localhost:%d, authkey=%s..\n' %
-                    (os.getpid(), port, repr(authkey)), -1)
-    tries = 0
-    while True:
-        try:
-            conn = multiprocessing.connection.Client(('localhost', int(port)), authkey=authkey)
-        except (ConnectionRefusedError, ConnectionResetError) as e:
-            tries += 1
-            if tries == 3:
-                if debug:
-                    cprint.cout(debug, '[%d] failed to connect to parent\n' % os.getpid(), -1)
-                return
-            else:
-                if debug:
-                    cprint.cout(debug, "[%d] failed to connect to parent %d times, with exception %r"
-                                % (os.getpid(), tries, e), -1)
-                time.sleep(1)
-                continue
-        break
-    if debug:
         cprint.cout(debug, '[%d] connected; starting remote proxy.\n' % os.getpid(), -1)
     from pyqtgraph.Qt import QtGui
     app = QtGui.QApplication.instance()
@@ -279,4 +228,4 @@ def startQtEventLoop(name, port, authkey, ppid, debug=False):
 
     handler = RemoteQtEventHandler(conn, name, ppid, debug=debug)
     handler.startEventTimer()
-    app.exec_()
+    sys.exit(app.exec_())
