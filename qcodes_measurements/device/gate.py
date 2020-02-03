@@ -5,9 +5,7 @@ from datetime import datetime
 
 from typing import Optional, Sequence, TYPE_CHECKING, Union, Callable, List, \
     Dict, Any, Sized, Iterable, cast, Type, Tuple, Iterator #pylint: disable=unused-import
-# for now the type the parameter may contain is not restricted at all
-ParamDataType = Any
-ParamRawDataType = Any
+
 
 from qcodes import InstrumentChannel, Parameter
 from qcodes.instrument.base import InstrumentBase
@@ -25,6 +23,10 @@ from .bb import BBChan
 from .states import GateMode, ConnState
 from .channel_wrapper import ChannelWrapper
 from .mdac_wrappers import MDACWrapper
+
+# for now the type the parameter may contain is not restricted at all
+ParamDataType = Any
+ParamRawDataType = Any
 
 __all__ = ["GateMode", "ConnState", "Gate", "GateWrapper", "MDACGateWrapper",
            "BBGateWrapper", "Ohmic", "OhmicWrapper", "MDACOhmicWrapper",
@@ -291,12 +293,13 @@ class _GateCache(_Cache):
                  max_val_age: Optional[float] = None):
         if not isinstance(parameter, (Gate, Ohmic)):
             raise TypeError(f"GateCache can only wrap Gates or Ohmics, got {type(parameter)}")
+        self._source = parameter.source.voltage
         super().__init__(parameter, max_val_age)
 
     @property
     def raw_value(self) -> ParamRawDataType:
         """Raw value of the parameter"""
-        return self._parameter.source.voltage.cache.get()
+        return self._source.cache.get()
 
     @property
     def timestamp(self) -> Optional[datetime]:
@@ -306,7 +309,7 @@ class _GateCache(_Cache):
         If ``None``, the cache hasn't been updated yet and shall be seen as
         "invalid".
         """
-        return self._parameter.source.voltage.cache.timestamp
+        return self._source.cache.timestamp
 
     def set(self, value: ParamDataType) -> None:
         """
@@ -319,7 +322,7 @@ class _GateCache(_Cache):
         """
         self._parameter.validate(value)
         raw_value = self._parameter._from_value_to_raw_value(value)
-        self._parameter.source.voltage.cache.set(raw_value)
+        self._source.cache.set(raw_value)
 
     def get(self, get_if_invalid: bool = True) -> ParamDataType:
         """
@@ -332,5 +335,6 @@ class _GateCache(_Cache):
                 example, due to ``max_val_age``, or because the parameter has
                 never been captured)
         """
-        return self._parameter._from_raw_value_to_value(
-            self._parameter.source.voltage.cache.get(get_if_invalid))
+        value = self._parameter._from_raw_value_to_value( #pylint: disable=protected-access
+            self._source.cache.get(get_if_invalid))
+        return value
