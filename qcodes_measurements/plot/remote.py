@@ -150,7 +150,7 @@ class RemoteQtEventHandler(RemoteEventHandler):
     def processRequests(self):
         try:
             RemoteEventHandler.processRequests(self)
-        except ClosedError:
+        except (ClosedError, BrokenPipeError):
             from pyqtgraph.Qt import QtGui
             self.timer.stop()
             QtGui.QApplication.instance().quit()
