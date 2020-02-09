@@ -10,6 +10,9 @@ import numpy as np
 from numpy import min, max, searchsorted
 from scipy.linalg import lstsq
 
+from PyQt5.QtWidgets import QAction, QGraphicsItem
+from PyQt5 import QtGui, QtCore
+
 #from pyqtgraph import *
 from pyqtgraph import GraphicsObject, GraphicsWidget, GraphicsWidgetAnchor, \
                       GraphicsLayoutWidget, graphicsItems, mkPen, mkColor, \
@@ -19,9 +22,6 @@ from pyqtgraph import GraphicsObject, GraphicsWidget, GraphicsWidgetAnchor, \
                       GraphicsItem, LegendItem
 from pyqtgraph.exporters import ImageExporter, SVGExporter
 import pyqtgraph.multiprocess as mp
-
-from PyQt5.QtWidgets import QAction, QGraphicsItem
-from PyQt5 import QtGui, QtCore
 
 from .colors import COLORMAPS, DEFAULT_CMAP
 
@@ -33,7 +33,7 @@ log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messa
 log_handler.setFormatter(log_format)
 logger.addHandler(log_handler)
 def exc(e_type, value, tb):
-    logger.exception("Uncaught Exception: {%r}\n{''.join(traceback.format_tb(tb))}", value)
+    logger.exception("Uncaught Exception: %r\n%s", value, ''.join(traceback.format_tb(tb)))
     traceback.print_exc()
 
 sys.excepthook = exc
@@ -388,8 +388,8 @@ class CustomViewBox(PlotMenu, ViewBox):
                 return True
 
             # Get a list of the items near this event
-            itemNumbers = [x for x in self.addedItems if 
-                            isinstance(x, PlotDataItem) or isinstance(x, ImageItem)]
+            itemNumbers = [x for x in self.addedItems if
+                           isinstance(x, PlotDataItem) or isinstance(x, ImageItem)]
             itemNumbers = dict((x[1], x[0]) for x in enumerate(itemNumbers))
             items = filter(filterNear, self.scene().itemsNearEvent(event))
             self.addPlotContextMenus(items, itemNumbers, self.menu)
@@ -510,7 +510,7 @@ class ExtendedPlotItem(PlotItem):
 
     def addLegend(self, size=None, offset=(30, 30)):
         """
-        Reimplement addLegend to check if legend already exists. 
+        Reimplement addLegend to check if legend already exists.
         The default one should do this, but doesn't
         seem to work on our extended version for some reason?
         """
@@ -531,7 +531,7 @@ class ExtendedPlotDataItem(PlotDataItem):
         self.colorDialog.colorSelected.connect(self.colorSelected)
 
         # Store x-setpoint, since we may add nan values back in
-        self.setpoint_x = None
+        self.setpoint_x = tuple()
 
     def getContextMenus(self, *, rect=None, event=None):
         if self.menu is None:
@@ -563,7 +563,7 @@ class ExtendedPlotDataItem(PlotDataItem):
     def colorSelected(self, color):
         self.setPen(color)
 
-    def update(self, yData):
+    def update(self, yData, *args, **kwargs):
         # Filter out nan values, due to https://github.com/pyqtgraph/pyqtgraph/issues/1057
         if not isinstance(yData, np.ndarray):
             yData = np.array(yData)
@@ -571,14 +571,18 @@ class ExtendedPlotDataItem(PlotDataItem):
         xData = self.setpoint_x[notnan]
         yData = yData[notnan]
 
-        # Figure out which points are separated by nan values
-        nanind = np.where(~notnan)[0]
-        dontconnect = nanind + np.cumsum(np.full_like(nanind, -1))
-        connect = np.ones_like(xData, dtype=np.int32)
-        connect[dontconnect] = 0
+        # If connect is explicitly specified, use that, otherwise calculate
+        # the necessary connections
+        connect = kwargs.pop("connect", None)
+        if connect is None:
+            # Figure out which points are separated by nan values
+            nanind = np.where(~notnan)[0]
+            dontconnect = nanind + np.cumsum(np.full_like(nanind, -1))
+            connect = np.ones_like(xData, dtype=np.int32)
+            connect[dontconnect] = 0
 
         # Update data
-        self.setData(x=xData, y=yData, connect=connect)
+        self.setData(x=xData, y=yData, connect=connect, *args, **kwargs)
 
     def setName(self, name):
         self.opts['name'] = str(name)
@@ -727,13 +731,13 @@ class ExtendedImageItem(ImageItem):
         image = self.image - Z.T
         self.setImage(image)
 
-    def levelColumns(self, xrange, yrange):
+    def levelColumns(self, _, yrange):
         # Extract indices of limits
         ymin, ymax = yrange
         ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
 
-        logger.info(f"Doing a levelColumns between y: {yrange}")
-        logger.debug(f"Calculated limits: y: {(ymin_p, ymax_p)}")
+        logger.info("Doing a levelColumns between y: %r", yrange)
+        logger.debug("Calculated limits: y: {(%d, %d)}", ymin_p, ymax_p)
 
         # Get a list of means for that column
         col_mean = self.image[:, ymin_p:ymax_p]
@@ -756,10 +760,10 @@ class ImageItemWithHistogram(ExtendedImageItem):
     def __init__(self, setpoint_x, setpoint_y, *args, colormap, **kwargs):
         # Create the attached histogram
         self._LUTitem = HistogramLUTItem()
-        
+
         # Initialize self
         super().__init__(setpoint_x, setpoint_y, *args, **kwargs)
-        
+
         # Update _LUTitem
         self._LUTitem.setImageItem(self)
         self._LUTitem.autoHistogramRange() # enable autoscaling
