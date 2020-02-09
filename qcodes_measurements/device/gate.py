@@ -130,13 +130,13 @@ class Gate(Parameter):
             self.source.voltage.inter_delay = old_delay
 
     # Make getters and setters
-    def get_raw(self): #pylint: disable=E0202
+    def get_raw(self): #pylint: disable=method-hidden
         """
         Get refers to the voltage of the underlying source
         """
         return self.source.voltage()
 
-    def set_raw(self, value): #pylint: disable=E0202
+    def set_raw(self, value): #pylint: disable=method-hidden
         """
         Set the voltage to the selected value, ramping if the step is
         larger than max_step.
@@ -237,10 +237,10 @@ class Ohmic(Parameter):
             return snap
         return super().snapshot_base(update)
 
-    def get_raw(self): #pylint: disable=E0202
+    def get_raw(self): #pylint: disable=method-hidden
         return self.source.voltage()
 
-    def set_raw(self, value): #pylint: disable=E0202
+    def set_raw(self, value): #pylint: disable=method-hidden
         return self.source.voltage(value)
 
 
