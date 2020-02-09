@@ -571,6 +571,11 @@ class PlotDataItem(PlotData):
             self.xData = kwargs['setpoint_x']
 
     def update(self, data, *args, **kwargs):
+        """
+        Update the data in the plot.
+
+        Note: The data must not contain NaN values, or the plot will not show any data.
+        """
         self.setData(x=self.setpoint_x, y=_ensure_ndarray(data), *args, **kwargs)
 
     @property
@@ -604,6 +609,7 @@ class ExtendedPlotDataItem(PlotDataItem):
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
+        self._remote_function_options['update'] = {'callSync': 'off'}
         if 'setpoint_x' in kwargs:
             # If we know what our setpoints are, use them
             self.setpoint_x = _ensure_ndarray(kwargs['setpoint_x'])
@@ -626,7 +632,17 @@ class ExtendedPlotDataItem(PlotDataItem):
         self._base_inst.setpoint_x = val
 
     def update(self, data, *args, **kwargs):
-        RPGWrappedBase.__getattr__(self, "update")(data)
+        """
+        Update the data in a plot, sending only the new y-data. The data will be filtered
+        for NaN values correctly in the remote plot window.
+        """
+        RPGWrappedBase.__getattr__(self, "update")(data, *args, **kwargs)
+
+    def setData(self, x, y, *args, **kwargs):
+        """
+        Set the x, y in the plot, without filtering for NaN values.
+        """
+        RPGWrappedBase.__getattr__(self, "setData")(x, y, *args, **kwargs)
 
 class ImageItem(PlotData):
     _base = "ImageItem"
