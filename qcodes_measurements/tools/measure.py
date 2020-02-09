@@ -430,12 +430,15 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                         if i == 0:
                             plots[p].data[1:] = (np.min(output[p][1]) +
                                                  np.max(output[p][1]))/2
+                        if win is not None:
+                            # Update live plots
+                            plots[p].plotdata.update(plots[p].data)
                     else:
                         plots[p].data[i] = output[p][1] # Update 1D data
+                        if win is not None:
+                            plots[p].plotdata.setData(set_points[:i], plots[p].data[:i])
 
-                    if win is not None:
-                        # Update live plots
-                        plots[p].plotdata.update(plots[p].data)
+
                 # Save data
                 datasaver.add_result((param_set, set_point),
                                      *output)
