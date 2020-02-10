@@ -8,7 +8,7 @@ import numpy as np
 
 from qcodes.instrument.parameter import _BaseParameter
 
-from . import remote
+from . import multiprocess
 
 # Get access to module level variables
 this = sys.modules[__name__]
@@ -40,7 +40,7 @@ def _ensure_val(func):
     """
     def wrap(*args, **kwargs):
         val = func(*args, **kwargs)
-        if isinstance(val, remote.ObjectProxy):
+        if isinstance(val, multiprocess.ObjectProxy):
             return val._getValue()
         return val
     return wrap
@@ -58,7 +58,7 @@ def _auto_wrap(f):
     return wrap
 
 
-class RPGWrappedBase(remote.ObjectProxy):
+class RPGWrappedBase(multiprocess.ObjectProxy):
     # Keep track of children so they aren't recomputed each time
     _subclass_types = None
 
@@ -100,7 +100,7 @@ class RPGWrappedBase(remote.ObjectProxy):
 
     @classmethod
     def wrap(cls, instance, *args, **kwargs):
-        if not isinstance(instance, remote.ObjectProxy):
+        if not isinstance(instance, multiprocess.ObjectProxy):
             raise TypeError("We can only wrap ObjectProxies")
 
         # Create an empty instance of RPGWrappedBase,
@@ -134,7 +134,7 @@ class RPGWrappedBase(remote.ObjectProxy):
             append_subclasses(RPGWrappedBase._subclass_types, RPGWrappedBase)
 
         # Then, if we have an object proxy, wrap it if it is in the list of wrappable types
-        if isinstance(inst, remote.ObjectProxy):
+        if isinstance(inst, multiprocess.ObjectProxy):
             if isinstance(inst, RPGWrappedBase):
                 return inst
             typestr = inst._typeStr.split()[0].strip('< ').split('.')[-1]
@@ -156,7 +156,7 @@ class RPGWrappedBase(remote.ObjectProxy):
             # Try to translate to one of the friendly names
             res = RPGWrappedBase.autowrap(res)
             # Add the result to the items list if returned
-            if isinstance(res, remote.ObjectProxy):
+            if isinstance(res, multiprocess.ObjectProxy):
                 # Keep track of all objects that are added to a window, since
                 # we can't get them back from the remote later
                 #if res not in self._items:
@@ -794,21 +794,21 @@ def _start_remote():
     else:
         this.app = PyQt5.QtGui.QApplication.instance()
 
-    proc = remote.QtProcess(debug=False)
+    proc = multiprocess.QtProcess(debug=False)
     this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
     _set_defaults(this.rpg)
 
 def _restart_remote():
-    if len(remote.QtProcess.handlers) == 0:
+    if len(multiprocess.QtProcess.handlers) == 0:
         _start_remote()
     else:
-        for pid in remote.QtProcess.handlers:
+        for pid in multiprocess.QtProcess.handlers:
             try:
-                proc = remote.QtProcess.handlers[pid]
-                if isinstance(proc, remote.QtProcess):
+                proc = multiprocess.QtProcess.handlers[pid]
+                if isinstance(proc, multiprocess.QtProcess):
                     if not proc.exited:
-                        remote.QtProcess.handlers[pid].join()
-            except remote.ClosedError:
+                        multiprocess.QtProcess.handlers[pid].join()
+            except multiprocess.ClosedError:
                 continue
-        remote.QtProcess.handlers.clear()
+        multiprocess.QtProcess.handlers.clear()
         _start_remote()

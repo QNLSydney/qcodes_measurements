@@ -1,16 +1,48 @@
 # pylint: disable=import-outside-toplevel,invalid-name
+import io
 import os
 import sys
 import time
 import atexit
+import logging
 import multiprocessing
 import multiprocessing.connection
 
 from pyqtgraph.multiprocess.remoteproxy import RemoteEventHandler, ClosedError, NoResultError, \
                                                ObjectProxy
-from pyqtgraph.util import cprint
 
 __all__ = ['Process', 'QtProcess', 'ClosedError', 'NoResultError', 'ObjectProxy']
+
+class LoggingStream(io.IOBase):
+    """
+    Implement a stream handler that redirects all writes to a logger.
+    """
+
+    def __init__(self, logger, level="debug"):
+        """
+        Store the logger to which we pass all output.
+        """
+        super().__init__()
+        if not isinstance(logger, logging.Logger):
+            raise TypeError(f"logger must be a Logger. Is a {type(logger)}.")
+
+        self.logger = logger
+        self.level = level
+
+    def readable(self):
+        """
+        Can't read from a logger
+        """
+        return False
+
+    def writable(self):
+        """
+        Can write to a logger
+        """
+        return True
+
+    def write(self, msg):
+        getattr(self.logger, self.level)(msg.strip("\r\n"))
 
 class Process(RemoteEventHandler):
     """
@@ -119,10 +151,20 @@ class Process(RemoteEventHandler):
 
 
 def startEventLoop(name, conn, ppid, debug=False):
-    if debug:
-        sys.stdout = open("debug.txt", "w")
-        sys.stderr = sys.stdout
-        cprint.cout(debug, '[%d] connected; starting remote proxy.\n' % os.getpid(), -1)
+    # Create a new logger
+    logger = logging.getLogger("rpyplot.remote")
+    logger.setLevel(logging.DEBUG)
+    log_handler = logging.FileHandler("rpyplot.log")
+    log_handler.setLevel(logging.DEBUG)
+    log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    log_handler.setFormatter(log_format)
+    logger.addHandler(log_handler)
+
+    # Redirect stdout and stderr to the logger
+    sys.stdout = LoggingStream(logger.info)
+    sys.stderr = LoggingStream(logger.error)
+
+    logger.debug('[%d] connected; starting remote proxy.\n', os.getpid())
 
     handler = RemoteEventHandler(conn, name, ppid, debug=debug)
     while True:
@@ -214,10 +256,27 @@ class QtProcess(Process):
             self.timer.stop()
 
 def startQtEventLoop(name, conn, ppid, debug=False):
-    if debug:
-        sys.stdout = open("debug.txt", "w")
-        sys.stderr = sys.stdout
-        cprint.cout(debug, '[%d] connected; starting remote proxy.\n' % os.getpid(), -1)
+    # Disable logging to stderr
+    logging.lastResort = None
+    logging.captureWarnings(True)
+
+    # Create a new logger
+    logger = logging.getLogger("rpyplot")
+    logger.setLevel(logging.DEBUG)
+    log_handler = logging.FileHandler("rpyplot.log")
+    log_handler.setLevel(logging.DEBUG)
+    log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    log_handler.setFormatter(log_format)
+    logger.addHandler(log_handler)
+
+    # Get the remote handler
+    logger = logging.getLogger("rpyplot.remote")
+
+    # Redirect stdout and stderr to the logger
+    sys.stdout = LoggingStream(logger, "info")
+    sys.stderr = LoggingStream(logger, "error")
+
+    logger.debug('[%d] connected; starting remote proxy.\n', os.getpid())
     from pyqtgraph.Qt import QtGui
     app = QtGui.QApplication.instance()
     if app is None:
