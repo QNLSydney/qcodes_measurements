@@ -3,15 +3,14 @@ import numpy as np
 
 from qcodes.dataset.measurements import Measurement
 
-from ..plot import pyplot, plot_tools
-from .measure import Setpoint, _flush_buffers, _run_functions, _plot_sweep, _get_window
+from .measure import Setpoint, _flush_buffers, _run_functions, _plot_sweep
 
 @_plot_sweep
-def sweep_time(*param_meas, delay=10, until=None, 
+def sweep_time(*param_meas, delay=10, until=None,
                win=None, append=False, plot_params=None, annotation=None,
                atstart=(), ateach=(), atend=()):
     """
-    Run a time sweep, with a delay between each point. This sweep will run for `until` seconds, 
+    Run a time sweep, with a delay between each point. This sweep will run for `until` seconds,
     or indefinitely if until is None
 
     Args:
@@ -77,7 +76,7 @@ def sweep_time(*param_meas, delay=10, until=None,
             plot.bot_axis.unit = "s"
             plotdata = plot.plot(setpoint_x=time_data, name=param.name, pen=(255,0,0))
             plt_data[param] = (plot, plotdata, np.full((1,), np.nan))
-    
+
     if win is not None and annotation is not None:
         win.items[0].textbox(annotation)
 
@@ -118,7 +117,7 @@ def sweep_time(*param_meas, delay=10, until=None,
                         pld[2][array_size//2:] = np.nan
 
                 datasaver.add_result(*data)
-                
+
                 # Wait until the next point time. Try to keep track of how long it
                 # took for equipment to respond
                 next_time = start_time + delay*curr_point
@@ -127,5 +126,5 @@ def sweep_time(*param_meas, delay=10, until=None,
                     time.sleep(sleep_time)
     finally:
         _run_functions(atend)
-    
+
     return datasaver.run_id
