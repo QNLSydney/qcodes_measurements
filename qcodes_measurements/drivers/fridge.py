@@ -3,6 +3,8 @@ from functools import partial
 import requests
 from qcodes import Instrument
 
+__all__ = ["FridgeTemps"]
+
 class FridgeTemps(Instrument):
     """
     Instrument definition for a fridge logged on the thermometry site.

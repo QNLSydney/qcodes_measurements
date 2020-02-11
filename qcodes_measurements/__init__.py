@@ -1,6 +1,4 @@
-import logging
-
-logger = logging.getLogger("qcodes_measurements")
+__version__ = "0.1.0"
 
 # Import shortcuts to plot tools
 from .plot import plot_tools, pyplot
@@ -13,10 +11,3 @@ from .tools.snapshot import get_snapshot, pprint_dev_gates
 
 # Import shortcuts to device
 from .device import *
-
-# If we have an MDAC, import MDAC shortcuts
-try:
-    from MDAC import MDAC
-    from .tools.mdac import *
-except ModuleNotFoundError:
-    logger.info("MDAC drivers not present. Not loading drivers")
