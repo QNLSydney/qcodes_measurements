@@ -2,15 +2,16 @@ from setuptools import setup, find_packages
 
 setup(
     name='qcodes-measurements',
-    version='0.1',
+    version='0.1.0',
     description='QNL qcodes measurement procedures',
     url='https://github.com/QNLSydney/qcodes-measurements',
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
         'Licence :: MIT Licence',
         'Topic :: Scientific/Engineering'
     ],
@@ -28,5 +29,5 @@ setup(
         'tqdm>=4.41.1',
         'requests>=2.22.0'
     ],
-    python_requires='>=3'
+    python_requires='>=3.6'
 )
