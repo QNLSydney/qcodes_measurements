@@ -44,6 +44,24 @@ class LoggingStream(io.IOBase):
     def write(self, msg):
         getattr(self.logger, self.level)(msg.strip("\r\n"))
 
+def get_logger():
+    # Disable logging to stderr
+    logging.lastResort = None
+    logging.captureWarnings(True)
+
+    # Create a new logger
+    logger = logging.getLogger("rpyplot")
+    logger.setLevel(logging.DEBUG)
+    log_handler = logging.FileHandler("rpyplot.log")
+    log_handler.setLevel(logging.DEBUG)
+    log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    log_handler.setFormatter(log_format)
+    logger.addHandler(log_handler)
+
+    logger = logging.getLogger("rpyplot.remote")
+
+    return logger
+
 class Process(RemoteEventHandler):
     """
     Bases: RemoteEventHandler
@@ -151,14 +169,7 @@ class Process(RemoteEventHandler):
 
 
 def startEventLoop(name, conn, ppid, debug=False):
-    # Create a new logger
-    logger = logging.getLogger("rpyplot.remote")
-    logger.setLevel(logging.DEBUG)
-    log_handler = logging.FileHandler("rpyplot.log")
-    log_handler.setLevel(logging.DEBUG)
-    log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    log_handler.setFormatter(log_format)
-    logger.addHandler(log_handler)
+    logger = get_logger()
 
     # Redirect stdout and stderr to the logger
     sys.stdout = LoggingStream(logger.info)
@@ -256,21 +267,11 @@ class QtProcess(Process):
             self.timer.stop()
 
 def startQtEventLoop(name, conn, ppid, debug=False):
-    # Disable logging to stderr
-    logging.lastResort = None
-    logging.captureWarnings(True)
+    # Get logger
+    logger = get_logger()
 
-    # Create a new logger
-    logger = logging.getLogger("rpyplot")
-    logger.setLevel(logging.DEBUG)
-    log_handler = logging.FileHandler("rpyplot.log")
-    log_handler.setLevel(logging.DEBUG)
-    log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    log_handler.setFormatter(log_format)
-    logger.addHandler(log_handler)
-
-    # Get the remote handler
-    logger = logging.getLogger("rpyplot.remote")
+    # Set up environment
+    os.environ["QCM_REMOTE"] = "QCM_REMOTE"
 
     # Redirect stdout and stderr to the logger
     sys.stdout = LoggingStream(logger, "info")

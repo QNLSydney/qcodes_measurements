@@ -13,6 +13,9 @@ from . import multiprocess
 # Get access to module level variables
 this = sys.modules[__name__]
 
+__all__ = ["PlotWindow", "PlotItem", "PlotData", "PlotDataItem", "ExtendedPlotDataItem", "ImageItem",
+           "ExtendedImageItem", "ImageItemWithHistogram", "TableWidget", "LegendItem", "TextItem", "ColorMap"]
+
 #Define some convenient functions
 def _set_defaults(rpg):
     """
