@@ -1,10 +1,9 @@
-import logging
 from PyQt5 import QtCore, QtGui
 
 from pyqtgraph import GraphicsWidget, GraphicsWidgetAnchor, LabelItem, Point, mkPen, mkBrush
 
-logger = logging.getLogger("rpyplot.DraggableTextItem")
-logger.setLevel(logging.DEBUG)
+from ..multiprocess import get_logger
+logger = get_logger("DraggableTextItem")
 
 class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
     def __init__(self, *args, text="", offset=None):

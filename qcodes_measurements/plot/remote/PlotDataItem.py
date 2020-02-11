@@ -6,6 +6,8 @@ from PyQt5 import QtGui
 from pyqtgraph import PlotDataItem, mkColor
 
 from .DataItem import ExtendedDataItem
+from ..multiprocess import get_logger
+logger = get_logger("PlotDataItem")
 
 class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
     def __init__(self, *args, **kwargs):

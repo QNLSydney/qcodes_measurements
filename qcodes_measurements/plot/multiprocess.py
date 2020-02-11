@@ -8,8 +8,8 @@ import logging
 import multiprocessing
 import multiprocessing.connection
 
-from pyqtgraph.multiprocess.remoteproxy import RemoteEventHandler, ClosedError, NoResultError, \
-                                               ObjectProxy
+import pyqtgraph.multiprocess.remoteproxy
+from pyqtgraph.multiprocess.remoteproxy import ClosedError, NoResultError, ObjectProxy
 
 __all__ = ['Process', 'QtProcess', 'ClosedError', 'NoResultError', 'ObjectProxy']
 
@@ -44,23 +44,62 @@ class LoggingStream(io.IOBase):
     def write(self, msg):
         getattr(self.logger, self.level)(msg.strip("\r\n"))
 
-def get_logger():
+def get_logger(name=None, debug=False):
     # Disable logging to stderr
     logging.lastResort = None
     logging.captureWarnings(True)
 
-    # Create a new logger
+    # Create a root logger
     logger = logging.getLogger("rpyplot")
     logger.setLevel(logging.DEBUG)
-    log_handler = logging.FileHandler("rpyplot.log")
-    log_handler.setLevel(logging.DEBUG)
-    log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    log_handler.setFormatter(log_format)
-    logger.addHandler(log_handler)
+    # Create a handler for the logger if necessary
+    if not logger.handlers:
+        log_handler = logging.FileHandler("rpyplot.log")
+        log_handler.setLevel(logging.DEBUG)
+        log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        log_handler.setFormatter(log_format)
+        logger.addHandler(log_handler)
 
-    logger = logging.getLogger("rpyplot.remote")
+    # Get the requested logger
+    if "QCM_REMOTE" in os.environ:
+        base = f"rpyplot.remote_{os.environ['QCM_REMOTE']}.{os.getpid()}"
+        if name is None:
+            logger = logging.getLogger(base)
+        else:
+            logger = logging.getLogger(f"{base}.{name}")
+    else:
+        base = f"rpyplot.local_{os.getpid()}"
+        if name is None:
+            logger = logging.getLogger(base)
+        else:
+            logger = logging.getLogger(f"{base}.{name}")
+    if debug:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
 
     return logger
+
+class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
+    """
+    Reimplementation of RemoteEventHandler that uses logging module for debug instead of
+    cprint. This works properly on windows and ipython.
+    """
+    def __init__(self, connection, name, pid, debug=False, logger=None):
+        super().__init__(connection, name, pid, debug=False)
+        del self.debug
+
+        # Set up logger if it does not exist
+        if logger is not None:
+            self.logger = logger
+        elif not hasattr(self, "logger"):
+            self.logger = get_logger(name, debug=debug)
+
+    def debugMsg(self, msg, *args):
+        """
+        Use the logger for debugging instead
+        """
+        self.logger.debug(msg.strip("\r\n"), *args)
 
 class Process(RemoteEventHandler):
     """
@@ -86,8 +125,6 @@ class Process(RemoteEventHandler):
     ProxyObject for more information.
     """
 
-    _process_count = 1
-
     def __init__(self, name=None, target=None, debug=False):
         """
         ==============  =============================================================
@@ -106,30 +143,23 @@ class Process(RemoteEventHandler):
         if target is None:
             target = startEventLoop
         if name is None:
-            name = str(self)
-        self.debug = 7 if debug is True else False  # 7 causes printing in white
+            name = str(os.getpid())
+        self.logger = get_logger(debug=debug)
 
         ## Create a connection for the client/server
         self.conn, child_conn = multiprocessing.Pipe(True)
 
-        self.debugMsg('Starting child process')
-
-        # Decide on printing color for this process
-        if debug:
-            proc_debug = (Process._process_count%6) + 1  # pick a color for this process to print in
-            Process._process_count += 1
-        else:
-            proc_debug = False
+        self.logger.info('Starting child process')
 
         # we must send pid to child because windows only implemented getppid in Python 3.2
         pid = os.getpid()
 
         ## Send everything the remote process needs to start correctly
         data = dict(
-            name=name+'_child',
+            name=name,
             conn=child_conn,
             ppid=pid,
-            debug=proc_debug,
+            debug=debug,
             )
 
         # Start the process. We'll set the file that multiprocessing loads to this file
@@ -145,7 +175,7 @@ class Process(RemoteEventHandler):
 
         ## Connect the child process event handler to self.conn
         RemoteEventHandler.__init__(self, self.conn, name+'_parent',
-                                    pid=self.proc.pid, debug=self.debug)
+                                    pid=self.proc.pid, logger=self.logger)
         self.debugMsg('Connected to child process.')
 
         atexit.register(self.join)
@@ -164,25 +194,26 @@ class Process(RemoteEventHandler):
 
         self.debugMsg('Child process exited. (%d)' % self.proc.exitcode)
 
-    def debugMsg(self, msg, *args):
-        RemoteEventHandler.debugMsg(self, msg, *args)
-
 
 def startEventLoop(name, conn, ppid, debug=False):
-    logger = get_logger()
+    # Set up environment
+    os.environ["QCM_REMOTE"] = name
+
+    # Set up logger
+    logger = get_logger(debug=debug)
 
     # Redirect stdout and stderr to the logger
     sys.stdout = LoggingStream(logger.info)
     sys.stderr = LoggingStream(logger.error)
 
-    logger.debug('[%d] connected; starting remote proxy.\n', os.getpid())
+    logger.info('Connected; starting remote proxy.\n')
 
-    handler = RemoteEventHandler(conn, name, ppid, debug=debug)
+    handler = RemoteEventHandler(conn, name, ppid, logger=logger)
     while True:
         try:
             handler.processRequests()  # exception raised when the loop should exit
             time.sleep(0.01)
-        except ClosedError:
+        except (ClosedError, BrokenPipeError):
             handler.debugMsg('Exiting server loop.')
             sys.exit(0)
 
@@ -267,17 +298,17 @@ class QtProcess(Process):
             self.timer.stop()
 
 def startQtEventLoop(name, conn, ppid, debug=False):
-    # Get logger
-    logger = get_logger()
-
     # Set up environment
-    os.environ["QCM_REMOTE"] = "QCM_REMOTE"
+    os.environ["QCM_REMOTE"] = name
+
+    # Get logger
+    logger = get_logger(debug=debug)
 
     # Redirect stdout and stderr to the logger
     sys.stdout = LoggingStream(logger, "info")
     sys.stderr = LoggingStream(logger, "error")
 
-    logger.debug('[%d] connected; starting remote proxy.\n', os.getpid())
+    logger.info('Connected; starting remote proxy.\n')
     from pyqtgraph.Qt import QtGui
     app = QtGui.QApplication.instance()
     if app is None:
@@ -286,6 +317,6 @@ def startQtEventLoop(name, conn, ppid, debug=False):
         ## until it is explicitly closed by the parent process.
         app.setQuitOnLastWindowClosed(False)
 
-    handler = RemoteQtEventHandler(conn, name, ppid, debug=debug)
+    handler = RemoteQtEventHandler(conn, name, ppid, logger=logger)
     handler.startEventTimer()
     sys.exit(app.exec_())

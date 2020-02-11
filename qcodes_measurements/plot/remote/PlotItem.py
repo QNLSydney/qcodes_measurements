@@ -1,4 +1,3 @@
-import logging
 import colorsys
 
 from pyqtgraph import PlotItem, ImageItem, PlotDataItem, LegendItem
@@ -6,9 +5,8 @@ from pyqtgraph.multiprocess import proxy
 
 from .ViewBox import CustomViewBox
 from .PlotDataItem import ExtendedPlotDataItem
-
-logger = logging.getLogger("rpyplot.PlotItem")
-logger.setLevel(logging.DEBUG)
+from ..multiprocess import get_logger
+logger = get_logger("PlotItem")
 
 class ExtendedPlotItem(PlotItem):
     def __init__(self, *args, **kwargs):

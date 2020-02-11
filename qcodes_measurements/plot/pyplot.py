@@ -707,7 +707,6 @@ class ExtendedImageItem(ImageItem):
         """
         This is handled on the server side...
         """
-        pass
 
     @property
     @_ensure_val

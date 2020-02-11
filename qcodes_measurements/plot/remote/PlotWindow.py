@@ -1,11 +1,9 @@
-import logging
-
 from pyqtgraph import GraphicsLayoutWidget
 from pyqtgraph.exporters import ImageExporter, SVGExporter
 from pyqtgraph.multiprocess import proxy
 
-logger = logging.getLogger("rpyplot.ExtendedPlotWindow")
-logger.setLevel(logging.DEBUG)
+from ..multiprocess import get_logger
+logger = get_logger("PlotWindow")
 
 class ExtendedPlotWindow(GraphicsLayoutWidget):
     _windows = []

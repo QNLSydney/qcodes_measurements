@@ -1,4 +1,3 @@
-import logging
 from functools import partial
 from PyQt5 import QtCore, QtGui
 import numpy as np
@@ -11,8 +10,8 @@ from .PlotWindow import ExtendedPlotWindow
 from .ViewBox import CustomViewBox
 from .colors import COLORMAPS, DEFAULT_CMAP
 
-logger = logging.getLogger("rpyplot.ImageItem")
-logger.setLevel(logging.DEBUG)
+from ..multiprocess import get_logger
+logger = get_logger("ImageItem")
 
 class ExtendedImageItem(ExtendedDataItem, ImageItem):
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):

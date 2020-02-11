@@ -1,11 +1,9 @@
-import logging
 from PyQt5 import QtCore
 from pyqtgraph import PlotCurveItem, PlotDataItem, ImageItem
 
 from .DataItem import ExtendedDataItem
-
-logger = logging.getLogger("rpyplot.PlotMenu")
-logger.setLevel(logging.DEBUG)
+from ..multiprocess import get_logger
+logger = get_logger("PlotMenu")
 
 class PlotMenuMixin:
     def raiseContextMenu(self, ev):

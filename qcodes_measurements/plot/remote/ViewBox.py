@@ -5,6 +5,8 @@ from pyqtgraph import ViewBox, PlotDataItem, PlotCurveItem, \
                       ImageItem, GraphicsObject, mkPen, mkBrush
 
 from .PlotMenu import PlotMenuMixin
+from ..multiprocess import get_logger
+logger = get_logger("ViewBox")
 
 class CustomViewBox(PlotMenuMixin, ViewBox):
     def __init__(self, *args, **kwargs):
