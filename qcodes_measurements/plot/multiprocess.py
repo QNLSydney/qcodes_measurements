@@ -116,12 +116,12 @@ class Process(RemoteEventHandler):
         ## Connect the child process event handler to self.conn
         RemoteEventHandler.__init__(self, self.conn, name+'_parent',
                                     pid=self.proc.pid, logger=self.logger)
-        self.debugMsg('Connected to child process.')
+        self.logger.debug('Connected to child process.')
 
         atexit.register(self.join)
 
     def join(self, timeout=10):
-        self.debugMsg('Joining child process..')
+        self.logger.debug('Joining child process..')
 
         if self.proc.is_alive():
             self.close()
@@ -132,7 +132,7 @@ class Process(RemoteEventHandler):
                 self.proc.join(0.05)
             self.conn.close()
 
-        self.debugMsg('Child process exited. (%d)' % self.proc.exitcode)
+        self.logger.info('Child process exited with exit code: %d', self.proc.exitcode)
 
 
 def startEventLoop(name, conn, ppid, debug=False):
@@ -154,7 +154,7 @@ def startEventLoop(name, conn, ppid, debug=False):
             handler.processRequests()  # exception raised when the loop should exit
             time.sleep(0.01)
         except (ClosedError, BrokenPipeError):
-            handler.debugMsg('Exiting server loop.')
+            logger.debug('Exiting server loop.')
             sys.exit(0)
 
 
