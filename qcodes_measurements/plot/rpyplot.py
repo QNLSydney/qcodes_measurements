@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 import pyqtgraph
 from pyqtgraph import GraphicsLayoutWidget, \
                       PlotItem, PlotDataItem, ImageItem, \
@@ -6,16 +7,18 @@ from pyqtgraph import GraphicsLayoutWidget, \
                       LabelItem, LegendItem, AxisItem, \
                       setConfigOption, setConfigOptions, getConfigOption
 
+from . import remote
 from .remote.colors import COLORMAPS, DEFAULT_CMAP
 from .remote.PlotWindow import ExtendedPlotWindow
 from .remote.DraggableTextItem import DraggableTextItem
 from .remote.PlotDataItem import ExtendedPlotDataItem
 from .remote.PlotItem import ExtendedPlotItem
 from .remote.ImageItem import ExtendedImageItem, ImageItemWithHistogram
+from .remote.VoronoiPlot import VoronoiPlot
 
 __all__ = ['ExtendedPlotWindow', 'DraggableTextItem', 'ExtendedPlotDataItem',
            'ExtendedPlotItem', 'ExtendedImageItem', 'ImageItemWithHistogram',
            'GraphicsLayoutWidget', 'AxisItem', 'PlotItem', 'HistogramLUTItem',
-           'ColorMap', 'LegendItem', 'PlotDataItem', 'ImageItem', 'TableWidget',
-           'LabelItem', 'setConfigOption', 'setConfigOptions', 'getConfigOption',
-           'pyqtgraph', 'COLORMAPS', 'DEFAULT_CMAP']
+           'ColorMap', 'LegendItem', 'PlotDataItem', 'ImageItem', 'VoronoiPlot',
+           'TableWidget', 'LabelItem', 'setConfigOption', 'setConfigOptions',
+           'getConfigOption', 'pyqtgraph', 'COLORMAPS', 'DEFAULT_CMAP', 'remote']

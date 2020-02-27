@@ -805,6 +805,12 @@ class TableWidget(RPGWrappedBase):
     """
     _base = "TableWidget"
 
+class VoronoiPlot(RPGWrappedBase):
+    """
+    Table
+    """
+    _base = "VoronoiPlot"
+
 def _start_remote():
     # Check that a QApplication has been created
     if PyQt5.QtGui.QApplication.instance() is None:

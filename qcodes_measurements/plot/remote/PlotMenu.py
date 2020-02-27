@@ -96,3 +96,6 @@ class PlotMenuMixin:
                     menuItems.append(self.menu.addMenu(item[1]))
 
         return itemsToAdd
+
+class ImageMenuMixin:
+    pass
