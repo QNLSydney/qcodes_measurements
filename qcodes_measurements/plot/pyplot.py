@@ -2,6 +2,7 @@
 
 import sys
 import re
+from typing import Dict
 import PyQt5
 
 import numpy as np
@@ -93,7 +94,9 @@ class RPGWrappedBase(multiprocess.ObjectProxy):
         else:
             raise TypeError("Base instance not defined. Don't know how to create remote object.")
 
-    def __wrap__(self):
+    def __wrap__(self, *args, **kwargs):
+        if args or kwargs:
+            raise TypeError(f"RPGWrappedBase.__wrap__ expects no arguments. Got args={args}, kwargs={kwargs}")
         # We still want to keep track of new items in wrapped objects
         self._items = []
         self._parent = None
@@ -318,6 +321,13 @@ class PlotAxis(RPGWrappedBase):
     def units(self, units):
         self.setLabel(units=units)
 
+    @property
+    def unit(self):
+        return self.labelUnits
+    @unit.setter
+    def unit(self, units):
+        self.setLabel(units=units)
+
 class BasePlotItem(RPGWrappedBase):
     _base = "PlotItem"
 
@@ -411,12 +421,12 @@ class PlotItem(BasePlotItem):
     @property
     @_auto_wrap
     def traces(self):
-        return self.listDataItems(proxy_items=True)
+        return self.listDataItems(_returnType="proxy")
 
     @property
     @_auto_wrap
     def items(self):
-        return self.listItems(proxy_items=True)
+        return self.listItems(_returnType="proxy")
 
 class TextItem(RPGWrappedBase):
     _base = "DraggableTextItem"
@@ -470,7 +480,7 @@ class HistogramLUTItem(RPGWrappedBase):
         self._remote_function_options['setLevels'] = {'callSync': 'off'}
         self._remote_function_options['imageChanged'] = {'callSync': 'off'}
     def __wrap__(self, *args, **kwargs):
-        super().__wrap__(*args, **kwargs)
+        super().__wrap__()
         self._remote_function_options['setLevels'] = {'callSync': 'off'}
         self._remote_function_options['imageChanged'] = {'callSync': 'off'}
 
@@ -500,7 +510,7 @@ class HistogramLUTItem(RPGWrappedBase):
 
 class ColorMap(RPGWrappedBase):
     _base = "ColorMap"
-    _all_colors = {}
+    _all_colors: Dict[str, "ColorMap"] = {}
 
     # Reserve names of local variables
     _name = None
@@ -567,11 +577,14 @@ class PlotDataItem(PlotData):
         self._remote_function_options['setData'] = {'callSync': 'off'}
 
     def __wrap__(self, *args, **kwargs):
+        setpoint_x = kwargs.pop("setpoint_x", None)
+
         super().__wrap__(*args, **kwargs)
         self._remote_function_options['setData'] = {'callSync': 'off'}
-        if 'setpoint_x' in kwargs:
+
+        if setpoint_x is not None:
             # If we know what our setpoints are, use them
-            self.xData = kwargs['setpoint_x']
+            self.xData = setpoint_x
 
     def update(self, data, *args, **kwargs):
         """
@@ -611,11 +624,14 @@ class ExtendedPlotDataItem(PlotDataItem):
         self._remote_function_options['update'] = {'callSync': 'off'}
 
     def __wrap__(self, *args, **kwargs):
+        setpoint_x = kwargs.pop("setpoint_x", None)
+
         super().__wrap__(*args, **kwargs)
         self._remote_function_options['update'] = {'callSync': 'off'}
-        if 'setpoint_x' in kwargs:
+
+        if setpoint_x is not None:
             # If we know what our setpoints are, use them
-            self.setpoint_x = _ensure_ndarray(kwargs['setpoint_x'])
+            self.setpoint_x = _ensure_ndarray(setpoint_x)
 
     @property
     def setpoint_x(self):
@@ -797,7 +813,7 @@ def _start_remote():
         this.app = PyQt5.QtGui.QApplication.instance()
 
     proc = multiprocess.QtProcess(debug=False)
-    this.rpg = proc._import('qcodes_measurements.plot.rpyplot')
+    this.rpg = proc._import('qcodes_measurements.plot.rpyplot', _timeout=10)
     _set_defaults(this.rpg)
 
 def _restart_remote():

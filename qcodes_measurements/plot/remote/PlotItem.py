@@ -30,7 +30,7 @@ class ExtendedPlotItem(PlotItem):
             # addItem does not keep track of images, let's add it ourselves
             self.dataItems.append(item)
 
-    def listItems(self, proxy_items=False):
+    def listItems(self):
         """
         Create a pickleable list of items in the plot
         """
@@ -40,7 +40,7 @@ class ExtendedPlotItem(PlotItem):
             items = self.items
         return items
 
-    def listDataItems(self, proxy_items=False):
+    def listDataItems(self):
         """
         Create a picklable list of data items.
         """
