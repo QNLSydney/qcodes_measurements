@@ -426,7 +426,7 @@ class PlotItem(BasePlotItem):
     @property
     @_auto_wrap
     def items(self):
-        return self.listItems(_returnType="proxy")
+        return self.__getattr__("items", _returnType="proxy")
 
 class TextItem(RPGWrappedBase):
     _base = "DraggableTextItem"

@@ -1,7 +1,6 @@
 import colorsys
 
 from pyqtgraph import PlotItem, ImageItem, PlotDataItem, LegendItem
-from pyqtgraph.multiprocess import proxy
 
 from .ViewBox import CustomViewBox
 from .PlotDataItem import ExtendedPlotDataItem
@@ -29,25 +28,6 @@ class ExtendedPlotItem(PlotItem):
         if isinstance(item, ImageItem):
             # addItem does not keep track of images, let's add it ourselves
             self.dataItems.append(item)
-
-    def listItems(self):
-        """
-        Create a pickleable list of items in the plot
-        """
-        if proxy_items:
-            items = [proxy(item) for item in self.items]
-        else:
-            items = self.items
-        return items
-
-    def listDataItems(self):
-        """
-        Create a picklable list of data items.
-        """
-        data_items = super().listDataItems()
-        if proxy_items:
-            data_items = [proxy(item) for item in data_items]
-        return data_items
 
     def plot(self, *args, **kargs):
         """
