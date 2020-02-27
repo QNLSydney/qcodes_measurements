@@ -5,6 +5,7 @@ from pyqtgraph import ViewBox, PlotDataItem, PlotCurveItem, \
                       ImageItem, GraphicsObject, mkPen, mkBrush
 
 from .PlotMenu import PlotMenuMixin
+from .DataItem import ExtendedDataItem
 from ..multiprocess import get_logger
 logger = get_logger("ViewBox")
 
@@ -17,6 +18,8 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
         self.scaleBox = DraggableScaleBox()
         self.scaleBox.hide()
         self.addItem(self.scaleBox, ignoreBounds=True)
+        # And disable the one from PyQtGraph
+        self.removeItem(self.rbScaleBox)
 
         # The mouse mode is not used, since we override what left clicking does anyway
         removeMenuItems = ('Mouse Mode', )
@@ -95,10 +98,7 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
         """
         r = QtCore.QRectF(p1, p2)
         r = self.childGroup.mapRectFromParent(r)
-
-        self.scaleBox.setPos(r.topLeft())
-        self.scaleBox.resetTransform()
-        self.scaleBox.scale(r.width(), r.height())
+        self.scaleBox.setBoundingRect(r)
 
     def removePlotItem(self, item):
         """
@@ -107,7 +107,7 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
         self.parentObject().removeItem(item)
         self.scaleBox.hide()
 
-    def makeTracesDifferent(self, checked=False, items=None):
+    def makeTracesDifferent(self, _checked=False, items=None):
         self.parentObject().makeTracesDifferent(items=items)
 
 
@@ -117,16 +117,23 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
         # Set menu, create when necessary
         self.menu = None
 
+        # Set size
+        self._rect = QtCore.QRectF(0, 0, 1, 1)
+
         # Set Formatting
         self.pen = mkPen((255, 255, 100), width=1)
         self.brush = mkBrush(255, 255, 0, 100)
         self.setZValue(1e9)
 
     # All graphics items must have paint() and boundingRect() defined.
-    def boundingRect(self):
-        return QtCore.QRectF(0, 0, 1, 1)
+    def setBoundingRect(self, r):
+        self._rect = r
+        self.update()
 
-    def paint(self, p, *args):
+    def boundingRect(self):
+        return self._rect
+
+    def paint(self, p, _options, _widget):
         p.setPen(self.pen)
         p.setBrush(self.brush)
         p.drawRect(self.boundingRect())
@@ -156,16 +163,19 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
                 qaction.triggered.connect(action[1])
                 self.menu.addAction(qaction)
 
-        # Get the size of the scale box
-        vb = self.getViewBox()
-        rect = self.mapRectToItem(vb.childGroup, self.boundingRect())
-
-        # Add plot items to the menu
-        items = self.scene().items(self.mapRectToScene(self.boundingRect()))
-        # Let's figure out as well the number of the plot item for labelling purposes
-        itemNumbers = [x for x in self.parentObject().childItems() if isinstance(x, (PlotDataItem, ImageItem))]
+        # Add plot items to the menu. First get a list of items in the view
+        items = self.getViewBox().childGroup.childItems()
+        # Figure out an item numbering for labelling purposes
+        itemNumbers = [x for x in self.parentObject().childItems() if isinstance(x, (ExtendedDataItem, PlotDataItem, ImageItem))]
         itemNumbers = dict((x[1], x[0]) for x in enumerate(itemNumbers))
-        self.addPlotContextMenus(items, itemNumbers, self.menu, rect)
+
+        # Then, filter items under the box
+        logger.debug("Bounding rect for scale box is: %r", self.boundingRect())
+        items = [i for i in items if i.collidesWithItem(self)]
+        logger.debug("Items in the selection are: %r", items)
+
+        # And finally add context menus
+        self.addPlotContextMenus(items, itemNumbers, self.menu, self.boundingRect())
 
         return self.menu
 
