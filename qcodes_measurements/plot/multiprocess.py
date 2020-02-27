@@ -13,6 +13,9 @@ from pyqtgraph.multiprocess.remoteproxy import ClosedError, NoResultError, Objec
 
 __all__ = ['Process', 'QtProcess', 'ClosedError', 'NoResultError', 'ObjectProxy']
 
+# Get access to module level variables
+this = sys.modules[__name__]
+
 class LoggingStream(io.IOBase):
     """
     Implement a stream handler that redirects all writes to a logger.
@@ -50,15 +53,18 @@ def get_logger(name=None, debug=False):
     logging.captureWarnings(True)
 
     # Create a root logger
-    logger = logging.getLogger("rpyplot")
-    logger.setLevel(logging.DEBUG)
-    # Create a handler for the logger if necessary
-    if not logger.handlers:
+    if getattr(this, "logger", None) is None:
+        this.logger = logging.getLogger("rpyplot")
+        if debug:
+            this.logger.setLevel(logging.DEBUG)
+        else:
+            this.logger.setLevel(logging.INFO)
+        # Create a handler for the logger
         log_handler = logging.FileHandler("rpyplot.log")
         log_handler.setLevel(logging.DEBUG)
         log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         log_handler.setFormatter(log_format)
-        logger.addHandler(log_handler)
+        this.logger.addHandler(log_handler)
 
     # Get the requested logger
     if "QCM_REMOTE" in os.environ:
@@ -73,12 +79,13 @@ def get_logger(name=None, debug=False):
             logger = logging.getLogger(base)
         else:
             logger = logging.getLogger(f"{base}.{name}")
-    if debug:
-        logger.setLevel(logging.DEBUG)
-    else:
-        logger.setLevel(logging.INFO)
 
     return logger
+
+def set_log_level(level):
+    # Get the root logger
+    logger = logging.getLogger("rpyplot")
+    logger.setLevel(level)
 
 class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
     """
@@ -286,7 +293,7 @@ class QtProcess(Process):
         This allows signals to be connected from the child process to the parent.
         """
         self.timer.timeout.connect(self.processRequests)
-        self.timer.start(interval*1000)
+        self.timer.start(max(1, int(interval*1000)))
 
     def stopRequestProcessing(self):
         self.timer.stop()
@@ -308,7 +315,7 @@ def startQtEventLoop(name, conn, ppid, debug=False):
     sys.stdout = LoggingStream(logger, "info")
     sys.stderr = LoggingStream(logger, "error")
 
-    logger.info('Connected; starting remote proxy.\n')
+    logger.info('Connected; starting remote proxy.')
     from pyqtgraph.Qt import QtGui
     app = QtGui.QApplication.instance()
     if app is None:
