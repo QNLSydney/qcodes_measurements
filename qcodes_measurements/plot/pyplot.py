@@ -188,7 +188,7 @@ class RPGWrappedBase(multiprocess.ObjectProxy):
         else:
             super().__setattr__(name, value)
 
-    def __getattr__(self, name):
+    def __getattr__(self, name, **kwargs):
         # Check for ipython special methods
         if re.match("_repr_.*_", name):
             raise AttributeError("Ignoring iPython special methods")
@@ -199,8 +199,11 @@ class RPGWrappedBase(multiprocess.ObjectProxy):
         if name in self._remote_functions:
             return self._remote_functions[name]
 
-        # Get attribute from object proxy
-        attr = getattr(self._base_inst, name)
+        # Get attribute from object proxy, checking if it exists locally first
+        try:
+            attr = self._base_inst.__dict__[name]
+        except KeyError:
+            attr = self._base_inst.__getattr__(name, **kwargs)
 
         # Check if item is a wrappable type
         attr = self.autowrap(attr)
