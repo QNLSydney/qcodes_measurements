@@ -4,7 +4,7 @@ from pyqtgraph import PlotItem, ImageItem, PlotDataItem, LegendItem
 
 from .ViewBox import CustomViewBox
 from .PlotDataItem import ExtendedPlotDataItem
-from ..multiprocess import get_logger
+from ...logging import get_logger
 logger = get_logger("PlotItem")
 
 class ExtendedPlotItem(PlotItem):

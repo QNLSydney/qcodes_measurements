@@ -4,7 +4,7 @@ from pyqtgraph import GraphicsLayoutWidget
 from pyqtgraph.exporters import ImageExporter, SVGExporter
 from pyqtgraph.multiprocess import proxy
 
-from ..multiprocess import get_logger
+from ...logging import get_logger
 logger = get_logger("PlotWindow")
 
 class ExtendedPlotWindow(GraphicsLayoutWidget):

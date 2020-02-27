@@ -1,91 +1,24 @@
-# pylint: disable=import-outside-toplevel,invalid-name
-import io
+# pylint: disable=import-outside-toplevel,invalid-name,wrong-import-position
 import os
 import sys
 import time
 import atexit
-import logging
 import multiprocessing
 import multiprocessing.connection
 
 import pyqtgraph.multiprocess.remoteproxy
 from pyqtgraph.multiprocess.remoteproxy import ClosedError, NoResultError, ObjectProxy
 
+# Allow a speedy import of logging from qcodes_measurements
+PREV_REMOTE = os.environ.get("QCM_REMOTE", None)
+os.environ["QCM_REMOTE"] = "IMP_LOGGING"
+from qcodes_measurements.logging import get_logger, LoggingStream
+if PREV_REMOTE is None:
+    del os.environ["QCM_REMOTE"]
+else:
+    os.environ["QCM_REMOTE"] = PREV_REMOTE
+
 __all__ = ['Process', 'QtProcess', 'ClosedError', 'NoResultError', 'ObjectProxy']
-
-# Get access to module level variables
-this = sys.modules[__name__]
-
-class LoggingStream(io.IOBase):
-    """
-    Implement a stream handler that redirects all writes to a logger.
-    """
-
-    def __init__(self, logger, level="debug"):
-        """
-        Store the logger to which we pass all output.
-        """
-        super().__init__()
-        if not isinstance(logger, logging.Logger):
-            raise TypeError(f"logger must be a Logger. Is a {type(logger)}.")
-
-        self.logger = logger
-        self.level = level
-
-    def readable(self):
-        """
-        Can't read from a logger
-        """
-        return False
-
-    def writable(self):
-        """
-        Can write to a logger
-        """
-        return True
-
-    def write(self, msg):
-        getattr(self.logger, self.level)(msg.strip("\r\n"))
-
-def get_logger(name=None, debug=False):
-    # Disable logging to stderr
-    logging.lastResort = None
-    logging.captureWarnings(True)
-
-    # Create a root logger
-    if getattr(this, "logger", None) is None:
-        this.logger = logging.getLogger("rpyplot")
-        if debug:
-            this.logger.setLevel(logging.DEBUG)
-        else:
-            this.logger.setLevel(logging.INFO)
-        # Create a handler for the logger
-        log_handler = logging.FileHandler("rpyplot.log")
-        log_handler.setLevel(logging.DEBUG)
-        log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        log_handler.setFormatter(log_format)
-        this.logger.addHandler(log_handler)
-
-    # Get the requested logger
-    if "QCM_REMOTE" in os.environ:
-        base = f"rpyplot.remote_{os.environ['QCM_REMOTE']}.{os.getpid()}"
-        if name is None:
-            logger = logging.getLogger(base)
-        else:
-            logger = logging.getLogger(f"{base}.{name}")
-    else:
-        base = f"rpyplot.local_{os.getpid()}"
-        if name is None:
-            logger = logging.getLogger(base)
-        else:
-            logger = logging.getLogger(f"{base}.{name}")
-
-    return logger
-
-def set_log_level(level):
-    # Get the root logger
-    logger = logging.getLogger("rpyplot")
-    logger.setLevel(level)
 
 class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
     """
@@ -151,7 +84,7 @@ class Process(RemoteEventHandler):
             target = startEventLoop
         if name is None:
             name = str(os.getpid())
-        self.logger = get_logger(debug=debug)
+        self.logger = get_logger(f"local_{os.getpid()}", debug=debug)
 
         ## Create a connection for the client/server
         self.conn, child_conn = multiprocessing.Pipe(True)

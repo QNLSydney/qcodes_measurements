@@ -6,7 +6,7 @@ from pyqtgraph import ViewBox, PlotDataItem, PlotCurveItem, \
 
 from .PlotMenu import PlotMenuMixin
 from .DataItem import ExtendedDataItem
-from ..multiprocess import get_logger
+from ...logging import get_logger
 logger = get_logger("ViewBox")
 
 class CustomViewBox(PlotMenuMixin, ViewBox):

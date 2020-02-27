@@ -2,7 +2,7 @@ from PyQt5 import QtCore, QtGui
 
 from pyqtgraph import GraphicsWidget, GraphicsWidgetAnchor, LabelItem, Point, mkPen, mkBrush
 
-from ..multiprocess import get_logger
+from ...logging import get_logger
 logger = get_logger("DraggableTextItem")
 
 class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):

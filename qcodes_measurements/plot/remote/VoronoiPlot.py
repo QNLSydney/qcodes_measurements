@@ -6,8 +6,8 @@ from PyQt5 import QtCore, QtGui
 
 from .MeshPlot import MeshPlot
 from .DataItem import ExtendedDataItem
-from ..multiprocess import get_logger
-logger = get_logger("ViewBox")
+from ...logging import get_logger
+logger = get_logger("VoronoiPlot")
 
 class VoronoiPlot(ExtendedDataItem, MeshPlot):
     def __init__(self, *args, positions=None, data=None, colormap=None, **kwargs):

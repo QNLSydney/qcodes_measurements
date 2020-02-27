@@ -9,7 +9,7 @@ from pyqtgraph import GraphicsObject, HistogramLUTItem, mkPen
 from .PlotWindow import ExtendedPlotWindow
 from .ViewBox import CustomViewBox
 from .colors import DEFAULT_CMAP, COLORMAPS
-from ..multiprocess import get_logger
+from ...logging import get_logger
 logger = get_logger("MeshPlot")
 
 class MeshPlot(GraphicsObject):

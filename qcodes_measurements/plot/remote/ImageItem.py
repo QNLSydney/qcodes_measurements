@@ -9,8 +9,7 @@ from .DataItem import ExtendedDataItem
 from .PlotWindow import ExtendedPlotWindow
 from .ViewBox import CustomViewBox
 from .colors import COLORMAPS, DEFAULT_CMAP
-
-from ..multiprocess import get_logger
+from ...logging import get_logger
 logger = get_logger("ImageItem")
 
 class ExtendedImageItem(ExtendedDataItem, ImageItem):

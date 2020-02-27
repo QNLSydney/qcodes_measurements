@@ -2,7 +2,7 @@ from PyQt5 import QtCore
 from pyqtgraph import PlotCurveItem, PlotDataItem, ImageItem
 
 from .DataItem import ExtendedDataItem
-from ..multiprocess import get_logger
+from ...logging import get_logger
 logger = get_logger("PlotMenu")
 
 class PlotMenuMixin:
