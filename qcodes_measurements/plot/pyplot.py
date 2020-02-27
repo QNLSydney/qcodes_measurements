@@ -15,7 +15,8 @@ from . import multiprocess
 this = sys.modules[__name__]
 
 __all__ = ["PlotWindow", "PlotItem", "PlotData", "PlotDataItem", "ExtendedPlotDataItem", "ImageItem",
-           "ExtendedImageItem", "ImageItemWithHistogram", "TableWidget", "LegendItem", "TextItem", "ColorMap"]
+           "ExtendedImageItem", "ImageItemWithHistogram", "TableWidget", "LegendItem", "TextItem", "ColorMap",
+           "VoronoiPlot"]
 
 #Define some convenient functions
 def _set_defaults(rpg):
@@ -57,6 +58,9 @@ def _auto_wrap(f):
         val = f(*args, **kwargs)
         if isinstance(val, (tuple, list)):
             return tuple(RPGWrappedBase.autowrap(item) for item in val)
+        elif val.__getattr__("__class__").__name__ in ("tuple", "list"):
+            # Need to iterate over things in a dumb way to suppress warnings
+            return tuple(RPGWrappedBase.autowrap(val[i]) for i in range(len(val)))
         else:
             return RPGWrappedBase.autowrap(val)
     return wrap
@@ -67,8 +71,6 @@ class RPGWrappedBase(multiprocess.ObjectProxy):
     _subclass_types = None
 
     # Reserve names for local variables, so they aren't proxied.
-    _items = None
-    _parent = None
     _base_inst = None
 
     # Cache remote functions, allowing proxy options for each to be set
@@ -76,8 +78,6 @@ class RPGWrappedBase(multiprocess.ObjectProxy):
     _remote_function_options = None
 
     def __init__(self, *args, **kwargs):
-        self._items = []
-        self._parent = None
         self._remote_functions = {}
         self._remote_function_options = {}
 
@@ -97,9 +97,6 @@ class RPGWrappedBase(multiprocess.ObjectProxy):
     def __wrap__(self, *args, **kwargs):
         if args or kwargs:
             raise TypeError(f"RPGWrappedBase.__wrap__ expects no arguments. Got args={args}, kwargs={kwargs}")
-        # We still want to keep track of new items in wrapped objects
-        self._items = []
-        self._parent = None
         self._remote_functions = {}
         self._remote_function_options = {}
         # And make sure that ndarrays are still proxied
@@ -143,9 +140,11 @@ class RPGWrappedBase(multiprocess.ObjectProxy):
         if isinstance(inst, multiprocess.ObjectProxy):
             if isinstance(inst, RPGWrappedBase):
                 return inst
-            typestr = inst._typeStr.split()[0].strip('< ').split('.')[-1]
-            if typestr in RPGWrappedBase._subclass_types:
-                return RPGWrappedBase._subclass_types[typestr].wrap(inst)
+            typestr = re.match(r"<[a-zA-Z_.]+\.([a-zA-Z_]+) object at 0x[0-9A-F]+>", inst._typeStr)
+            if typestr:
+                typestr = typestr.groups()[0]
+                if typestr in RPGWrappedBase._subclass_types:
+                    return RPGWrappedBase._subclass_types[typestr].wrap(inst)
         # Otherwise, just return the bare instance
         return inst
 
@@ -161,16 +160,6 @@ class RPGWrappedBase(multiprocess.ObjectProxy):
                     return
             # Try to translate to one of the friendly names
             res = RPGWrappedBase.autowrap(res)
-            # Add the result to the items list if returned
-            if isinstance(res, multiprocess.ObjectProxy):
-                # Keep track of all objects that are added to a window, since
-                # we can't get them back from the remote later
-                #if res not in self._items:
-                self._items.append(res)
-            if isinstance(res, RPGWrappedBase):
-                # If we are a managed object, notify that we were added so that items can keep track
-                # of which windows they are in.
-                res._notify_added(self)
             return res
         return save
 
@@ -224,13 +213,6 @@ class RPGWrappedBase(multiprocess.ObjectProxy):
     def __repr__(self):
         return "<%s for %s>" % (self.__class__.__name__, super().__repr__())
 
-    def _notify_added(self, parent):
-        # Allow objects to keep track of which window they are in if they need to
-        self._parent = parent
-
-    @property
-    def items(self):
-        return tuple(self._items)
 
 class BasePlotWindow(RPGWrappedBase):
     _base = "GraphicsLayoutWidget"
