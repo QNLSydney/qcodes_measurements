@@ -1069,6 +1069,7 @@ if cm is not None:
     __data__['twilight'] = cm.cmap_d['twilight'](gradient)[:,0:3]
     __data__['twilight_shifted'] = cm.cmap_d['twilight_shifted'](gradient)[:,0:3]
     __data__['Spectral'] = cm.cmap_d["Spectral"](gradient)[:,0:3]
+    __data__['SpectralBack'] = cm.cmap_d["Spectral"](gradient)[:,0:3][::-1]
     __data__['coolwarm'] = cm.cmap_d["coolwarm"](gradient)[:,0:3]
     __data__['bwr'] = cm.cmap_d["bwr"](gradient)[:,0:3]
     __data__['RdBu'] = cm.cmap_d["RdBu"](gradient)[:,0:3]
