@@ -73,6 +73,7 @@ class MeshPlot(GraphicsObject):
         newHist[1:-1] = hist
         self._LUTitem.plot.setData(newBins, newHist)
         self._LUTitem.setLevels(newBins[0], newBins[-1])
+        self._LUTitem.plot.getViewBox().itemBoundsChanged(self._LUTitem.plot)
 
         # Force viewport update
         self.getViewBox().itemBoundsChanged(self)
@@ -118,6 +119,7 @@ class MeshPlot(GraphicsObject):
     def changeColorScale(self, name=None):
         if name is None:
             raise ValueError("Name of color map must be given")
+        logger.debug("Changed color scale to %s.", name)
         self._LUTitem.gradient.setColorMap(COLORMAPS[name])
 
     def getHistogramLUTItem(self):
@@ -137,7 +139,9 @@ class MeshPlot(GraphicsObject):
         if self.data is not None:
             scaled = (self.data - minr)/(maxr - minr)
 
+            logger.debug("Calculating new colors")
             self.rgb_data = self._LUTitem.gradient.colorMap().map(scaled, mode="qcolor")
+            logger.debug("Done")
             self.update()
     ###
     # Functions relating to drawing

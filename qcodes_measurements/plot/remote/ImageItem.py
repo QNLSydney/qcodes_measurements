@@ -116,7 +116,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         xmin_p, xmax_p = self.getLimits(self.setpoint_x, (xmin, xmax))
         ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
 
-        logger.info("Doing a levelColumns between x: %r, y: %r", xrange, yrange)
+        logger.info("Doing a colorByMarquee between x: %r, y: %r", xrange, yrange)
         logger.debug("Calculated limits: x: (%d, %d), y: (%d, %d)", xmin_p, xmax_p, ymin_p, ymax_p)
 
         # Then calculate the min/max range of the array
