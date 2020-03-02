@@ -36,8 +36,9 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
     def mouseClickEvent(self, ev):
         if ev.button() & QtCore.Qt.LeftButton:
             if self.scaleBox.isVisible():
-                rect = self.scaleBox.mapRectToScene(self.scaleBox.boundingRect())
+                rect = self.scaleBox.mapRectToScene(self.scaleBox.getRect())
                 pos = ev.scenePos()
+                logger.debug(f"Rect has position %r. Event has position %r.", rect, pos)
                 if not rect.contains(pos):
                     ev.accept()
                     self.scaleBox.hide()
@@ -98,7 +99,7 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
         """
         r = QtCore.QRectF(p1, p2)
         r = self.childGroup.mapRectFromParent(r)
-        self.scaleBox.setBoundingRect(r)
+        self.scaleBox.setRect(r)
 
     def removePlotItem(self, item):
         """
@@ -118,7 +119,8 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
         self.menu = None
 
         # Set size
-        self._rect = QtCore.QRectF(0, 0, 1, 1)
+        self._rect = QtCore.QRectF(0, 0, 0, 0)
+        self._boundingRect = QtCore.QRectF(0, 0, 0, 0)
 
         # Set Formatting
         self.pen = mkPen((255, 255, 100), width=1)
@@ -126,17 +128,35 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
         self.setZValue(1e9)
 
     # All graphics items must have paint() and boundingRect() defined.
-    def setBoundingRect(self, r):
+    def setRect(self, r):
         self._rect = r
+        self._boundingRect = self._boundingRect.united(r)
         self.update()
 
-    def boundingRect(self):
+    def getRect(self):
         return self._rect
+
+    def boundingRect(self):
+        return self._boundingRect
+
+    def show(self):
+        """
+        Reset the maximum bounding rect and show
+        """
+        self._boundingRect = QtCore.QRectF(0, 0, 0, 0)
+        super().show()
+
+    def hide(self):
+        """
+        Reset the rect and hide
+        """
+        self._rect = QtCore.QRectF(0, 0, 0, 0)
+        super().hide()
 
     def paint(self, p, _options, _widget):
         p.setPen(self.pen)
         p.setBrush(self.brush)
-        p.drawRect(self.boundingRect())
+        p.drawRect(self._rect)
 
     # On right-click, raise the context menu
     def mouseClickEvent(self, ev):
