@@ -44,7 +44,7 @@ def set_log_level(level="INFO", name=None):
     # Get the logger
     logger = get_logger(name)
     logger.setLevel(level)
-    logger.debug(f"Set log level of {logger} to {level}")
+    get_logger().debug(f"Set log level of %r to %r", logger, level)
 
 class LoggingStream(io.IOBase):
     """
