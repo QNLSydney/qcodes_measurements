@@ -2,7 +2,6 @@ from typing import List
 
 from pyqtgraph import GraphicsLayoutWidget
 from pyqtgraph.exporters import ImageExporter, SVGExporter
-from pyqtgraph.multiprocess import proxy
 
 from ...logging import get_logger
 logger = get_logger("PlotWindow")
@@ -31,10 +30,8 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
     def getLayoutItems(self):
         layout = self.ci
         items = list(layout.items.keys())
-        items = [proxy(item) for item in items]
         return items
 
     @classmethod
     def getWindows(cls):
-        windows = [proxy(item) for item in cls._windows]
-        return windows
+        return cls._windows
