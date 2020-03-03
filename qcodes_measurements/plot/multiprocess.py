@@ -131,8 +131,7 @@ class Process(RemoteEventHandler):
                     raise Exception('Timed out waiting for remote process to end.')
                 self.proc.join(0.05)
             self.conn.close()
-
-        self.logger.info('Child process exited with exit code: %d', self.proc.exitcode)
+            self.logger.info('Child process exited with exit code: %d', self.proc.exitcode)
 
 
 def startEventLoop(name, conn, ppid, debug=False):
@@ -207,11 +206,13 @@ class QtProcess(Process):
     def __init__(self, **kwds):
         if 'target' not in kwds:
             kwds['target'] = startQtEventLoop
+
         from pyqtgraph.Qt import QtGui  ## avoid module-level import to keep bootstrap snappy.
         self._processRequests = kwds.pop('processRequests', True)
         if self._processRequests and QtGui.QApplication.instance() is None:
             raise Exception("Must create QApplication before starting QtProcess, "
                             "or use QtProcess(processRequests=False)")
+
         super().__init__(**kwds)
         self.startEventTimer()
 
