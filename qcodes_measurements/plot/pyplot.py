@@ -8,9 +8,9 @@ from .local.PlotItem import PlotItem
 from .local.ExtendedDataItem import ExtendedDataItem
 from .local.PlotDataItem import PlotDataItem, ExtendedPlotDataItem
 from .local.ImageItem import ImageItem, ExtendedImageItem, ImageItemWithHistogram
-from .local.VoronoiPlot import VoronoiPlot
+from .local.MeshPlots import VoronoiPlot, ColorMesh
 
 
 __all__ = ["PlotWindow", "PlotItem", "ExtendedDataItem", "PlotDataItem", "ExtendedPlotDataItem", "ImageItem",
            "ExtendedImageItem", "ImageItemWithHistogram", "TableWidget", "LegendItem", "TextItem", "ColorMap",
-           "PlotAxis", "VoronoiPlot", "start_remote", "restart_remote", "get_remote"]
+           "PlotAxis", "VoronoiPlot", "ColorMesh", "start_remote", "restart_remote", "get_remote"]
