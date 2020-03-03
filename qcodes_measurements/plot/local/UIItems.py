@@ -1,3 +1,5 @@
+from qcodes import ParamSpec
+
 from .RemoteProcessWrapper import RPGWrappedBase
 
 class TableWidget(RPGWrappedBase):
@@ -78,3 +80,14 @@ class PlotAxis(RPGWrappedBase):
     @unit.setter
     def unit(self, units):
         self.setLabel(units=units)
+
+    def checkParamspec(self, paramspec: ParamSpec):
+        if self.label != paramspec.label:
+            return False
+        if self.unit != paramspec.unit:
+            return False
+        return True
+    def setParamspec(self, paramspec: ParamSpec):
+        self.label = paramspec.label
+        self.unit = paramspec.unit
+    paramspec = property(None, setParamspec)
