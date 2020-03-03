@@ -12,6 +12,7 @@
 # You should have received a copy of the CC0 legalcode along with this
 # work.  If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 
+from typing import Dict, Union, Tuple, List
 from math import ceil
 from numpy import linspace
 from pyqtgraph import ColorMap
@@ -1054,7 +1055,8 @@ _VIRIDIS_DATA = ((0.267004, 0.004874, 0.329415),
                  (0.993248, 0.906157, 0.143936))
 _GREY_DATA = ((0, 0, 0),
               (1, 1, 1))
-__data__ = {'magma': _MAGMA_DATA,
+__data__: Dict[str, Union[List, Tuple]] = {
+            'magma': _MAGMA_DATA,
             'inferno': _INFERNO_DATA,
             'plasma': _PLASMA_DATA,
             'viridis': _VIRIDIS_DATA,
@@ -1093,7 +1095,7 @@ for name, data in __data__.items():
     }
     COLORMAPS[name] = rcmap
     if name == "viridis":
-        pos = [0] + list(1/(x**1.5) for x in range(15, 0, -1))
+        pos = [0.0] + list(1/(x**1.5) for x in range(15, 0, -1))
         rcmap = ColorMap(pos=pos, color=data[::step])
         GRADIENTS[name+"_nlin"] = {
             'ticks': list(zip(pos, data[::step])),
