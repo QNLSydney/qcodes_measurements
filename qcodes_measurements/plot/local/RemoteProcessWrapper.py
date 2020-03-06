@@ -3,11 +3,13 @@ import sys
 import numpy as np
 import PyQt5.QtGui
 
+from ...logging import get_logger
 from ..multiprocess import ObjectProxy, QtProcess, ClosedError
 
 # Get access to module level variables
 this = sys.modules[__name__]
 rpg = None
+logger = get_logger("RPGWrapper")
 
 __all__ = ["ensure_ndarray", "auto_wrap", "RPGWrappedBase", "get_remote"]
 
@@ -141,8 +143,10 @@ class RPGWrappedBase(ObjectProxy):
 
     @staticmethod
     def autowrap(inst):
+        logger.debug("Trying to autowrap %r.", inst)
         # Figure out the types that we know how to autowrap
         if RPGWrappedBase._subclass_types is None:
+            logger.debug("Populating subclass types")
             RPGWrappedBase._subclass_types = {}
             def append_subclasses(sc_dict, cls):
                 for typ in cls.__subclasses__():
@@ -157,19 +161,24 @@ class RPGWrappedBase(ObjectProxy):
         # Then, if we have an object proxy, wrap it if it is in the list of wrappable types
         if isinstance(inst, ObjectProxy):
             if isinstance(inst, RPGWrappedBase):
+                logger.debug("Object already wrapped. Has types: %r.", inst.__class__.__mro__)
                 return inst
 
             # Check if we have a list of objects:
             if inst.__getattr__("__class__").__name__ in ("tuple", "list"):
+                logger.debug("Wrapping remote list.")
                 # Need to iterate over things in a dumb way to suppress warnings
                 return tuple(RPGWrappedBase.autowrap(inst[i]) for i in range(len(inst)))
 
             # Otherwise look to see if we have an extended type
-            typestr = re.match(r"<[a-zA-Z_.]+\.([a-zA-Z_]+) object at 0x[0-9A-F]+>", inst._typeStr)
+            typestr = re.match(r"<[a-zA-Z_.]+\.([a-zA-Z_]+) object at 0x[0-9A-Fa-f]+>", inst._typeStr)
+            logger.debug("Extracted remote type: %s.", typestr)
             if typestr:
                 typestr = typestr.groups()[0]
                 if typestr in RPGWrappedBase._subclass_types:
                     return RPGWrappedBase._subclass_types[typestr].wrap(inst)
+        else:
+            logger.debug("Object is not an ObjectProxy. Has types: %r.", inst.__class__.__mro__)
         # Otherwise, just return the bare instance
         return inst
 
@@ -215,24 +224,31 @@ class RPGWrappedBase(ObjectProxy):
         attr = None
         # Get attribute from object proxy, checking if it exists locally first
         if search_location in ("local", "both"):
+            logger.debug("Looking for attr %s locally.", name)
             for cls in self.__class__.__mro__:
                 if name in cls.__dict__:
                     v = cls.__dict__[name]
                     if hasattr(v, '__get__'):
                         attr = v.__get__(None, self)
+                        logger.debug("Found attr %s locally in subclass %r, and is a property. Returns value: %r.", name, cls, attr)
                     else:
                         attr = v
+                        logger.debug("Found attr %s locally in subclass %r. Returns value: %r.", name, cls, attr)
                     break
             else:
                 if name in self._base_inst.__dict__:
                     attr = self._base_inst.__dict__[name]
+                    logger.debug("Found attr %s locally in base_inst (%r). Returns value: %r", name, self._base_inst, attr)
         # Otherwise check whether the attribute exists on the remote
         if search_location in ("remote", "both") and attr is None:
+            logger.debug("Looking for attr %s remotely.", name)
             # Check whether this function has been cached
             if name in self._remote_functions:
+                logger.debug("Found cached value for %s.", name)
                 return self._remote_functions[name]
             # Otherwise look for it on the remote
             attr = self._base_inst.__getattr__(name, **kwargs)
+            logger.debug("Found attr %s remotely. Returns value %r.", name, attr)
 
         # If we didn't find the attribute in either location, raise an AttributeError
         if attr is None:
