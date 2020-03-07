@@ -172,8 +172,8 @@ class RPGWrappedBase(ObjectProxy):
 
             # Otherwise look to see if we have an extended type
             typestr = re.match(r"<[a-zA-Z_.]+\.([a-zA-Z_]+) object at 0x[0-9A-Fa-f]+>", inst._typeStr)
-            logger.debug("Extracted remote type: %s.", typestr)
             if typestr:
+                logger.debug("Extracted remote type: %s.", typestr.groups()[0])
                 typestr = typestr.groups()[0]
                 if typestr in RPGWrappedBase._subclass_types:
                     return RPGWrappedBase._subclass_types[typestr].wrap(inst)
