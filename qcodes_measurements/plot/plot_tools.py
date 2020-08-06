@@ -3,7 +3,8 @@ import re
 import json
 import pandas as pd
 
-from qcodes import DataSet, ParamSpec, load_by_id
+from qcodes import ParamSpec, load_by_id
+from qcodes.data.data_set import DataSet
 
 from ..plot import pyplot
 from .local.PlotItem import BasePlotItem
