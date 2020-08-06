@@ -124,6 +124,9 @@ def sweep_time(*param_meas, delay=10, until=None,
                 while time.monotonic() < next_time:
                     sleep_time = max(0, min(0.01, time.monotonic() - next_time))
                     time.sleep(sleep_time)
+    except KeyboardInterrupt:
+        print(f"Trace cancelled with Ctrl-C")
+        print(f"Ending plot at time {time.monotonic() - start_time}.")
     finally:
         _run_functions(atend)
 
