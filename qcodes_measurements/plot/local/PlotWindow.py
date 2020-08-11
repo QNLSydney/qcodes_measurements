@@ -65,8 +65,11 @@ class PlotWindow(BasePlotWindow):
     @classmethod
     def getWindows(cls):
         windows = get_remote().ExtendedPlotWindow.getWindows(_returnType="proxy")
-        windows = [RPGWrappedBase.autowrap(win) for win in windows]
-        return windows
+        num_windows = len(windows)
+        local_windows = []
+        for i in range(num_windows):
+            local_windows.append(RPGWrappedBase.autowrap(windows[i]))
+        return local_windows
 
     @classmethod
     def find_by_id(cls, wid):
