@@ -84,3 +84,16 @@ class Device(InstrumentBase):
         elif isinstance(param, Ohmic):
             return getattr(self.ohmics, param.name)
         return None
+
+    def lookup_source(self, source):
+        """
+        Check if a given parameter is controlled through the device.
+        Example: sample.lookup_source(mdac.ch01) -> sample.gates.LW1
+        """
+        for gate in self.gates:
+            if gate.gate.source is source:
+                return gate
+        for ohmic in self.ohmics:
+            if ohmic.gate.source is source:
+                return ohmic
+        return None
