@@ -1,3 +1,4 @@
+import sys
 import logging as log
 from inspect import signature
 from collections import namedtuple
@@ -132,7 +133,7 @@ def _plot_sweep(sweep_func, _, args, kwargs):
     # Try run the sweep, passing the plot window to the sweep function for update
     run_id = None
     try:
-        if append is not None and append:
+        if isinstance(append, pyplot.PlotWindow) or append is True:
             append = True
         kwargs["win"] = win
         kwargs["append"] = append
