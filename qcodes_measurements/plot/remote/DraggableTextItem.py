@@ -39,7 +39,7 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
         parent.items.append(self)
         return ret
 
-    def paint(self, p):
+    def paint(self, p, _options, _widget):
         p.setPen(self.pen)
         p.setBrush(self.brush)
         p.drawRect(self.boundingRect())

@@ -23,8 +23,6 @@ class TextItem(RPGWrappedBase):
 
     def setParentItem(self, p):
         self._base_inst.setParentItem(p)
-        if isinstance(p, RPGWrappedBase):
-            p._items.append(self)
 
     def anchor(self, anchor):
         """
