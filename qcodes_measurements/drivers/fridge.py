@@ -9,8 +9,8 @@ class FridgeTemps(Instrument):
     """
     Instrument definition for a fridge logged on the thermometry site.
     """
-    def __init__(self, fridge, url):
-        super().__init__(fridge)
+    def __init__(self, name, url):
+        super().__init__(name)
         self.url = url
 
         params = requests.get(url)
