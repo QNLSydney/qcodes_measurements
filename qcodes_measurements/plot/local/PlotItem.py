@@ -1,4 +1,4 @@
-from qcodes import Parameter
+from qcodes.instrument.parameter import _BaseParameter
 
 from .RemoteProcessWrapper import RPGWrappedBase
 from .PlotDataItem import ExtendedPlotDataItem
@@ -51,9 +51,9 @@ class BasePlotItem(RPGWrappedBase):
         If left or bottom axis is from an ArrayParameter, set param_x_setpoint
         or param_y_setpoint to true
         """
-        if not isinstance(param_x, Parameter):
+        if not isinstance(param_x, _BaseParameter):
             raise TypeError(f"param_x must be a qcodes parameter. Got {type(param_x)}.")
-        if not isinstance(param_y, Parameter):
+        if not isinstance(param_y, _BaseParameter):
             raise TypeError(f"param_y must be a qcodes parameter. Got {type(param_y)}")
 
         if param_x_setpoint:
