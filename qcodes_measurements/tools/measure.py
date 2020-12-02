@@ -462,7 +462,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
 def linear2d(param_set1, start1, stop1, num_points1, delay1,
              param_set2, start2, stop2, num_points2, delay2,
              *param_meas,
-             win=None, append=False,
+             win=None, append=False, plot_params=None,
              atstart=None, ateachcol=None, ateach=None, atend=None,
              setback=False, write_period=120):
     """
@@ -543,8 +543,10 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
     set_points2 = np.linspace(start2, stop2, num_points2)
 
     # Keep track of data and plots
+    if plot_params is None:
+        plot_params = param_meas
     output = []
-    plots = []
+    plots = {}
 
     # Run @start functions
     _run_functions(atstart)
@@ -555,19 +557,19 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         output.append([parameter, None])
 
         # Add Plot item
-        if win is not None:
+        if win is not None and parameter in plot_params:
             if append:
                 plotitem = win.items[0]
                 plotdata = plotitem.plot(setpoint_x=set_points1, setpoint_y=set_points2)
             else:
                 plotitem = win.addPlot(name=parameter.full_name,
-                                       title="%s (%s) v.<br>%s (%s)" %
-                                       (param_set1.full_name, param_set1.label,
+                                    title="%s (%s) v.<br>%s (%s)" %
+                                    (param_set1.full_name, param_set1.label,
                                         param_set2.full_name, param_set2.label))
                 plotdata = plotitem.plot(setpoint_x=set_points1, setpoint_y=set_points2)
                 plotitem.update_axes(param_set1, param_set2)
                 plotdata.update_histogram_axis(parameter)
-            plots.append(LivePlotDataItem(plotitem, plotdata, np.ndarray((num_points1, num_points2))))
+            plots[parameter] = LivePlotDataItem(plotitem, plotdata, np.ndarray((num_points1, num_points2)))
 
     meas.write_period = write_period
     pbar = None
@@ -576,8 +578,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
             # Update plot titles
             win.run_id = datasaver.run_id
             win.win_title += "{} ".format(datasaver.run_id)
-            for plotitem in plots:
-                plotitem.plot.plot_title += " (id: %d)" % datasaver.run_id
+            for plotitem in plots.values():
+                    plotitem.plot.plot_title += " (id: %d)" % datasaver.run_id
 
             pbar = tqdm(total=num_points1, unit="col", position=0, leave=True)
             for i, set_point1 in enumerate(set_points1):
@@ -590,10 +592,10 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
                                                        Setpoint(param_set2, j, set_point2)))
                     for p, parameter in enumerate(param_meas):
                         output[p][1] = parameter.get()
-                        fdata = plots[p].data
-                        fdata[i, j] = output[p][1]
 
-                        if win is not None:
+                        if win is not None and parameter in plots:
+                            fdata = plots[parameter].data
+                            fdata[i, j] = output[p][1]
                             if i == 0:
                                 # Calculate z-range of data, and remove NaN's from first column
                                 # This sets zero point for rest of data
@@ -603,7 +605,7 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
 
                             # Update plot items, and update range every 10 points
                             if (num_points1*num_points2) < 1000 or (j%20) == 0:
-                                plots[p].plotdata.update(fdata, True)
+                                plots[parameter].plotdata.update(fdata, True)
 
                     # Save data
                     datasaver.add_result((param_set1, set_point1),
@@ -613,8 +615,8 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
 
             # At the end, do one last update to make sure that all data is displayed.
             if win is not None:
-                for plotitem, plotdata, data in plots:
-                    plotdata.update(data, True)
+                for pd in plots.values():
+                    pd.plotdata.update(pd.data, True)
     finally:
         # Set paramters back to start
         if setback:
