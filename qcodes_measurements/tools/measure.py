@@ -291,7 +291,7 @@ def do0d(*param_meas,
 
 @_plot_sweep
 def linear1d(param_set, start, stop, num_points, delay, *param_meas,
-             win=None, append=False,
+             win=None, append=False, plot_params=None,
              atstart=None, ateach=None, atend=None,
              setback=False,
              write_period=120):
@@ -322,6 +322,9 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         will not be live plotted.
 
         append (bool): If this parameter is true, the trace will be appended to an existing window.
+
+        plot_params (Optional[Iterable[Parameter]]): A list of measured parameters to live plot. If no
+        value is given, then all parameters will be live-plotted
 
         atstart (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run before the measurement is started. The functions will be run BEFORE the parameters
@@ -359,8 +362,10 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
     set_points = np.linspace(start, stop, num_points)
 
     # Keep track of data and plots
+    if plot_params is None:
+        plot_params = param_meas
     output = []
-    plots = []
+    plots = {}
 
     # Run @start functions
     _run_functions(atstart)
@@ -370,7 +375,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
         meas.register_parameter(parameter, setpoints=(param_set,))
         output.append([parameter, None])
 
-        if win is not None:
+        if win is not None and parameter in plot_params:
             # Create plot window
             if append:
                 plotitem = win.items[0]
@@ -394,7 +399,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                                      setpoint_y=set_points_y,
                                      pen=(255, 0, 0),
                                      name=parameter.name)
-            plots.append(LivePlotDataItem(plotitem, plotdata, data))
+            plots[parameter] = LivePlotDataItem(plotitem, plotdata, data)
 
             # Update axes
             if set_points_y is not None:
@@ -412,7 +417,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                 # Update plot titles to include the ID
                 win.run_id = datasaver.run_id
                 win.win_title += "{} ".format(datasaver.run_id)
-                for plotitem in plots:
+                for plotitem in plots.values():
                     plotitem.plot.plot_title += " (id: %d)" % datasaver.run_id
 
             # Then, run the actual sweep
@@ -424,20 +429,19 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
                 for p, parameter in enumerate(param_meas):
                     output[p][1] = parameter.get()
                     shape = getattr(parameter, 'shape', None)
-                    if shape is not None and shape != tuple():
-                        plots[p].data[i, :] = output[p][1] # Update 2D data
-                        # For a 2D trace, figure out the value for data not yet set if this is the
-                        # first column
-                        if i == 0:
-                            plots[p].data[1:] = (np.min(output[p][1]) +
-                                                 np.max(output[p][1]))/2
-                        if win is not None:
+                    if win is not None and parameter in plots:
+                        if shape is not None and shape != tuple():
+                            plots[parameter].data[i, :] = output[p][1] # Update 2D data
+                            # For a 2D trace, figure out the value for data not yet set if this is the
+                            # first column
+                            if i == 0:
+                                plots[parameter].data[1:] = (np.min(output[p][1]) +
+                                                             np.max(output[p][1]))/2
                             # Update live plots
-                            plots[p].plotdata.update(plots[p].data)
-                    else:
-                        plots[p].data[i] = output[p][1] # Update 1D data
-                        if win is not None:
-                            plots[p].plotdata.setData(set_points[:i], plots[p].data[:i])
+                            plots[parameter].plotdata.update(plots[parameter].data)
+                        else:
+                            plots[parameter].data[i] = output[p][1] # Update 1D data
+                            plots[parameter].plotdata.setData(set_points[:i], plots[parameter].data[:i])
 
 
                 # Save data
@@ -497,6 +501,9 @@ def linear2d(param_set1, start1, stop1, num_points1, delay1,
         will not be live plotted.
 
         append (bool): If this parameter is true, the trace will be appended to an existing window.
+
+        plot_params (Optional[Iterable[Parameter]]): A list of measured parameters to live plot. If no
+        value is given, then all parameters will be live-plotted
 
         atstart (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run before the measurement is started. The functions will be run BEFORE the parameters
