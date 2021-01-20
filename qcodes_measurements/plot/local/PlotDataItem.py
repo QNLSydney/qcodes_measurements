@@ -6,7 +6,7 @@ class PlotDataItem(ExtendedDataItem, RPGWrappedBase):
 
     def __init__(self, setpoint_x, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.xData = ensure_ndarray(setpoint_x)
+        #self.xData = ensure_ndarray(setpoint_x)
         self._remote_function_options['setData'] = {'callSync': 'off'}
 
     def __wrap__(self, *args, **kwargs):
