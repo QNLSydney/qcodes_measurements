@@ -4,6 +4,8 @@ import numpy as np
 from qcodes.dataset.measurements import Measurement
 
 from .measure import Setpoint, _flush_buffers, _run_functions, _plot_sweep
+from ..logging import get_logger
+logger = get_logger("tools.time")
 
 @_plot_sweep
 def sweep_time(*param_meas, delay=10, until=None,
@@ -109,7 +111,7 @@ def sweep_time(*param_meas, delay=10, until=None,
                 # Resize plot arrays if necessary
                 if array_size == curr_point:
                     array_size *= 2
-                    print(f"New plot array size: {array_size}")
+                    logger.debug("New plot array size: %d", array_size)
                     time_data.resize(array_size)
                     time_data[array_size//2:] = np.nan
                     for pld in plt_data.values():
