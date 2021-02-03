@@ -86,6 +86,8 @@ def sweep_time(*param_meas, delay=10, until=None,
         with m.run() as datasaver:
             start_time = time.monotonic()
             win.win_title += f"{datasaver.run_id}"
+            for pd in plt_data.values():
+                pd[0].plot_title += f" (id: {datasaver.run_id})"
             while True:
                 # Update each parameter
                 data = [("time", time.monotonic()-start_time)]
