@@ -63,21 +63,21 @@ class PlotAxis(RPGWrappedBase):
         return self.labelText
     @label.setter
     def label(self, text):
-        self.setLabel(text=text)
+        self.setLabel(text=text, units=self.labelUnits)
 
     @property
     def units(self):
         return self.labelUnits
     @units.setter
     def units(self, units):
-        self.setLabel(units=units)
+        self.setLabel(text=self.labelText, units=units)
 
     @property
     def unit(self):
         return self.labelUnits
     @unit.setter
     def unit(self, units):
-        self.setLabel(units=units)
+        self.setLabel(text=self.labelText, units=units)
 
     def checkParamspec(self, paramspec: ParamSpec):
         if self.label != paramspec.label:
