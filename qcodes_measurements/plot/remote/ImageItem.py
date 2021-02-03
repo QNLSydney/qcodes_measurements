@@ -156,7 +156,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         image = self.image - Z.T
         self.setImage(image)
 
-    def levelColumns(self, _, yrange):
+    def levelColumns(self, xrange, yrange):
         # Extract indices of limits
         ymin, ymax = yrange
         ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
