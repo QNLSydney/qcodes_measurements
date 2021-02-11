@@ -1,5 +1,5 @@
 import numpy as np
-from qcodes import Parameter
+from qcodes import Parameter, ArrayParameter
 
 from .RemoteProcessWrapper import RPGWrappedBase, ensure_ndarray, get_remote
 from .ExtendedDataItem import ExtendedDataItem
@@ -150,7 +150,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
         """
         Update histogram axis labels
         """
-        if not isinstance(param_z, Parameter):
+        if not isinstance(param_z, (Parameter, ArrayParameter)):
             raise TypeError("param_z must be a qcodes parameter")
         self.histogram.axis.label = param_z.label
         self.histogram.axis.units = param_z.unit
