@@ -89,7 +89,7 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
                                    f"(id: {dataset.run_id})")
 
             c_data = data[param.name]
-            if c_data.isna().all()[0]:
+            if c_data.isna().all(axis=None):
                 # No data in plot
                 continue
             add_line_plot(plot, c_data, x=dep_params[0], y=param)
@@ -115,7 +115,7 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
                                    f"v.<br>{dep_params[1].name} ({dep_params[1].label}) "
                                    f"(id: {dataset.run_id})")
             c_data = data[param.name].unstack().droplevel(0, axis=1)
-            if c_data.isna().all()[0]:
+            if c_data.isna().all(axis=None):
                 # No data in plot
                 continue
             add_image_plot(plot, c_data, x=dep_params[0], y=dep_params[1], z=param)
