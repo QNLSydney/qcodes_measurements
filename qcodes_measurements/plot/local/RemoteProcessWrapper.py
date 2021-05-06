@@ -52,7 +52,8 @@ def start_remote():
         this.app = PyQt5.QtGui.QApplication.instance()
 
     this.proc = QtProcess(debug=False)
-    this.rpg = this.proc._import('qcodes_measurements.plot.rpyplot', _timeout=10)
+    this.rpg = this.proc._import('qcodes_measurements.plot.rpyplot', _timeout=20)
+    this.rbuiltins = this.proc._import("builtins")
     _set_defaults(this.rpg)
 
 def restart_remote():
@@ -77,10 +78,6 @@ def remote_callable(remote_obj):
     # If the object is local, shortcut to the local callable
     if not isinstance(remote_obj, ObjectProxy):
         return callable(remote_obj)
-
-    # Make sure we have access to the remote builtins
-    if getattr(this, "rbuiltins", None) is None:
-        this.rbuiltins = this.proc._import("builtins")
 
     # Call callable on the remote
     return this.rbuiltins.callable(remote_obj)
