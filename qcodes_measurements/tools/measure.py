@@ -121,6 +121,8 @@ def _plot_sweep(sweep_func, _, args, kwargs):
         *args, **kwargs: Parameters passed to the sweep function
     """
     plot = kwargs.get("plot", True)
+    if "plot" in kwargs:
+        del kwargs["plot"]
     append = kwargs.get("append", None)
     save = kwargs.get("save", True)
 
