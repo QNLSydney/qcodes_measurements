@@ -52,7 +52,7 @@ def start_remote():
         this.app = PyQt5.QtGui.QApplication.instance()
 
     this.proc = QtProcess(debug=False)
-    this.rpg = this.proc._import('qcodes_measurements.plot.rpyplot', _timeout=20)
+    this.rpg = this.proc._import('qcodes_measurements.plot.rpyplot', timeout=20)
     this.rbuiltins = this.proc._import("builtins")
     _set_defaults(this.rpg)
 
