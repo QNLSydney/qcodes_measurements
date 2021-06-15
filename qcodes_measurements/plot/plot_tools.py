@@ -65,7 +65,7 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
         raise TypeError(f"Unexpected type for win. Expected pyplot.PlotWindow, got {type(win)}.")
 
     # Plot each dependant dataset in the data
-    data = dataset.get_data_as_pandas_dataframe(*dataset.dependent_parameters)
+    data = dataset.to_pandas_dataframe_dict()
     for param in data:
         param = dataset.paramspecs[param]
         dep_params = [dataset.paramspecs[p] for p in param._depends_on]
