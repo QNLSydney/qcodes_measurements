@@ -5,7 +5,8 @@ from pyqtgraph import GraphicsLayoutWidget, \
                       PlotItem, PlotDataItem, ImageItem, \
                       HistogramLUTItem, ColorMap, TableWidget, \
                       LabelItem, LegendItem, AxisItem, \
-                      setConfigOption, setConfigOptions, getConfigOption
+                      setConfigOption, setConfigOptions, getConfigOption, \
+                      mkPen, mkBrush
 
 from . import remote
 from .remote.colors import COLORMAPS, DEFAULT_CMAP
@@ -24,4 +25,4 @@ __all__ = ['remote', 'ExtendedPlotWindow', 'DraggableTextItem', 'ExtendedPlotDat
            'ColorMap', 'LegendItem', 'PlotDataItem', 'ImageItem', 'VoronoiPlot',
            'TableWidget', 'LabelItem', 'setConfigOption', 'setConfigOptions',
            'ColorMesh', 'getConfigOption', 'pyqtgraph', 'COLORMAPS', 'DEFAULT_CMAP',
-           'get_logger', 'set_log_level']
+           'get_logger', 'set_log_level', 'mkPen', 'mkBrush']
