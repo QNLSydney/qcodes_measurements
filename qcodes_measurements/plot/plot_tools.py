@@ -74,6 +74,8 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
             plot = None
             if appending:
                 plot = find_plot_by_paramspec(win, dep_params[0], param)
+                if plot is None:
+                    raise ValueError(f"Failed to find a plot matching the paramters of this sweep in the window.")
                 plot.plot_title += f" (id: {dataset.run_id})"
                 if not plot.left_axis.checkParamspec(param):
                     raise ValueError(f"Left axis label/units incompatible. "
