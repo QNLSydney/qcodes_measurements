@@ -211,7 +211,7 @@ class Ohmic(Parameter):
             label = name
 
         # Initialize the parameter
-        super().__init__(name=f"{name}_bias",
+        super().__init__(name=f"{name}",
                          label=f"{name} Bias",
                          unit="V",
                          vals=vals.Numbers(-2e-3, 2e-3),
