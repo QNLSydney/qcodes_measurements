@@ -1,7 +1,7 @@
 from functools import partial
 
 import numpy as np
-from PyQt5 import QtGui
+from PyQt5 import QtGui, QtWidgets
 
 from pyqtgraph import PlotDataItem, mkColor
 
@@ -15,9 +15,9 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
         self.menu = None
 
         # Plot color selection dialog
-        self.colorDialog = QtGui.QColorDialog()
-        self.colorDialog.setOption(QtGui.QColorDialog.ShowAlphaChannel, True)
-        self.colorDialog.setOption(QtGui.QColorDialog.DontUseNativeDialog, True)
+        self.colorDialog = QtWidgets.QColorDialog()
+        self.colorDialog.setOption(QtWidgets.QColorDialog.ShowAlphaChannel, True)
+        self.colorDialog.setOption(QtWidgets.QColorDialog.DontUseNativeDialog, True)
         self.colorDialog.colorSelected.connect(self.colorSelected)
 
         # Store x-setpoint, since we may add nan values back in
@@ -27,11 +27,11 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
         if self.menu is None:
             self.menu = QtGui.QMenu()
 
-            qaction = QtGui.QAction("Select Color", self.menu)
+            qaction = QtWidgets.QAction("Select Color", self.menu)
             qaction.triggered.connect(self.selectColor)
             self.menu.addAction(qaction)
 
-            qaction = QtGui.QAction("Remove Item", self.menu)
+            qaction = QtWidgets.QAction("Remove Item", self.menu)
             qaction.triggered.connect(partial(self.getViewBox().removePlotItem, self))
             self.menu.addAction(qaction)
 

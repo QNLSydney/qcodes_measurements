@@ -1,6 +1,6 @@
 from functools import partial
 
-from PyQt5 import QtCore, QtGui
+from PyQt5 import QtCore, QtGui, QtWidgets
 from pyqtgraph import ViewBox, PlotDataItem, PlotCurveItem, \
                       ImageItem, GraphicsObject, mkPen, mkBrush
 
@@ -30,7 +30,7 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
                     self.menu.removeAction(action)
 
         # Extra menu actions
-        self.makeTracesDifferentAction = QtGui.QAction("Make All Traces Different", self.menu)
+        self.makeTracesDifferentAction = QtWidgets.QAction("Make All Traces Different", self.menu)
         self.makeTracesDifferentAction.triggered.connect(self.makeTracesDifferent)
 
     def mouseClickEvent(self, ev):
@@ -179,7 +179,7 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
                 ('Expand Y', partial(self.expand, axis='Y')),
             )
             for action in rbActions:
-                qaction = QtGui.QAction(action[0], self.menu)
+                qaction = QtWidgets.QAction(action[0], self.menu)
                 qaction.triggered.connect(action[1])
                 self.menu.addAction(qaction)
 
