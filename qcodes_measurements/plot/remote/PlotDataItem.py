@@ -25,7 +25,7 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
 
     def getContextMenus(self, *, rect=None, event=None):
         if self.menu is None:
-            self.menu = QtGui.QMenu()
+            self.menu = QtWidgets.QMenu()
 
             qaction = QtWidgets.QAction("Select Color", self.menu)
             qaction.triggered.connect(self.selectColor)

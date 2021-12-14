@@ -1,4 +1,5 @@
 from functools import partial
+from sys import exc_info
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from pyqtgraph import ViewBox, PlotDataItem, PlotCurveItem, \
@@ -45,7 +46,12 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
                     return True
         if ev.button() & QtCore.Qt.RightButton:
             ev.accept()
-            self.raiseContextMenu(ev)
+            logger.debug(f"Trying to raise context menu")
+            try:
+                self.raiseContextMenu(ev)
+            except Exception as e:
+                logger.exception("Exception trying to raise context menu!", exc_info=exc_info())
+                raise
             return True
 
         return super().mouseClickEvent(ev)
@@ -168,7 +174,7 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
     # a context menu that includes their parents' menus.
     def getContextMenus(self, event=None):
         if self.menu is None:
-            self.menu = QtGui.QMenu()
+            self.menu = QtWidgets.QMenu()
             self.menu.triggered.connect(self.hide)
             self.menu.setTitle("Scale Box")
 

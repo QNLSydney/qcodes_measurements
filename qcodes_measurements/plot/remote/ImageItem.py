@@ -32,7 +32,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
 
     def getContextMenus(self, *, rect=None, event=None):
         if self.menu is None:
-            self.menu = QtGui.QMenu()
+            self.menu = QtWidgets.QMenu()
         self.menu.clear()
 
         # Add color selector
