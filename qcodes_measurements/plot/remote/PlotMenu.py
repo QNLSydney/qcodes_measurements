@@ -26,7 +26,8 @@ class PlotMenuMixin:
 
         # Display the separator
         pos = ev.screenPos()
-        menu.popup(QtCore.QPoint(pos.x(), pos.y()))
+        logger.debug("Screen pos: %r, %r", pos.x(), pos.y())
+        menu.popup(QtCore.QPoint(int(pos.x()), int(pos.y())))
         ev.accept()
         return True
 
