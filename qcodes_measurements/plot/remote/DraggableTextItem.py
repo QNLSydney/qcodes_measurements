@@ -1,4 +1,4 @@
-from PyQt5 import QtCore, QtGui
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 from pyqtgraph import GraphicsWidget, GraphicsWidgetAnchor, LabelItem, Point, mkPen, mkBrush
 
@@ -10,7 +10,7 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
         GraphicsWidget.__init__(self)
         GraphicsWidgetAnchor.__init__(self)
         self.setFlag(self.ItemIgnoresTransformations)
-        self.layout = QtGui.QGraphicsGridLayout()
+        self.layout = QtWidgets.QGraphicsGridLayout()
         self.setLayout(self.layout)
         self.item_anchor = (0, 0)
         self.object_anchor = (0, 0)
