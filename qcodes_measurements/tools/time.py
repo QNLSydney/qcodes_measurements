@@ -7,6 +7,13 @@ from .measure import Setpoint, _flush_buffers, _run_functions, _plot_sweep
 from ..logging import get_logger
 logger = get_logger("tools.time")
 
+def _interruptible_sleep(sleep_time):
+    while sleep_time > 1:
+        time.sleep(1)
+        sleep_time -= 1
+    time.sleep(sleep_time)
+    return
+
 @_plot_sweep
 def sweep_time(*param_meas, delay=10, until=None,
                win=None, append=False, plot_params=None, annotation=None,
@@ -127,7 +134,7 @@ def sweep_time(*param_meas, delay=10, until=None,
                 next_time = start_time + delay*curr_point
                 while time.monotonic() < next_time:
                     sleep_time = max(0, min(0.01, time.monotonic() - next_time))
-                    time.sleep(sleep_time)
+                    _interruptible_sleep(sleep_time)
     except KeyboardInterrupt:
         print(f"Trace cancelled with Ctrl-C")
         print(f"Ending plot at time {time.monotonic() - start_time}.")
