@@ -38,7 +38,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         # Add color selector
         if self.gradientSelectorMenu is None:
             l = 80
-            self.gradientSelectorMenu = QtGui.QMenu()
+            self.gradientSelectorMenu = QtWidgets.QMenu()
             self.gradientSelectorMenu.setTitle("Color Scale")
             gradients = graphicsItems.GradientEditorItem.Gradients
             for g in gradients:
@@ -57,10 +57,10 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
                 brush = QtGui.QBrush(grad)
                 p.fillRect(QtCore.QRect(0, 0, l, 15), brush)
                 p.end()
-                label = QtGui.QLabel()
+                label = QtWidgets.QLabel()
                 label.setPixmap(px)
                 label.setContentsMargins(1, 1, 1, 1)
-                act = QtGui.QWidgetAction(self)
+                act = QtWidgets.QWidgetAction(self)
                 act.setDefaultWidget(label)
                 act.triggered.connect(partial(self.changeColorScale, name=g))
                 act.name = g
