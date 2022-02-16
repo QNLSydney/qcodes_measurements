@@ -47,7 +47,7 @@ def pprint_dev_gates(snap, dev):
     """
     Print out gates from a snapshot, given the device name dev
     """
-    GATE_ORDERS = ("LW", "LP", "C", "RP", "RW", "N")
+    GATE_ORDERS = ("T", "LW", "LP", "C", "RP", "RW", "N", "B")
 
     device = get_instr_snap(snap, dev)
     gates = device['parameters']
@@ -58,11 +58,15 @@ def pprint_dev_gates(snap, dev):
         #_, _, name = extract_gate_desc(gate)
         for i, prefix in enumerate(GATE_ORDERS):
             if name.startswith(prefix) and name[-1].isnumeric():
-                ordered_gates.append((int(name[-1]), i, name, gate))
+                ordered_gates.append((name[-1], i, name, gate))
+                break
+            elif prefix in name:
+                match = re.fullmatch(f"(.*){prefix}(.*)", name)
+                ordered_gates.append(("".join(match.groups()), i, name, gate))
                 break
         else:
             # If they aren't otherwise defined, add them to the end of the list
-            ordered_gates.append((10, 0, name, gate))
+            ordered_gates.append(("10", 0, name, gate))
     ordered_gates.sort()
 
     output = []
