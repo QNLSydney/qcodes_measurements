@@ -3,6 +3,7 @@ from functools import partial, reduce
 from scipy import signal
 import numpy as np
 import qcodes
+import qcodes.utils.validators as vals
 
 """
 Define some modules for doing filtering on parameters as they come in. This is mainly
@@ -187,6 +188,7 @@ class ReduceFilterWrapper(BaseWrappedParameter):
         d = self.filter_func(d, *self.args, **self.kwargs)
         return d
 
+
 class CutWrapper(BaseWrappedParameter):
     """
     Cut a certain number of records from the front or back of a parameter.
@@ -199,7 +201,8 @@ class CutWrapper(BaseWrappedParameter):
 
     def __init__(self, parameter, fromstart=0, fromend=0):
         # Must be an array paramter
-        assert(hasattr(parameter, "shape"))
+        assert(hasattr(parameter, "shape") or isinstance(parameter.vals, vals.Arrays))
+
         super().__init__(parameter)
 
         # Save variables
@@ -231,15 +234,37 @@ class CutWrapper(BaseWrappedParameter):
     @property
     def setpoints(self):
         """
-        Trim the setpoints of the data
+        Trim the setpoints of the data. Setpoints may be a parameter, in which case,
+        we need to return a new parameter array.
         """
-        old_setpoints = self.__wrapped__.setpoints
-        assert(len(old_setpoints) == 1) # Only support 1D arrays for now
-        if self.fromend == 0:
-            old_setpoints = old_setpoints[0][self.fromstart:]
+        if isinstance(self.__wrapped__, qcodes.ParameterWithSetpoints):
+            cut_setpoints = []
+            for setpoint in self.__wrapped__.setpoints:
+                cut_setpoints.append(CutWrapper(setpoint, self.fromstart, self.fromend))
+            return tuple(cut_setpoints)
         else:
-            old_setpoints = old_setpoints[0][self.fromstart:-self.fromend]
-        return (old_setpoints,)
+            old_setpoints = self.__wrapped__.setpoints
+            assert(len(old_setpoints) == 1) # Only support 1D arrays for now
+            if self.fromend == 0:
+                old_setpoints = old_setpoints[0][self.fromstart:]
+            else:
+                old_setpoints = old_setpoints[0][self.fromstart:-self.fromend]
+            return (old_setpoints,)
+
+    @property
+    def vals(self):
+        """
+        Overwrite the Arrays validator if we are a ParameterWithSetpoints.
+        """
+        if not isinstance(self.__wrapped__, qcodes.ParameterWithSetpoints):
+            return self.__wrapped__.vals
+
+        def cut_shape(old_shape, subshape):
+            return max(0, old_shape-subshape)
+        new_shape = []
+        for param in self.__wrapped__.vals.shape_unevaluated:
+            new_shape.append(FilterWrapper(param, filter_func=cut_shape, args=(self.fromstart+self.fromend,)))
+        return vals.Arrays(shape=tuple(new_shape))
 
     def get(self):
         d = self.__wrapped__.get()
