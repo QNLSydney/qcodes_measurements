@@ -6,5 +6,5 @@ from .combine import CombinedParameter
 from .parameters import FilterWrapper, CutWrapper, SmoothFilter, DiffFilter, MeanFilter, ReduceFilterWrapper
 from .snapshot import get_snapshot, pprint_dev_gates
 
-__all__ = ["do0d", "linear1d", "linear2d", "sweep_time", "get_snapshot", "pprint_dev_gates", "CombinedParameter",
+__all__ = ["do0d", "do1d", "do2d", "linear1d", "linear2d", "sweep_time", "get_snapshot", "pprint_dev_gates", "CombinedParameter",
            "FilterWrapper", "CutWrapper", "SmoothFilter", "DiffFilter", "MeanFilter", "ReduceFilterWrapper"]
