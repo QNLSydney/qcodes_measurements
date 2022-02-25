@@ -99,6 +99,22 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
                 continue
             add_line_plot(plot, vals[dep_params[0].name], c_data, x=dep_params[0], y=param)
         elif len(dep_params) == 2:
+            # Check if we are loading an old-style plot with no shape information
+            if dataset.description.shapes is None:
+                logger.info("No shape info. Falling back to old-style shape inference.")
+                # No dataset description available. Use pandas to unwrap shape
+                data = dataset.to_pandas_dataframe_dict(param.name)[param.name]
+                c_data = data.unstack().droplevel(0, axis=1)
+                if c_data.size != len(dataset):
+                    logger.error("Unable to unwrap dataset automatically. Unable to infer shape.")
+                    continue
+                setpoint_x = c_data.index.values
+                setpoint_y = c_data.columns.values
+                c_data = c_data.values
+            else:
+                c_data = vals[param.name]
+                setpoint_x = vals[dep_params[0].name][:,0]
+                setpoint_y = vals[dep_params[1].name][0,:]
             plot = None
             if appending:
                 plot = find_plot_by_paramspec(win, dep_params[0], dep_params[1])
@@ -120,13 +136,10 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
                                    f"v.<br>{dep_params[1].name} ({dep_params[1].label}) "
                                    f"(id: {dataset.run_id})")
 
-            c_data = vals[param.name]
             if np.isnan(c_data).any(axis=None):
                 # Nan in plot
                 logger.warning("2D plot has NaN's in it. Ignoring plot")
                 continue
-            setpoint_x = vals[dep_params[0].name][:,0]
-            setpoint_y = vals[dep_params[1].name][0,:]
             add_image_plot(plot, setpoint_x, setpoint_y, c_data,
                            x=dep_params[0], y=dep_params[1], z=param)
         else:
