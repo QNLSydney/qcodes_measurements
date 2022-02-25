@@ -1,4 +1,5 @@
 from typing import List
+from PyQt5.QtWidgets import QGraphicsProxyWidget
 
 from pyqtgraph import GraphicsLayoutWidget
 from pyqtgraph.exporters import ImageExporter, SVGExporter
@@ -30,6 +31,9 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
     def getLayoutItems(self):
         layout = self.ci
         items = list(layout.items.keys())
+        for i, item in enumerate(items):
+            if isinstance(item, QGraphicsProxyWidget):
+                items[i] = item.widget()
         return items
 
     @classmethod
