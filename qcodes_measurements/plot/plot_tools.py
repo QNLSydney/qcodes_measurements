@@ -1,11 +1,12 @@
 import os
 import re
 import json
-import pandas as pd
+import numpy as np
 
 from qcodes import ParamSpec, load_by_id
 from qcodes.data.data_set import DataSet
 
+from ..logging import get_logger
 from ..plot import pyplot
 from .local.PlotItem import BasePlotItem
 
@@ -13,6 +14,8 @@ __all__ = ["save_figure", "append_by_id", "plot_by_id", "plot_by_run", "plot_dat
 
 TITLE_FORMAT = re.compile(r"(\w+) \([^)]+\) ?v.?(?:<br>)? ?(\w+) \([^)]+\) ((?:\(id: (?:[\d -]+)\) ?)+)")
 ID_STR = re.compile(r"(id: [0-9-]+)")
+
+logger = get_logger("plot.plot_tools")
 
 def save_figure(plot, fname, fig_folder=None):
     """
@@ -65,8 +68,8 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
         raise TypeError(f"Unexpected type for win. Expected pyplot.PlotWindow, got {type(win)}.")
 
     # Plot each dependant dataset in the data
-    data = dataset.to_pandas_dataframe_dict()
-    for param in data:
+    data = dataset.get_parameter_data()
+    for param, vals in data.items():
         param = dataset.paramspecs[param]
         dep_params = [dataset.paramspecs[p] for p in param._depends_on]
 
@@ -90,11 +93,11 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
                                    f"v.<br>{param.name} ({param.label}) "
                                    f"(id: {dataset.run_id})")
 
-            c_data = data[param.name]
-            if c_data.isna().all(axis=None):
+            c_data = vals[param.name]
+            if np.isnan(c_data).all(axis=None):
                 # No data in plot
                 continue
-            add_line_plot(plot, c_data, x=dep_params[0], y=param)
+            add_line_plot(plot, vals[dep_params[0].name], c_data, x=dep_params[0], y=param)
         elif len(dep_params) == 2:
             plot = None
             if appending:
@@ -116,17 +119,22 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
                 plot.plot_title = (f"{dep_params[0].name} ({dep_params[0].label}) "
                                    f"v.<br>{dep_params[1].name} ({dep_params[1].label}) "
                                    f"(id: {dataset.run_id})")
-            c_data = data[param.name].unstack().droplevel(0, axis=1)
-            if c_data.isna().all(axis=None):
-                # No data in plot
+
+            c_data = vals[param.name]
+            if np.isnan(c_data).any(axis=None):
+                # Nan in plot
+                logger.warning("2D plot has NaN's in it. Ignoring plot")
                 continue
-            add_image_plot(plot, c_data, x=dep_params[0], y=dep_params[1], z=param)
+            setpoint_x = vals[dep_params[0].name][:,0]
+            setpoint_y = vals[dep_params[1].name][0,:]
+            add_image_plot(plot, setpoint_x, setpoint_y, c_data,
+                           x=dep_params[0], y=dep_params[1], z=param)
         else:
             raise ValueError("Invalid number of dimensions in dataset. Can only plot 1D or 2D traces.")
 
     return win
 
-def add_line_plot(plot: pyplot.PlotItem, data: pd.DataFrame,
+def add_line_plot(plot: pyplot.PlotItem, setpoint_x: np.ndarray, data: np.ndarray,
                   x: ParamSpec, y: ParamSpec, title=None):
     # Check that we are given a plot
     if not isinstance(plot, pyplot.PlotItem):
@@ -135,7 +143,7 @@ def add_line_plot(plot: pyplot.PlotItem, data: pd.DataFrame,
         plot.plot_title = title
 
     # Create line plot
-    lplot = plot.plot(setpoint_x=data.index.values, data=data.values.flatten(), pen='r')
+    lplot = plot.plot(setpoint_x=setpoint_x.flatten(), data=data.flatten(), pen='r')
 
     # Set Axis Labels
     plot.left_axis.paramspec = y
@@ -144,7 +152,8 @@ def add_line_plot(plot: pyplot.PlotItem, data: pd.DataFrame,
     # Give back plot
     return lplot
 
-def add_image_plot(plot: pyplot.PlotItem, data: pd.DataFrame,
+def add_image_plot(plot: pyplot.PlotItem,
+                   setpoint_x: np.ndarray, setpoint_y: np.ndarray, data: np.ndarray,
                    x: ParamSpec, y: ParamSpec, z: ParamSpec, title=None):
     # Check that we are given a plot
     if not isinstance(plot, pyplot.PlotItem):
@@ -153,9 +162,9 @@ def add_image_plot(plot: pyplot.PlotItem, data: pd.DataFrame,
         plot.plot_title = title
 
     # Create image plot
-    implot = plot.plot(setpoint_x=data.index.values,
-                       setpoint_y=data.columns.values,
-                       data=data.values)
+    implot = plot.plot(setpoint_x=setpoint_x,
+                       setpoint_y=setpoint_y,
+                       data=data)
 
     # Set Axis Labels
     plot.left_axis.paramspec = y
