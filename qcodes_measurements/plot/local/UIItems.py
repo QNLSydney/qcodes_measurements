@@ -8,6 +8,32 @@ class TableWidget(RPGWrappedBase):
     """
     _base = "TableWidget"
 
+    def getData(self):
+        """
+        Get the data from the table.
+        """
+        nRows = self.rowCount()
+        nCols = self.columnCount()
+        rowTitles = []
+        rowData = []
+        for i in range(nRows):
+            rowTitles.append(self.verticalHeaderItem(i).text())
+            data = []
+            for j in range(nCols):
+                data.append(self.item(i, j).text())
+            rowData.append(data)
+        return {title: data for title, data in zip(rowTitles, rowData)}
+
+    def getHorizontalHeaders(self):
+        """
+        Get the headers from the table.
+        """
+        nCols = self.columnCount()
+        colTitles = []
+        for i in range(nCols):
+            colTitles.append(self.horizontalHeaderItem(i).text())
+        return colTitles
+
 class LegendItem(RPGWrappedBase):
     """
     Legend handling code
