@@ -233,8 +233,8 @@ def do0d(*param_meas,
                     plotitem.plot_title += f" {parameter.full_name}"
                 else:
                     plotitem = win.addPlot(name=parameter.full_name,
-                                           title="%s" %
-                                           (parameter.full_name))
+                                           title="%s (%s)" %
+                                           (parameter.full_name, parameter.label))
                     if legend:
                         plotitem.addLegend()
 
