@@ -1,4 +1,3 @@
-import sys
 import logging as log
 from inspect import signature
 from collections import namedtuple
@@ -7,6 +6,7 @@ from wrapt import decorator
 from tqdm import tqdm
 import numpy as np
 
+from qcodes.utils.deprecate import deprecate
 from qcodes.instrument.visa import VisaInstrument
 from qcodes.dataset.measurements import Measurement
 
@@ -154,6 +154,7 @@ def _plot_sweep(sweep_func, _, args, kwargs):
                     print(f"Failed to save figure {run_id}")
     return run_id, win
 
+@deprecate(alternative="qcm.tools.doNd.do0d")
 @_plot_sweep
 def do0d(*param_meas,
          win=None, append=False, stack=False, legend=False,
@@ -291,6 +292,7 @@ def do0d(*param_meas,
     # Return the dataid
     return datasaver.run_id  # can use plot_by_id(dataid)
 
+@deprecate(alternative="qcm.tools.doNd.do1d")
 @_plot_sweep
 def linear1d(param_set, start, stop, num_points, delay, *param_meas,
              win=None, append=False, plot_params=None,
@@ -464,6 +466,7 @@ def linear1d(param_set, start, stop, num_points, delay, *param_meas,
     # Return the dataid
     return datasaver.run_id  # can use plot_by_id(dataid)
 
+@deprecate(alternative="qcm.tools.doNd.do2d")
 @_plot_sweep
 def linear2d(param_set1, start1, stop1, num_points1, delay1,
              param_set2, start2, stop2, num_points2, delay2,

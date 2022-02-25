@@ -1,5 +1,6 @@
 # Import shortcuts to measurements
-from .measure import do0d, linear1d, linear2d
+from .measure import linear1d, linear2d
+from .doNd import do0d, do1d, do2d
 from .time import sweep_time
 from .combine import CombinedParameter
 from .parameters import FilterWrapper, CutWrapper, SmoothFilter, DiffFilter, MeanFilter, ReduceFilterWrapper
