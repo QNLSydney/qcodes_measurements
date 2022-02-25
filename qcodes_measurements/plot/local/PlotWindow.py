@@ -1,4 +1,5 @@
 from .RemoteProcessWrapper import RPGWrappedBase, get_remote
+from .UIItems import TableWidget
 from .PlotItem import PlotItem
 
 class BasePlotWindow(RPGWrappedBase):
@@ -61,6 +62,13 @@ class PlotWindow(BasePlotWindow):
     @property
     def items(self):
         return self.getLayoutItems(_returnType="proxy")
+
+    @property
+    def table(self):
+        for item in self.items:
+            if isinstance(item, TableWidget):
+                return item
+        return None
 
     @classmethod
     def getWindows(cls):
