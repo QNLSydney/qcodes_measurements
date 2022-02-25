@@ -1,8 +1,6 @@
 """
 Wrappers around qcodes.utils.dataset.doNd functions that live-plot
 data during the sweep.
-
-In order to
 """
 
 import re
@@ -145,7 +143,7 @@ def _register_subscriber():
     if "qcm" not in config.subscription.subscribers:
         logger.info("Registering qcm as a default subscriber")
         config.subscription.subscribers["qcm"] = {
-            'factory': 'qcodes_measurements.tools.subscriber.subscriber',
+            'factory': 'qcodes_measurements.tools.doNd.subscriber',
             'factory_kwargs': {},
             'subscription_kwargs': {
                 'min_wait': 10,
