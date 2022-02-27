@@ -105,8 +105,9 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
                 # No dataset description available. Use pandas to unwrap shape
                 data = dataset.to_pandas_dataframe_dict(param.name)[param.name]
                 c_data = data.unstack().droplevel(0, axis=1)
-                if c_data.size != len(dataset):
-                    logger.error("Unable to unwrap dataset automatically. Unable to infer shape.")
+                if c_data.size != len(data):
+                    logger.error("Unable to unwrap dataset automatically. Unable to infer shape."
+                                 f"Inferred shape: {c_data.shape}. (Size: {c_data.size} != {len(dataset)})")
                     continue
                 setpoint_x = c_data.index.values
                 setpoint_y = c_data.columns.values
