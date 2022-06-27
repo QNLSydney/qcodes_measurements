@@ -40,7 +40,8 @@ class DigitalGate(Gate):
                          label=label,
                          rate=None,
                          max_step=None,
-                         default_mode=GateMode.FREE)
+                         default_mode=GateMode.FREE,
+                         **kwargs)
 
         self.vals = MultiType(Bool(), Numbers())
         self._v_high = v_high
