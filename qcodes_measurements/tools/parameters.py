@@ -142,10 +142,14 @@ class ReduceFilterWrapper(BaseWrappedParameter):
     # The following variables are reserved, otherwise they would be passed along
     # to the base parameter
     filter_func = None
+    _unit = None
+    _label = None
     args = None
     kwargs = None
 
-    def __init__(self, parameter, *, filter_func, args=None, kwargs=None):
+    def __init__(self, parameter, *, filter_func,
+                 args=None, kwargs=None,
+                 label=None, unit=None):
         """
         Args:
             parameter - the parameter to wrap
@@ -163,6 +167,8 @@ class ReduceFilterWrapper(BaseWrappedParameter):
                 'args': args,
                 'kwargs': kwargs}
         self.wrappers = snap
+        self._label = label
+        self._unit = unit
 
     @property
     def setpoints(self):
@@ -180,8 +186,23 @@ class ReduceFilterWrapper(BaseWrappedParameter):
     def setpoint_names(self):
         return None
     @property
+    def vals(self):
+        return vals.Anything()
+    @property
     def __class__(self):
         return qcodes.instrument.parameter.Parameter
+
+    @property
+    def label(self):
+        if self._label is None:
+            return self.__wrapped__.label
+        return self._label
+
+    @property
+    def unit(self):
+        if self._unit is None:
+            return self.__wrapped__.unit
+        return self._unit
 
     def get(self):
         d = self.__wrapped__.get()
@@ -256,14 +277,17 @@ class CutWrapper(BaseWrappedParameter):
         """
         Overwrite the Arrays validator if we are a ParameterWithSetpoints.
         """
-        if not isinstance(self.__wrapped__, qcodes.ParameterWithSetpoints):
+        if not isinstance(self.__wrapped__.vals, vals.Arrays):
             return self.__wrapped__.vals
 
         def cut_shape(old_shape, subshape):
             return max(0, old_shape-subshape)
         new_shape = []
         for param in self.__wrapped__.vals.shape_unevaluated:
-            new_shape.append(FilterWrapper(param, filter_func=cut_shape, args=(self.fromstart+self.fromend,)))
+            if callable(param):
+                new_shape.append(FilterWrapper(param, filter_func=cut_shape, args=(self.fromstart+self.fromend,)))
+            else:
+                new_shape.append(param - self.fromstart - self.fromend)
         return vals.Arrays(shape=tuple(new_shape))
 
     def get(self):
