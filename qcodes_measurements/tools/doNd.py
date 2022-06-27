@@ -281,7 +281,8 @@ def subscriber(dataset, **kwargs):
     # a blank function
     if this.current is None or this.current.plot_window is None:
         logger.info(f"Live plotting disabled for {dataset.run_id}.")
-        this.current.dataset = dataset
+        if this.current is not None:
+            this.current.dataset = dataset
         return do_nothing
 
     # Update the plot title
@@ -498,7 +499,8 @@ def _live_plot(wrapped):
 
     old_signature = inspect.signature(wrapped)
     new_signature = inspect.signature(wrapped_function, follow_wrapped=False)
-    combined_parameters = dict(old_signature.parameters.items()) | dict(new_signature.parameters.items())
+    #combined_parameters = dict(old_signature.parameters.items()) | dict(new_signature.parameters.items())
+    combined_parameters = dict(list(old_signature.parameters.items()) + list(new_signature.parameters.items()))
     del combined_parameters["do_plot"]
     del combined_parameters["args"]
     del combined_parameters["kwargs"]
