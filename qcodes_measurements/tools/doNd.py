@@ -281,7 +281,6 @@ def subscriber(dataset, **kwargs):
     # a blank function
     if this.current is None or this.current.plot_window is None:
         logger.info(f"Live plotting disabled for {dataset.run_id}.")
-        this.current.dataset = dataset
         return do_nothing
 
     # Update the plot title
