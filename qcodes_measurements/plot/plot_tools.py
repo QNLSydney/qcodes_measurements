@@ -2,6 +2,7 @@ import os
 import re
 import json
 import numpy as np
+from typing import Optional, List
 
 from qcodes import ParamSpec, load_by_id
 from qcodes.data.data_set import DataSet
@@ -45,7 +46,7 @@ def find_plot_by_paramspec(win: pyplot.PlotWindow, x: ParamSpec, y: ParamSpec):
                 return plotitem
     return None
 
-def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
+def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None, params: Optional[List[str]]=None):
     """
     Plot the given dataset.
 
@@ -56,7 +57,7 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
 
     Args:
         dataset [qcodes.DataSet]: The qcodes dataset to plot.
-        win Union[pyplot.PlotWindow, None]: The window to plot into, or none if
+        win Optional[pyplot.PlotWindow]: The window to plot into, or none if
             we should create a new window.
     """
     if win is None:
@@ -70,6 +71,9 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None):
     # Plot each dependant dataset in the data
     data = dataset.get_parameter_data()
     for param, vals in data.items():
+        # Check if we want to plot this item
+        if params is not None and param not in params:
+            continue # This is not an item we want to plot
         param = dataset.paramspecs[param]
         dep_params = [dataset.paramspecs[p] for p in param._depends_on]
 
@@ -188,12 +192,18 @@ def add_image_plot(plot: pyplot.PlotItem,
     # Give back the image plot
     return implot
 
-def plot_by_id(did, save_fig=False, fig_folder=None):
+def plot_by_id(did, params=None, save_fig=False, fig_folder=None):
     """
     Generate a plot by the given ID
+
+    Args:
+        did[int]: Dataset ID to load
+        params[Optional[List[str]]]: List of parameters to plot
+        save_fig[Bool]: Save figure after plotting
+        fig_folder[Optional[str]]: Location to save figure
     """
     ds = load_by_id(did)
-    win = plot_dataset(ds)
+    win = plot_dataset(ds, params=params)
 
     # Save the figure by id if requested
     if save_fig:
@@ -201,19 +211,29 @@ def plot_by_id(did, save_fig=False, fig_folder=None):
 
     return win
 
-def append_by_id(win, did):
+def append_by_id(win, did, params=None, save_fig=False, fig_folder=None):
     """
     Append a 1d trace to a plot
+    Args:
+        win[PlotWindow]: Window to append plots to
+        did[int]: Dataset ID to load
+        params[Optional[List[str]]]: List of parameters to plot
+        save_fig[Bool]: Save figure after plotting
+        fig_folder[Optional[str]]: Location to save figure
     """
     d = load_by_id(did)
-    plot_dataset(d, win)
+    plot_dataset(d, win, params=params)
 
-def plot_by_run(exp, kt, save_fig, fig_folder=None):
+    # Save the figure by id if requested
+    if save_fig:
+        save_figure(win, did, fig_folder)
+
+def plot_by_run(exp, kt, params=None, save_fig=False, fig_folder=None):
     """
     Plot a dataset by exp id
     """
     ds = exp.data_set(kt)
-    win = plot_dataset(ds)
+    win = plot_dataset(ds, params=params)
 
     # Save the figure by id if requested
     if save_fig:
