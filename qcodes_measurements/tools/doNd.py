@@ -302,7 +302,7 @@ def subscriber(dataset, **kwargs):
     if this.current.plot_params is None:
         this.current.plot_params = set(params.names)
     else:
-        this.current.plot_params = set(p.fullname for p in this.current.plot_params)
+        this.current.plot_params = set(p.full_name for p in this.current.plot_params)
 
     for param in itertools.chain(params.dependencies, params.standalones):
         name = param.name
