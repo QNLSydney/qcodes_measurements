@@ -178,8 +178,10 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         step_y = (self.setpoint_y[-1] - self.setpoint_y[0])/len(self.setpoint_y)
 
         self.resetTransform()
-        self.translate(self.setpoint_x[0], self.setpoint_y[0])
-        self.scale(step_x, step_y)
+        tr = QtGui.QTransform()
+        tr.translate(self.setpoint_x[0], self.setpoint_y[0])
+        tr.scale(step_x, step_y)
+        self.setTransform(tr)
 
 class ImageItemWithHistogram(ExtendedImageItem):
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):

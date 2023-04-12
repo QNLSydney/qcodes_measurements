@@ -174,9 +174,9 @@ class RemoteQtEventHandler(RemoteEventHandler):
         try:
             RemoteEventHandler.processRequests(self)
         except (ClosedError, BrokenPipeError):
-            from pyqtgraph.Qt import QtGui
+            from pyqtgraph.Qt import QtWidgets
             self.timer.stop()
-            QtGui.QApplication.instance().quit()
+            QtWidgets.QApplication.instance().quit()
 
 class QtProcess(Process):
     """
@@ -207,9 +207,9 @@ class QtProcess(Process):
         if 'target' not in kwds:
             kwds['target'] = startQtEventLoop
 
-        from pyqtgraph.Qt import QtGui  ## avoid module-level import to keep bootstrap snappy.
+        from pyqtgraph.Qt import QtWidgets  ## avoid module-level import to keep bootstrap snappy.
         self._processRequests = kwds.pop('processRequests', True)
-        if self._processRequests and QtGui.QApplication.instance() is None:
+        if self._processRequests and QtWidgets.QApplication.instance() is None:
             raise Exception("Must create QApplication before starting QtProcess, "
                             "or use QtProcess(processRequests=False)")
 
@@ -250,10 +250,10 @@ def startQtEventLoop(name, conn, ppid, debug=False):
     sys.stderr = LoggingStream(logger, "error")
 
     logger.info('Connected; starting remote proxy.')
-    from pyqtgraph.Qt import QtGui
-    app = QtGui.QApplication.instance()
+    from pyqtgraph.Qt import QtWidgets
+    app = QtWidgets.QApplication.instance()
     if app is None:
-        app = QtGui.QApplication([])
+        app = QtWidgets.QApplication([])
         ## generally we want the event loop to stay open
         ## until it is explicitly closed by the parent process.
         app.setQuitOnLastWindowClosed(False)

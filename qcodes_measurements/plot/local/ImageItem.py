@@ -59,8 +59,10 @@ class ImageItem(ExtendedDataItem, RPGWrappedBase):
         step_y = (setpoint_y[-1] - setpoint_y[0])/len(setpoint_y)
 
         self.resetTransform()
-        self.translate(setpoint_x[0], setpoint_y[0])
-        self.scale(step_x, step_y)
+        tr = get_remote().pyqtgraph.QtGui.QTransform()
+        tr.translate(setpoint_x[0], setpoint_y[0])
+        tr.scale(step_x, step_y)
+        self.setTransform(tr)
 
     def update(self, data, *args, **kwargs):
         self.setImage(ensure_ndarray(data), autoDownsample=True)

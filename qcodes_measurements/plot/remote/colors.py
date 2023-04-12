@@ -20,9 +20,9 @@ from pyqtgraph.graphicsItems import GradientEditorItem
 
 # In addition, try and load extra matplotlib colormaps
 try:
-    from matplotlib import cm
+    import matplotlib as mpl
 except ImportError:
-    cm = None
+    mpl = None
 
 __all__ = ["COLORMAPS", "DEFAULT_CMAP"]
 
@@ -1063,22 +1063,22 @@ __data__: Dict[str, Union[List, Tuple]] = {
             'grey': _GREY_DATA}
 
 # Add some extra matplotlib colors
-if cm is not None:
+if mpl is not None:
     gradient = linspace(0, 1, 256)
     # More perceptually uniform color schemes
-    __data__['cividis'] = cm.cmap_d['cividis'](gradient)[:,0:3]
+    __data__['cividis'] = mpl.colormaps['cividis'](gradient)[:,0:3]
     # Diverging color schemes
-    __data__['twilight'] = cm.cmap_d['twilight'](gradient)[:,0:3]
-    __data__['twilight_shifted'] = cm.cmap_d['twilight_shifted'](gradient)[:,0:3]
-    __data__['Spectral'] = cm.cmap_d["Spectral"](gradient)[:,0:3]
-    __data__['SpectralBack'] = cm.cmap_d["Spectral"](gradient)[:,0:3][::-1]
-    __data__['coolwarm'] = cm.cmap_d["coolwarm"](gradient)[:,0:3]
-    __data__['bwr'] = cm.cmap_d["bwr"](gradient)[:,0:3]
-    __data__['RdBu'] = cm.cmap_d["RdBu"](gradient)[:,0:3]
+    __data__['twilight'] = mpl.colormaps['twilight'](gradient)[:,0:3]
+    __data__['twilight_shifted'] = mpl.colormaps['twilight_shifted'](gradient)[:,0:3]
+    __data__['Spectral'] = mpl.colormaps["Spectral"](gradient)[:,0:3]
+    __data__['SpectralBack'] = mpl.colormaps["Spectral"](gradient)[:,0:3][::-1]
+    __data__['coolwarm'] = mpl.colormaps["coolwarm"](gradient)[:,0:3]
+    __data__['bwr'] = mpl.colormaps["bwr"](gradient)[:,0:3]
+    __data__['RdBu'] = mpl.colormaps["RdBu"](gradient)[:,0:3]
     # Others
-    __data__['ocean'] = cm.cmap_d["ocean"](gradient)[:,0:3]
-    __data__['gist_earth'] = cm.cmap_d["gist_earth"](gradient)[:,0:3]
-    __data__['terrain'] = cm.cmap_d["terrain"](gradient)[:,0:3]
+    __data__['ocean'] = mpl.colormaps["ocean"](gradient)[:,0:3]
+    __data__['gist_earth'] = mpl.colormaps["gist_earth"](gradient)[:,0:3]
+    __data__['terrain'] = mpl.colormaps["terrain"](gradient)[:,0:3]
 
 
 COLORMAPS = {}
