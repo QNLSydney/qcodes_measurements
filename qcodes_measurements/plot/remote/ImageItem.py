@@ -1,5 +1,5 @@
 from functools import partial
-from PyQt5 import QtCore, QtGui, QtWidgets
+from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 import numpy as np
 import scipy.linalg
 
@@ -72,15 +72,15 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
             xrange = rect.left(), rect.right()
             yrange = rect.top(), rect.bottom()
 
-            qaction = QtWidgets.QAction("Colour By Marquee", self.menu)
+            qaction = QtGui.QAction("Colour By Marquee", self.menu)
             qaction.triggered.connect(partial(self.colorByMarquee, xrange=xrange, yrange=yrange))
             self.menu.addAction(qaction)
 
-            qaction = QtWidgets.QAction("Plane Fit", self.menu)
+            qaction = QtGui.QAction("Plane Fit", self.menu)
             qaction.triggered.connect(partial(self.planeFit, xrange=xrange, yrange=yrange))
             self.menu.addAction(qaction)
 
-            qaction = QtWidgets.QAction("Level Columns", self.menu)
+            qaction = QtGui.QAction("Level Columns", self.menu)
             qaction.triggered.connect(partial(self.levelColumns, xrange=xrange, yrange=yrange))
             self.menu.addAction(qaction)
 

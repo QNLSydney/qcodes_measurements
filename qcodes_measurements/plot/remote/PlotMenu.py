@@ -1,4 +1,4 @@
-from PyQt5 import QtCore
+from pyqtgraph.Qt import QtCore
 from pyqtgraph import PlotCurveItem, PlotDataItem, ImageItem
 
 from .DataItem import ExtendedDataItem

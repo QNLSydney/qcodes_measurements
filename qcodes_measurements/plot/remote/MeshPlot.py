@@ -3,7 +3,7 @@ from typing import List, Union
 
 import numpy as np
 
-from PyQt5 import QtCore
+from pyqtgraph.Qt import QtCore
 from pyqtgraph import GraphicsObject, HistogramLUTItem, mkPen
 
 from .PlotWindow import ExtendedPlotWindow

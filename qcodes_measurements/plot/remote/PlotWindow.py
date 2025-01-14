@@ -1,5 +1,5 @@
 from typing import List
-from PyQt5.QtWidgets import QGraphicsProxyWidget
+from pyqtgraph.Qt.QtWidgets import QGraphicsProxyWidget
 
 from pyqtgraph import GraphicsLayoutWidget
 from pyqtgraph.exporters import ImageExporter, SVGExporter

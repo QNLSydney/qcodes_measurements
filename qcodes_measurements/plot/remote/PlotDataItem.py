@@ -1,7 +1,7 @@
 from functools import partial
 
 import numpy as np
-from PyQt5 import QtGui, QtWidgets
+from pyqtgraph.Qt import QtGui, QtWidgets
 
 from pyqtgraph import PlotDataItem, mkColor
 
@@ -27,11 +27,11 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
         if self.menu is None:
             self.menu = QtWidgets.QMenu()
 
-            qaction = QtWidgets.QAction("Select Color", self.menu)
+            qaction = QtGui.QAction("Select Color", self.menu)
             qaction.triggered.connect(self.selectColor)
             self.menu.addAction(qaction)
 
-            qaction = QtWidgets.QAction("Remove Item", self.menu)
+            qaction = QtGui.QAction("Remove Item", self.menu)
             qaction.triggered.connect(partial(self.getViewBox().removePlotItem, self))
             self.menu.addAction(qaction)
 

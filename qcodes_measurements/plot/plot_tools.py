@@ -5,7 +5,7 @@ import numpy as np
 from typing import Optional, List
 
 from qcodes import ParamSpec, load_by_id
-from qcodes.data.data_set import DataSet
+from qcodes.dataset.data_set import DataSet
 
 from ..logging import get_logger
 from ..plot import pyplot

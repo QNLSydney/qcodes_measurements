@@ -1,8 +1,8 @@
 import re
 import sys
 import numpy as np
-import PyQt5.QtGui
-import PyQt5.QtWidgets
+import pyqtgraph.Qt.QtGui
+import pyqtgraph.Qt.QtWidgets
 
 from ...logging import get_logger
 from ..multiprocess import ObjectProxy, QtProcess, ClosedError
@@ -47,10 +47,10 @@ def _set_defaults(remote):
 
 def start_remote():
     # Check that a QApplication has been created
-    if PyQt5.QtWidgets.QApplication.instance() is None:
-        this.app = PyQt5.QtWidgets.QApplication([])
+    if pyqtgraph.Qt.QtWidgets.QApplication.instance() is None:
+        this.app = pyqtgraph.Qt.QtWidgets.QApplication([])
     else:
-        this.app = PyQt5.QtWidgets.QApplication.instance()
+        this.app = pyqtgraph.Qt.QtWidgets.QApplication.instance()
 
     this.proc = QtProcess(debug=False)
     this.rpg = this.proc._import('qcodes_measurements.plot.rpyplot', timeout=20)

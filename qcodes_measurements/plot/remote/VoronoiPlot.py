@@ -2,7 +2,7 @@ import struct
 
 import scipy.spatial as spatial
 
-from PyQt5 import QtCore, QtGui
+from pyqtgraph.Qt import QtCore, QtGui
 
 from .MeshPlot import MeshPlot
 from .DataItem import ExtendedDataItem

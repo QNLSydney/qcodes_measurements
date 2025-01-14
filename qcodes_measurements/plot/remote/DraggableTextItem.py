@@ -1,4 +1,4 @@
-from PyQt5 import QtCore, QtGui, QtWidgets
+from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 
 from pyqtgraph import GraphicsWidget, GraphicsWidgetAnchor, LabelItem, Point, mkPen, mkBrush
 
