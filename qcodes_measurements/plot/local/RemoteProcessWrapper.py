@@ -163,13 +163,14 @@ class RPGWrappedBase(ObjectProxy):
                 return inst
 
             # Check if we have a list of objects:
-            if inst.__getattr__("__class__").__name__ in ("tuple", "list"):
+            if getattr(inst, "__class__").__name__ in ("tuple", "list"):
                 logger.debug("Wrapping remote list.")
                 # Need to iterate over things in a dumb way to suppress warnings
                 return tuple(RPGWrappedBase.autowrap(inst[i]) for i in range(len(inst)))
 
             # Otherwise look to see if we have an extended type
-            typestr = re.match(r"<[a-zA-Z_.]+\.([a-zA-Z_]+) object at 0x[0-9A-Fa-f]+>", inst._typeStr)
+            logger.debug("Matching %s", inst._typeStr)
+            typestr = re.match(r"^<[a-zA-Z_.]+\.([a-zA-Z_]+)(?:\(.*\))? at 0x[0-9A-Fa-f]+>$", inst._typeStr)
             if typestr:
                 logger.debug("Extracted remote type: %s.", typestr.groups()[0])
                 typestr = typestr.groups()[0]
