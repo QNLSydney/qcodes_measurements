@@ -5,10 +5,12 @@ from qcodes import Instrument
 
 __all__ = ["FridgeTemps"]
 
+
 class FridgeTemps(Instrument):
     """
     Instrument definition for a fridge logged on the thermometry site.
     """
+
     def __init__(self, name, url, refresh_interval=60):
         super().__init__(name)
         self.url = url
@@ -17,17 +19,21 @@ class FridgeTemps(Instrument):
         if params.status_code != 200:
             raise RuntimeError("Unable to query fridge")
         params = set(params.json().keys())
-        params.remove("Time")
+        for param in params.copy():
+            if param.lower() == "time":
+                params.remove(param)
         params = tuple(params)
         self.params = params
 
         for param in params:
-            self.add_parameter(f"{param}_temp",
-                               unit="K",
-                               label=f"{param}",
-                               get_cmd=partial(self.get_param, param),
-                               snapshot_get=True,
-                               max_val_age=refresh_interval)
+            self.add_parameter(
+                f"{param}_temp",
+                unit="K",
+                label=f"{param}",
+                get_cmd=partial(self.get_param, param),
+                snapshot_get=True,
+                max_val_age=refresh_interval,
+            )
 
     def get_param(self, param):
         temps = requests.get(self.url)
@@ -59,7 +65,4 @@ class FridgeTemps(Instrument):
         """
         Returns details of the instrument and driver.
         """
-        return {"vendor": "QNL",
-                "model": "Fridge URL Driver",
-                "serial": "0001",
-                "firmware": "0.1"}
+        return {"vendor": "QNL", "model": "Fridge URL Driver", "serial": "0001", "firmware": "0.1"}
