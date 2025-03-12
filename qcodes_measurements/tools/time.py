@@ -125,8 +125,6 @@ def sweep_time(
                     if param in plot_params:
                         plt_data[param][2][curr_point] = data[-1][1]
                         plt_data[param][1].setData(time_data, plt_data[param][2])
-                        plt_data[param][1].xData = time_data
-                        plt_data[param][1].update(plt_data[param][2])
 
                 curr_point += 1
 
