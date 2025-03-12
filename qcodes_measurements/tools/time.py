@@ -5,7 +5,9 @@ from qcodes.dataset.measurements import Measurement
 
 from .measure import Setpoint, _flush_buffers, _run_functions, _plot_sweep
 from ..logging import get_logger
+
 logger = get_logger("tools.time")
+
 
 def _interruptible_sleep(sleep_time):
     while sleep_time > 1:
@@ -14,10 +16,20 @@ def _interruptible_sleep(sleep_time):
     time.sleep(sleep_time)
     return
 
+
 @_plot_sweep
-def sweep_time(*param_meas, delay=10, until=None,
-               win=None, append=False, plot_params=None, annotation=None,
-               atstart=(), ateach=(), atend=()):
+def sweep_time(
+    *param_meas,
+    delay=10,
+    until=None,
+    win=None,
+    append=False,
+    plot_params=None,
+    annotation=None,
+    atstart=(),
+    ateach=(),
+    atend=(),
+):
     """
     Run a time sweep, with a delay between each point. This sweep will run for `until` seconds,
     or indefinitely if until is None
@@ -73,22 +85,22 @@ def sweep_time(*param_meas, delay=10, until=None,
 
     # Set up parameters
     for param in param_meas:
-        m.register_parameter(param, setpoints=("time", ))
+        m.register_parameter(param, setpoints=("time",))
 
         # Create plot window
         if win is not None and param in plot_params:
-            plot = win.addPlot(name=param.full_name,
-                            title=f"{param.full_name} ({param.label})")
+            plot = win.addPlot(name=param.full_name, title=f"{param.full_name} ({param.label})")
             plot.left_axis.label = param.label
             plot.left_axis.unit = param.unit
             plot.bot_axis.label = "Time"
             plot.bot_axis.unit = "s"
-            plotdata = plot.plot(setpoint_x=time_data, name=param.name, pen=(255,0,0))
+            plotdata = plot.plot(setpoint_x=time_data, name=param.name, pen=(255, 0, 0))
             plt_data[param] = (plot, plotdata, np.full((1,), np.nan))
 
     if win is not None and annotation is not None:
         win.items[0].textbox(annotation)
 
+    start_time = 0
     try:
         with m.run() as datasaver:
             start_time = time.monotonic()
@@ -97,7 +109,7 @@ def sweep_time(*param_meas, delay=10, until=None,
                 pd[0].plot_title += f" (id: {datasaver.run_id})"
             while True:
                 # Update each parameter
-                data = [("time", time.monotonic()-start_time)]
+                data = [("time", time.monotonic() - start_time)]
                 time_data[curr_point] = data[-1][1]
 
                 _run_functions(ateach, param_vals=(Setpoint("time", curr_point, data[-1][1])))
@@ -112,6 +124,7 @@ def sweep_time(*param_meas, delay=10, until=None,
                     data.append((param, val))
                     if param in plot_params:
                         plt_data[param][2][curr_point] = data[-1][1]
+                        plt_data[param][1].setData(time_data, plt_data[param][2])
                         plt_data[param][1].xData = time_data
                         plt_data[param][1].update(plt_data[param][2])
 
@@ -122,16 +135,16 @@ def sweep_time(*param_meas, delay=10, until=None,
                     array_size *= 2
                     logger.debug("New plot array size: %d", array_size)
                     time_data.resize(array_size)
-                    time_data[array_size//2:] = np.nan
+                    time_data[array_size // 2 :] = np.nan
                     for pld in plt_data.values():
                         pld[2].resize(array_size)
-                        pld[2][array_size//2:] = np.nan
+                        pld[2][array_size // 2 :] = np.nan
 
                 datasaver.add_result(*data)
 
                 # Wait until the next point time. Try to keep track of how long it
                 # took for equipment to respond
-                next_time = start_time + delay*curr_point
+                next_time = start_time + delay * curr_point
                 while time.monotonic() < next_time:
                     sleep_time = max(0, min(0.01, time.monotonic() - next_time))
                     _interruptible_sleep(sleep_time)
