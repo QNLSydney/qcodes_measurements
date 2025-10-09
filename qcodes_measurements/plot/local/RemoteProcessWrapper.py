@@ -95,7 +95,7 @@ def remote_callable(remote_obj):
 
 class RPGWrappedBase(ObjectProxy):
     # Keep track of children so they aren't recomputed each time
-    _subclass_types = None
+    _subclass_types: dict[str, type] = {}
 
     # Reserve names for local variables, so they aren't proxied.
     _base_inst = None
@@ -122,6 +122,13 @@ class RPGWrappedBase(ObjectProxy):
             raise TypeError(
                 "Base instance not defined. Don't know how to create remote object."
             )
+
+    def __init_subclass__(cls) -> None:
+        base = getattr(cls, "_base", None)
+        if base is not None:
+            typestr = base
+            RPGWrappedBase._subclass_types[typestr] = cls
+        return super().__init_subclass__()
 
     def __wrap__(self, *args, **kwargs):
         if args or kwargs:
@@ -154,23 +161,8 @@ class RPGWrappedBase(ObjectProxy):
     @staticmethod
     def autowrap(inst):
         logger.debug("Trying to autowrap %r.", inst)
-        # Figure out the types that we know how to autowrap
-        if RPGWrappedBase._subclass_types is None:
-            logger.debug("Populating subclass types")
-            RPGWrappedBase._subclass_types = {}
 
-            def append_subclasses(sc_dict, cls):
-                for typ in cls.__subclasses__():
-                    append_subclasses(sc_dict, typ)
-                    base = getattr(typ, "_base", None)
-                    if base is None:
-                        continue
-                    typestr = base
-                    sc_dict[typestr] = typ
-
-            append_subclasses(RPGWrappedBase._subclass_types, RPGWrappedBase)
-
-        # Then, if we have an object proxy, wrap it if it is in the list of wrappable types
+        # If we have an object proxy, wrap it if it is in the list of wrappable types
         if isinstance(inst, ObjectProxy):
             if isinstance(inst, RPGWrappedBase):
                 logger.debug(

@@ -1,9 +1,10 @@
 import numpy as np
-from qcodes import Parameter, ArrayParameter
+from qcodes.parameters import Parameter, ArrayParameter
 
 from .RemoteProcessWrapper import RPGWrappedBase, ensure_ndarray, get_remote
 from .ExtendedDataItem import ExtendedDataItem
 from .ColorMap import ColorMap
+
 
 class HistogramLUTItem(RPGWrappedBase):
     _base = "HistogramLUTItem"
@@ -11,12 +12,13 @@ class HistogramLUTItem(RPGWrappedBase):
     def __init__(self, *args, allowAdd=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.allowAdd = allowAdd
-        self._remote_function_options['setLevels'] = {'callSync': 'off'}
-        self._remote_function_options['imageChanged'] = {'callSync': 'off'}
+        self._remote_function_options["setLevels"] = {"callSync": "off"}
+        self._remote_function_options["imageChanged"] = {"callSync": "off"}
+
     def __wrap__(self, *args, **kwargs):
         super().__wrap__()
-        self._remote_function_options['setLevels'] = {'callSync': 'off'}
-        self._remote_function_options['imageChanged'] = {'callSync': 'off'}
+        self._remote_function_options["setLevels"] = {"callSync": "off"}
+        self._remote_function_options["imageChanged"] = {"callSync": "off"}
 
     @property
     def axis(self):
@@ -25,6 +27,7 @@ class HistogramLUTItem(RPGWrappedBase):
     @property
     def allowAdd(self):
         return self.gradient.allowAdd
+
     @allowAdd.setter
     def allowAdd(self, val):
         self.gradient.allowAdd = bool(val)
@@ -37,14 +40,14 @@ class ImageItem(ExtendedDataItem, RPGWrappedBase):
         super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
         setpoint_x = ensure_ndarray(setpoint_x)
         setpoint_y = ensure_ndarray(setpoint_y)
-        self._remote_function_options['setImage'] = {'callSync': 'off'}
+        self._remote_function_options["setImage"] = {"callSync": "off"}
         # Set axis scales correctly
         self._force_rescale(setpoint_x, setpoint_y)
 
         if colormap is not None:
             if not isinstance(colormap, ColorMap):
                 try:
-                    colormap = get_remote().COLORMAPS['colormap']
+                    colormap = get_remote().COLORMAPS["colormap"]
                 except KeyError:
                     raise ValueError(f"Can't find colormap {colormap}.")
             lut = colormap.getLookupTable(0, 1, alpha=False)
@@ -52,11 +55,11 @@ class ImageItem(ExtendedDataItem, RPGWrappedBase):
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
-        self._remote_function_options['setImage'] = {'callSync': 'off'}
+        self._remote_function_options["setImage"] = {"callSync": "off"}
 
     def _force_rescale(self, setpoint_x, setpoint_y):
-        step_x = (setpoint_x[-1] - setpoint_x[0])/len(setpoint_x)
-        step_y = (setpoint_y[-1] - setpoint_y[0])/len(setpoint_y)
+        step_x = (setpoint_x[-1] - setpoint_x[0]) / len(setpoint_x)
+        step_y = (setpoint_y[-1] - setpoint_y[0]) / len(setpoint_y)
 
         self.resetTransform()
         tr = get_remote().pyqtgraph.QtGui.QTransform()
@@ -73,6 +76,7 @@ class ImageItem(ExtendedDataItem, RPGWrappedBase):
         Return the data underlying this trace
         """
         return self.__getattr__("image", _returnType="value", _location="remote")
+
     @property
     def data(self):
         """
@@ -80,11 +84,13 @@ class ImageItem(ExtendedDataItem, RPGWrappedBase):
         """
         return self.image
 
+
 class ExtendedImageItem(ImageItem):
     """
     Extended image item keeps track of x and y setpoints remotely, as this is necessary
     to do more enhanced image processing that makes use of the axis scale, like color-by-marquee.
     """
+
     _base = "ExtendedImageItem"
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
@@ -100,6 +106,7 @@ class ExtendedImageItem(ImageItem):
     @property
     def setpoint_x(self):
         return self.__getattr__("setpoint_x", _returnType="value", _location="remote")
+
     @setpoint_x.setter
     def setpoint_x(self, val):
         self._base_inst.setpoint_x = val
@@ -107,9 +114,11 @@ class ExtendedImageItem(ImageItem):
     @property
     def setpoint_y(self):
         return self.__getattr__("setpoint_y", _returnType="value", _location="remote")
+
     @setpoint_y.setter
     def setpoint_y(self, val):
         self._base_inst.setpoint_y = val
+
 
 class ImageItemWithHistogram(ExtendedImageItem):
     _base = "ImageItemWithHistogram"
@@ -143,7 +152,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
     def update(self, data, *args, **kwargs):
         super().update(data, *args, **kwargs)
         # Only update the range if requested
-        if kwargs.get('update_range', True):
+        if kwargs.get("update_range", True):
             z_range = (np.min(data), np.max(data))
             self.histogram.imageChanged()
             self.histogram.setLevels(*z_range)
@@ -166,6 +175,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
     @property
     def colormap(self):
         return self.cmap
+
     @colormap.setter
     def colormap(self, cmap):
         self.changeColorScale(name=cmap)

@@ -1,3 +1,5 @@
+from typing import Sequence
+
 from .RemoteProcessWrapper import RPGWrappedBase, get_remote
 from .UIItems import TableWidget
 from .PlotItem import PlotItem
@@ -60,7 +62,7 @@ class PlotWindow(BasePlotWindow):
         return self.getWindows()
 
     @property
-    def items(self):
+    def items(self) -> Sequence[RPGWrappedBase]:
         return self.getLayoutItems(_returnType="proxy")
 
     @property
