@@ -3,6 +3,7 @@ from functools import partial, reduce
 from scipy import signal
 import numpy as np
 import qcodes
+from qcodes.parameters import Parameter, ParameterWithSetpoints
 import qcodes.utils.validators as vals
 
 """
@@ -190,7 +191,7 @@ class ReduceFilterWrapper(BaseWrappedParameter):
         return vals.Anything()
     @property
     def __class__(self):
-        return qcodes.instrument.parameter.Parameter
+        return Parameter
 
     @property
     def label(self):
@@ -258,7 +259,7 @@ class CutWrapper(BaseWrappedParameter):
         Trim the setpoints of the data. Setpoints may be a parameter, in which case,
         we need to return a new parameter array.
         """
-        if isinstance(self.__wrapped__, qcodes.ParameterWithSetpoints):
+        if isinstance(self.__wrapped__, ParameterWithSetpoints):
             cut_setpoints = []
             for setpoint in self.__wrapped__.setpoints:
                 cut_setpoints.append(CutWrapper(setpoint, self.fromstart, self.fromend))

@@ -13,9 +13,7 @@ def get_snapshot(data_id):
     Get a snapshot from the dataset indexed by data_id
     """
     data = load_by_id(data_id)
-    snap_str = data.get_metadata('snapshot')
-    snap = json.loads(snap_str)
-    return snap
+    return data.snapshot
 
 def list_instruments(snap):
     """
@@ -62,6 +60,8 @@ def pprint_dev_gates(snap, dev):
                 break
             elif prefix in name:
                 match = re.fullmatch(f"(.*){prefix}(.*)", name)
+                if not match:
+                    break
                 ordered_gates.append(("".join(match.groups()), i, name, gate))
                 break
         else:
