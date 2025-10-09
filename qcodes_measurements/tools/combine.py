@@ -1,4 +1,4 @@
-from qcodes import Parameter
+from qcodes.parameters import Parameter
 
 class CombinedParameter(Parameter):
     def __init__(self, *parameters,

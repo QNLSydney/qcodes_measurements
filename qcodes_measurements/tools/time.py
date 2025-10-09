@@ -1,12 +1,18 @@
 import time
 import numpy as np
+from inspect import signature
+from collections import namedtuple
 
+from qcodes.validators import Arrays
+from qcodes.parameters import ParameterWithSetpoints
 from qcodes.dataset.measurements import Measurement
 
-from .measure import Setpoint, _flush_buffers, _run_functions, _plot_sweep
+from .doNd import _live_plot
 from ..logging import get_logger
 
 logger = get_logger("tools.time")
+
+Setpoint = namedtuple("Setpoint", ("param", "index", "value"))
 
 
 def _interruptible_sleep(sleep_time):
@@ -17,18 +23,55 @@ def _interruptible_sleep(sleep_time):
     return
 
 
-@_plot_sweep
+def _run_function(function, param_vals=None):
+    """
+    Run a function, passing param_vals as an optional tuple of (*(Setpoint(param, index, param_val)))
+    Note: This function assumes we've already unwrapped lists using _run_functions.
+    """
+    if callable(function):
+        sig = signature(function)
+        if len(sig.parameters) == 1:
+            if param_vals is not None:
+                function(param_vals)
+            else:
+                raise RuntimeError(
+                    "Function expects parameter values but none were provided"
+                )
+        else:
+            function()
+    else:
+        raise TypeError("_run_function expects a function")
+
+
+def _run_functions(functions, param_vals=None, err_name="functions"):
+    """
+    Run a function or list of functions
+    """
+    if functions is not None:
+        if callable(functions):
+            _run_function(functions, param_vals)
+        else:
+            try:
+                if all(callable(x) for x in functions):
+                    for func in functions:
+                        _run_function(func, param_vals)
+                else:
+                    raise TypeError()
+            except TypeError:
+                raise TypeError(
+                    "{} must be a function or a list of functions".format(err_name)
+                )
+
+
+@_live_plot
 def sweep_time(
     *param_meas,
     delay=10,
     until=None,
-    win=None,
-    append=False,
-    plot_params=None,
-    annotation=None,
     atstart=(),
     ateach=(),
     atend=(),
+    do_plot=None,
 ):
     """
     Run a time sweep, with a delay between each point. This sweep will run for `until` seconds,
@@ -38,13 +81,11 @@ def sweep_time(
         *param_meas (Iterable[Parameter]): A list of the parameters to be measured at each of the
         set points. For now, these MUST be simple parameters. Arrays cannot be measured.
 
-        win (Optional[PlotWindow]): The plot window to add plots to. If this value is None, the sweep
-        will not be live plotted.
+        delay (float): Time in seconds between points
 
-        append (bool): If this parameter is true, the trace will be appended to an existing window.
+        until (float): Total time to run
 
-        plot_params (Optional[Iterable[Parameter]]): A list of parameters to plot. If not passed or None,
-        all measured parameters will be automatically plotted.
+        annotation
 
         atstart (Optional[Union[Callable,Iterable[Callable]]]): A function or list of functions
         to be run before the measurement is started. The functions will be run BEFORE the parameters
@@ -65,56 +106,45 @@ def sweep_time(
         (iw, win): ID is the trace id of the saved wave, win is a handle to the plot window that was created
         for the purposes of liveplotting.
     """
-    _flush_buffers(*param_meas)
-
     # Register setpoints
     m = Measurement()
     m.register_custom_parameter("time", label="Time", unit="s")
 
     _run_functions(atstart)
 
-    # Keep track of data and plots
-    plt_data = {}
-    time_data = np.full((1,), np.nan)
-    array_size = 1
-    curr_point = 0
-
-    # If plot_params is not given, plot all measured parameters
-    if plot_params is None:
-        plot_params = param_meas
-
     # Set up parameters
+    shapes = {}
+    if until is not None:
+        estimated_points: int = int(until // delay)
+    else:
+        estimated_points = 10
     for param in param_meas:
         m.register_parameter(param, setpoints=("time",))
-
-        # Create plot window
-        if win is not None and param in plot_params:
-            plot = win.addPlot(name=param.full_name, title=f"{param.full_name} ({param.label})")
-            plot.left_axis.label = param.label
-            plot.left_axis.unit = param.unit
-            plot.bot_axis.label = "Time"
-            plot.bot_axis.unit = "s"
-            plotdata = plot.plot(setpoint_x=time_data, name=param.name, pen=(255, 0, 0))
-            plt_data[param] = (plot, plotdata, np.full((1,), np.nan))
-
-    if win is not None and annotation is not None:
-        win.items[0].textbox(annotation)
+        if isinstance(param, ParameterWithSetpoints):
+            assert isinstance(param.vals, Arrays) and param.vals.shape is not None
+            shapes[param.full_name] = (estimated_points,) + param.vals.shape
+        elif isinstance(param.vals, Arrays) and param.vals.shape is not None:
+            shapes[param.full_name] = (estimated_points,) + param.vals.shape
+        else:
+            shapes[param.full_name] = (estimated_points,)
+        m.set_shapes(shapes)
 
     start_time = 0
+    curr_point = 0
+    datasaver = None
     try:
         with m.run() as datasaver:
             start_time = time.monotonic()
-            win.win_title += f"{datasaver.run_id}"
-            for pd in plt_data.values():
-                pd[0].plot_title += f" (id: {datasaver.run_id})"
             while True:
                 # Update each parameter
-                data = [("time", time.monotonic() - start_time)]
-                time_data[curr_point] = data[-1][1]
+                curr_time = time.monotonic() - start_time
+                data = [("time", curr_time)]
 
-                _run_functions(ateach, param_vals=(Setpoint("time", curr_point, data[-1][1])))
+                _run_functions(
+                    ateach, param_vals=(Setpoint("time", curr_point, curr_time))
+                )
 
-                if until is not None and time_data[curr_point] > until:
+                if until is not None and curr_time > until:
                     break
 
                 for param in param_meas:
@@ -122,21 +152,7 @@ def sweep_time(
                     if val is None:
                         val = np.nan
                     data.append((param, val))
-                    if param in plot_params:
-                        plt_data[param][2][curr_point] = data[-1][1]
-                        plt_data[param][1].setData(time_data, plt_data[param][2])
-
                 curr_point += 1
-
-                # Resize plot arrays if necessary
-                if array_size == curr_point:
-                    array_size *= 2
-                    logger.debug("New plot array size: %d", array_size)
-                    time_data.resize(array_size)
-                    time_data[array_size // 2 :] = np.nan
-                    for pld in plt_data.values():
-                        pld[2].resize(array_size)
-                        pld[2][array_size // 2 :] = np.nan
 
                 datasaver.add_result(*data)
 
@@ -152,4 +168,6 @@ def sweep_time(
     finally:
         _run_functions(atend)
 
-    return datasaver.run_id
+    if datasaver:
+        return datasaver.dataset, None, None
+    return None

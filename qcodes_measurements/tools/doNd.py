@@ -9,7 +9,7 @@ import inspect
 import functools
 import itertools
 import numpy as np
-from typing import Any, Optional, Union, Tuple, List, Mapping
+from typing import Any, Optional, Union, Tuple, Sequence, Mapping
 from dataclasses import dataclass, field
 
 from qcodes import config
@@ -33,8 +33,11 @@ _param = r"(\w+)\s+\([^)]+\)"
 _single_id = r"(\d+)(?:-(\d+))?(?:, (?=\d))?"
 _id = r"(\(id:\s+(?:\d+(?:-\d+)?(?:, (?=\d))?)+\))"
 _id_re = re.compile(_single_id, re.IGNORECASE)
-_plot_title_re = re.compile(r"("+_param+r"\s+v\.(?:<br>|\s)+"+_param+r")\s+"+_id, re.MULTILINE|re.IGNORECASE)
-_single_param_title_re = re.compile(r"("+_param+r")\s*"+_id, re.MULTILINE)
+_plot_title_re = re.compile(
+    r"(" + _param + r"\s+v\.(?:<br>|\s)+" + _param + r")\s+" + _id,
+    re.MULTILINE | re.IGNORECASE,
+)
+_single_param_title_re = re.compile(r"(" + _param + r")\s*" + _id, re.MULTILINE)
 
 
 def _get_window(append, size=(1000, 600)):
@@ -54,7 +57,7 @@ def _get_window(append, size=(1000, 600)):
     # Set up a plotting window
     if append is None or append is False:
         win = PlotWindow()
-        win.win_title = 'ID: '
+        win.win_title = "ID: "
         win.resize(*size)
     elif isinstance(append, PlotWindow):
         # Append to the given window
@@ -63,71 +66,74 @@ def _get_window(append, size=(1000, 600)):
         # Append to the last trace if true
         win = PlotWindow.getWindows()[-1]
     else:
-        raise ValueError("Unknown argument to append. Either give a plot window"
-                         " or true to append to the last plot")
+        raise ValueError(
+            "Unknown argument to append. Either give a plot window"
+            " or true to append to the last plot"
+        )
     return win
 
-def _explode_ids(ids_str: str) -> List[int]:
+
+def _explode_ids(ids_str: str) -> tuple[int, ...]:
     """
     Explode a list of ids from a plot title into a list of all
     ids.
     """
-    ids = []
+    ids: list[int] = []
     for match in _id_re.finditer(ids_str):
         start, stop = match.groups()
         if stop is None:
             ids.append(int(start))
         else:
-            ids.extend(range(int(start), int(stop)+1))
+            ids.extend(range(int(start), int(stop) + 1))
     return tuple(ids)
 
 
-def _reduce_ids(ids: List[int]):
+def _reduce_ids(ids: Sequence[int]):
     strings = []
     i = 1
     r = 0
     while i < len(ids):
-        if ids[i] == ids[i-1]+1:
+        if ids[i] == ids[i - 1] + 1:
             i += 1
         else:
-            if i-1 == r:
+            if i - 1 == r:
                 strings.append(f"{ids[r]}")
             else:
                 strings.append(f"{ids[r]}-{ids[i-1]}")
             r = i
             i += 1
-    if i-1 == r:
+    if i - 1 == r:
         strings.append(f"{ids[r]}")
     else:
         strings.append(f"{ids[r]}-{ids[i-1]}")
     return strings
 
 
-def _parse_title(title) -> Tuple[str, Tuple[str], Tuple[int]]:
+def _parse_title(title) -> Tuple[str, Tuple[str, ...], Tuple[int, ...]]:
     match = _plot_title_re.fullmatch(title)
     if not match:
         # Might be a single title re
         match = _single_param_title_re.fullmatch(title)
         if not match:
-            return None
+            raise ValueError(f"Can't parse title: {title}")
         paramstr, param_name, ids = match.groups()
         ids = _explode_ids(ids)
-        return(paramstr, (param_name,), ids)
+        return (paramstr, (param_name,), ids)
     paramstr, param1_name, param2_name, ids = match.groups()
     ids = _explode_ids(ids)
     return (paramstr, (param1_name, param2_name), ids)
 
 
-def _compatible_plot_item(win: PlotWindow,
-                          p_bot: ParamSpecBase,
-                          p_left: Optional[ParamSpecBase] = None) -> Optional[PlotItem]:
+def _compatible_plot_item(
+    win: PlotWindow, p_bot: ParamSpecBase, p_left: Optional[ParamSpecBase] = None
+) -> Optional[PlotItem]:
     """
     Returns a compatible plot item if found
     """
     if p_left is not None:
         axes = (p_bot.name, p_left.name)
     else:
-        axes = (p_bot.name, )
+        axes = (p_bot.name,)
     for item in win.items:
         if isinstance(item, PlotItem):
             _, params, _ = _parse_title(item.plot_title)
@@ -143,15 +149,16 @@ def _register_subscriber():
     if "qcm" not in config.subscription.subscribers:
         logger.info("Registering qcm as a default subscriber")
         config.subscription.subscribers["qcm"] = {
-            'factory': 'qcodes_measurements.tools.doNd.subscriber',
-            'factory_kwargs': {},
-            'subscription_kwargs': {
-                'min_wait': 10,
-                'min_count': 0,
-                'callback_kwargs': {}
-            }
+            "factory": "qcodes_measurements.tools.doNd.subscriber",
+            "factory_kwargs": {},
+            "subscription_kwargs": {
+                "min_wait": 10,
+                "min_count": 0,
+                "callback_kwargs": {},
+            },
         }
         config.subscription.default_subscribers.append("qcm")
+
 
 # Tuple for live plotting
 @dataclass(frozen=False)
@@ -159,11 +166,14 @@ class LivePlotWindow:
     plot_window: Optional[PlotWindow]
     stack: bool = False
     append: bool = False
-    dataset: DataSet = None
+    dataset: Optional[DataSet] = None
     datacount: Mapping[str, int] = field(default_factory=dict)
-    table_items: Mapping[str, Union[int, float]] = None
-    plot_items: Mapping[str, Union[PlotDataItem, ImageItem]] = field(default_factory=dict)
-    plot_params: List[_BaseParameter] = None
+    table_items: Optional[Mapping[str, Union[int, float]]] = None
+    plot_items: Mapping[str, Union[PlotDataItem, ImageItem]] = field(
+        default_factory=dict
+    )
+    plot_params: Optional[list[_BaseParameter]] = None
+    annotation: Optional[str] = None
 
 
 def do_nothing(new_data, data_len, state):
@@ -179,13 +189,16 @@ def update_plots(new_data, data_len, state):
     """
     write_count = this.current.dataset.cache._write_status
     # Don't update if we haven't started measuring yet
-    if not write_count or any(wc == 0 for wc in write_count.values()): return
+    if not write_count or any(wc == 0 for wc in write_count.values()):
+        return
     run_desc = this.current.dataset.description
     data_cache = this.current.dataset.cache.data()
     params = run_desc.interdeps
     shapes = run_desc.shapes
     plot_items = this.current.plot_items.items()
-    table_items = this.current.table_items.items() if this.current.table_items is not None else ()
+    table_items = (
+        this.current.table_items.items() if this.current.table_items is not None else ()
+    )
     for param, plotitem in itertools.chain(plot_items, table_items):
         # Keep track of how much of the plot we've written, and only update
         # parameters that are being measured.
@@ -201,7 +214,7 @@ def update_plots(new_data, data_len, state):
         # Update plots
         if shapes[param] == (1,):
             val = data_cache[param][param][0]
-            if isinstance(val, (float, np.float16, np.float32, np.float64)):
+            if isinstance(val, (float, np.floating)):
                 val = np.format_float_scientific(val)
             else:
                 val = str(val)
@@ -209,8 +222,10 @@ def update_plots(new_data, data_len, state):
         elif len(shapes[param]) == 1:
             paramspec = params[param]
             setpoint_param = params.dependencies[paramspec][0]
-            plotitem.setData(data_cache[param][setpoint_param.name][:write_count[param]],
-                             data_cache[param][param][:write_count[param]])
+            plotitem.setData(
+                data_cache[param][setpoint_param.name][: write_count[param]],
+                data_cache[param][param][: write_count[param]],
+            )
         else:
             paramspec = params[param]
             bot_axis = params.dependencies[paramspec][0]
@@ -218,9 +233,9 @@ def update_plots(new_data, data_len, state):
             data = data_cache[param][param]
 
             # Check if we are in the first column or if we need to clear nans
-            if np.isnan(data[-1,-1]) or write_count[param] < shapes[param][1]:
-                meanval = data.flat[:write_count[param]].mean()
-                data.flat[write_count[param]:] = meanval
+            if np.isnan(data[-1, -1]) or write_count[param] < shapes[param][1]:
+                meanval = data.flat[: write_count[param]].mean()
+                data.flat[write_count[param] :] = meanval
 
             # Update axis scales as data comes in
             if plotitem.no_xscale:
@@ -233,19 +248,29 @@ def update_plots(new_data, data_len, state):
                     plotitem.rescale()
                 elif plotitem.no_yscale and write_count[param] >= 2:
                     ldata = data_cache[param][left_axis.name]
-                    ymin, step = ldata[0, 0], ldata[0, 1]-ldata[0, 0]
-                    plotitem.setpoint_y = np.linspace(ymin, ymin + step*shapes[param][1], shapes[param][1], endpoint=False)
+                    ymin, step = ldata[0, 0], ldata[0, 1] - ldata[0, 0]
+                    plotitem.setpoint_y = np.linspace(
+                        ymin,
+                        ymin + step * shapes[param][1],
+                        shapes[param][1],
+                        endpoint=False,
+                    )
                     plotitem.rescale()
 
                 # Set X-scale
-                if write_count[param]/shapes[param][1] > 1:
+                if write_count[param] / shapes[param][1] > 1:
                     bdata = data_cache[param][bot_axis.name]
-                    xmin, step = bdata[0, 0], bdata[1, 0]-bdata[0, 0]
-                    plotitem.setpoint_x = np.linspace(xmin, xmin + step*shapes[param][0], shapes[param][0], endpoint=False)
+                    xmin, step = bdata[0, 0], bdata[1, 0] - bdata[0, 0]
+                    plotitem.setpoint_x = np.linspace(
+                        xmin,
+                        xmin + step * shapes[param][0],
+                        shapes[param][0],
+                        endpoint=False,
+                    )
                     plotitem.no_xscale = False
                     plotitem.rescale()
             # Rescale x-axis when we have all values in case of F.P. error
-            if write_count[param] == shapes[param][0]*shapes[param][1]:
+            if write_count[param] == shapes[param][0] * shapes[param][1]:
                 bdata = data_cache[param][bot_axis.name]
                 xmin, xmax = bdata[0, 0], bdata[-1, 0]
                 plotitem.setpoint_x = np.linspace(xmin, xmax, shapes[param][0])
@@ -289,7 +314,7 @@ def subscriber(dataset, **kwargs):
         window_run_ids = (dataset.run_id,)
     else:
         window_run_ids = window_run_ids + (dataset.run_id,)
-    run_id_str = ', '.join(_reduce_ids(window_run_ids))
+    run_id_str = ", ".join(_reduce_ids(window_run_ids))
     this.current.plot_window.win_title = f"ID: {run_id_str}"
 
     # Otherwise, register parameters into the window
@@ -307,7 +332,11 @@ def subscriber(dataset, **kwargs):
     for param in itertools.chain(params.dependencies, params.standalones):
         name = param.name
         if name not in this.current.plot_params:
-            logger.info("Parameter %s not in list of plot parameters %r", name, this.current.plot_params)
+            logger.info(
+                "Parameter %s not in list of plot parameters %r",
+                name,
+                this.current.plot_params,
+            )
             continue
 
         # Figure out the shape of the parameter
@@ -326,7 +355,7 @@ def subscriber(dataset, **kwargs):
                     nVals = len(next(iter(this.current.table_items.values())))
                 else:
                     nVals = 0
-                this.current.table_items[name] = [""]*nVals
+                this.current.table_items[name] = [""] * nVals
             win.table.setHorizontalHeaderLabels(list(str(s) for s in window_run_ids))
         elif len(shapes[name]) == 1:
             logger.info("Adding 1D parameter %s with shape %r", name, shapes[name])
@@ -336,21 +365,29 @@ def subscriber(dataset, **kwargs):
             plotitem = None
             if this.current.stack:
                 try:
-                    plotitem = next(iter(i for i in win.items if isinstance(i, PlotItem)))
+                    plotitem = next(
+                        iter(i for i in win.items if isinstance(i, PlotItem))
+                    )
                 except StopIteration:
                     pass
             elif this.current.append:
                 plotitem = _compatible_plot_item(win, bot_axis, param)
                 if plotitem is None:
-                    logger.warning("Append requested but appropriate plotitem not found."
-                                   " Making a new one.")
+                    logger.warning(
+                        "Append requested but appropriate plotitem not found."
+                        " Making a new one."
+                    )
 
             # Couldn't find an appropriate plotitem - make a new one
             if plotitem is None:
-                plotitem = win.addPlot(name=name,
-                                       title=(f"{bot_axis.name} ({bot_axis.label}) v.<br>"
-                                              f"{param.name} ({param.label}) "
-                                              f"(id: {run_id_str})"))
+                plotitem = win.addPlot(
+                    name=name,
+                    title=(
+                        f"{bot_axis.name} ({bot_axis.label}) v.<br>"
+                        f"{param.name} ({param.label}) "
+                        f"(id: {run_id_str})"
+                    ),
+                )
                 plotitem.bot_axis.paramspec = bot_axis
                 plotitem.left_axis.paramspec = param
             else:
@@ -358,9 +395,7 @@ def subscriber(dataset, **kwargs):
                 paramstr, _, _ = _parse_title(plotitem.plot_title)
                 plotitem.plot_title = f"{paramstr} (id: {run_id_str})"
             # Add new trace to the plot
-            plotdata = plotitem.plot(setpoint_x=[],
-                                     pen=(255, 0, 0),
-                                     name=param.name)
+            plotdata = plotitem.plot(setpoint_x=[], pen=(255, 0, 0), name=param.name)
             this.current.plot_items[param.name] = plotdata
         elif len(shapes[name]) == 2:
             logger.info("Adding 2D parameter %s with shape %r", name, shapes[name])
@@ -369,19 +404,27 @@ def subscriber(dataset, **kwargs):
 
             plotitem = None
             if this.current.stack:
-                logger.warning("Can't stack 2D param %r. Will create a new plot instead.", name)
+                logger.warning(
+                    "Can't stack 2D param %r. Will create a new plot instead.", name
+                )
             if this.current.append:
                 plotitem = _compatible_plot_item(win, bot_axis, left_axis)
                 if plotitem is None:
-                    logger.warning("Append requested but appropriate plotitem not found."
-                                   " Making a new one.")
+                    logger.warning(
+                        "Append requested but appropriate plotitem not found."
+                        " Making a new one."
+                    )
 
             # Couldn't find an appropriate plotitem - make a new one
             if plotitem is None:
-                plotitem = win.addPlot(name=name,
-                                       title=(f"{bot_axis.name} ({bot_axis.label}) v.<br>"
-                                              f"{left_axis.name} ({left_axis.label}) "
-                                              f"(id: {run_id_str})"))
+                plotitem = win.addPlot(
+                    name=name,
+                    title=(
+                        f"{bot_axis.name} ({bot_axis.label}) v.<br>"
+                        f"{left_axis.name} ({left_axis.label}) "
+                        f"(id: {run_id_str})"
+                    ),
+                )
                 plotitem.bot_axis.paramspec = bot_axis
                 plotitem.left_axis.paramspec = left_axis
             else:
@@ -392,15 +435,23 @@ def subscriber(dataset, **kwargs):
             # Add new trace to the plot
             # Initially the axes are set to some random range, this will be filled
             # in once the first column is taken.
-            plotdata = plotitem.plot(setpoint_x=np.linspace(0, 1, shapes[name][0]),
-                                     setpoint_y=np.linspace(0, 1, shapes[name][1]),
-                                     name=name)
+            plotdata = plotitem.plot(
+                setpoint_x=np.linspace(0, 1, shapes[name][0]),
+                setpoint_y=np.linspace(0, 1, shapes[name][1]),
+                name=name,
+            )
             plotdata.no_xscale = True
             plotdata.no_yscale = True
             this.current.plot_items[name] = plotdata
         else:
-            logger.warning("Trying to plot a dataset with more than 2 dimensions. "
-                           "Will not create plot for this item")
+            logger.warning(
+                "Trying to plot a dataset with more than 2 dimensions. "
+                "Will not create plot for this item"
+            )
+
+    # Add annotation to the plot if requested
+    if this.current.annotation is not None and win.items:
+        win.items[0].textbox(this.current.annotation)
 
     return update_plots
 
@@ -416,15 +467,19 @@ def _live_plot(wrapped):
     # Make sure qcm is registered
     _register_subscriber()
 
-    WRAPPER_ASSIGNMENTS = ('__module__', '__name__', '__qualname__', '__doc__')
+    WRAPPER_ASSIGNMENTS = ("__module__", "__name__", "__qualname__", "__doc__")
+
     @functools.wraps(wrapped, assigned=WRAPPER_ASSIGNMENTS)
-    def wrapped_function(*args: Any,
-                         plot: bool = True,
-                         plot_params: Optional[List[_BaseParameter]] = None,
-                         append: Optional[Union[bool, PlotWindow]] = False,
-                         save: bool = True,
-                         stack: bool = False,
-                         **kwargs: Any):
+    def wrapped_function(
+        *args: Any,
+        plot: bool = True,
+        plot_params: Optional[list[_BaseParameter]] = None,
+        append: Optional[Union[bool, PlotWindow]] = False,
+        annotation: Optional[str] = None,
+        save: bool = True,
+        stack: bool = False,
+        **kwargs: Any,
+    ):
         kwargs["do_plot"] = False
 
         # Get the plot window if requested
@@ -435,10 +490,13 @@ def _live_plot(wrapped):
         else:
             win = None
 
-        this.current = LivePlotWindow(plot_window=win,
-                                      append=(append is not False),
-                                      stack=stack,
-                                      plot_params=plot_params)
+        this.current = LivePlotWindow(
+            plot_window=win,
+            append=(append is not False),
+            stack=stack,
+            plot_params=plot_params,
+            annotation=annotation
+        )
 
         ret_val = None
         try:
@@ -479,7 +537,9 @@ def _live_plot(wrapped):
         plot (Optional[bool]): Whether or not live plotting should be performed
         on this dataset.
 
-        plot_params (Optional[List[_BaseParameter]]):  Which parameters to plot
+        plot_params (Optional[list[_BaseParameter]]):  Which parameters to plot
+
+        annotation (Optional[str]): Add an annotation to the plot window
 
         append (Optional[bool | PlotWindow]): If this parameter is not false, the
         trace will be appended to an existing window. Either the plot window should
@@ -497,12 +557,15 @@ def _live_plot(wrapped):
 
     old_signature = inspect.signature(wrapped)
     new_signature = inspect.signature(wrapped_function, follow_wrapped=False)
-    combined_parameters = dict(old_signature.parameters.items()) | dict(new_signature.parameters.items())
-    del combined_parameters["do_plot"]
-    del combined_parameters["args"]
-    del combined_parameters["kwargs"]
-    combined_signature = inspect.Signature(combined_parameters.values(),
-                                           return_annotation=old_signature.return_annotation)
+    combined_parameters = dict(old_signature.parameters.items()) | dict(
+        new_signature.parameters.items()
+    )
+    combined_parameters.pop("do_plot", None)
+    combined_parameters.pop("args", None)
+    combined_parameters.pop("kwargs", None)
+    combined_signature = inspect.Signature(
+        combined_parameters.values(), return_annotation=old_signature.return_annotation
+    )
     wrapped_function.__signature__ = combined_signature
 
     return wrapped_function
