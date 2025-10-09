@@ -1,7 +1,7 @@
 from functools import partial
 from typing import Optional, Dict
 import requests
-from qcodes import Instrument
+from qcodes.instrument import Instrument
 
 __all__ = ["FridgeTemps"]
 
