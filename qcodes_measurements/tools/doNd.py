@@ -7,9 +7,8 @@ import functools
 import inspect
 import itertools
 import re
-import sys
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Iterable, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import qcodes.dataset
@@ -21,8 +20,14 @@ from ..logging import get_logger
 from ..plot import ImageItem, PlotDataItem, PlotItem, PlotWindow, TableWidget
 from ..plot.plot_tools import save_figure
 
+
+class _GlobalState:
+    def __init__(self):
+        self.current: LivePlotWindow | None = None
+
+
 # Get access to module level variables
-this = sys.modules[__name__]
+this = _GlobalState()
 this.current = None
 logger = get_logger("tools.doNd")
 
@@ -166,12 +171,11 @@ class LivePlotWindow:
     stack: bool = False
     append: bool = False
     dataset: Optional[DataSet] = None
-    datacount: Mapping[str, int] = field(default_factory=dict)
-    table_items: Optional[Mapping[str, Union[int, float]]] = None
-    plot_items: Mapping[str, Union[PlotDataItem, ImageItem]] = field(
-        default_factory=dict
-    )
+    datacount: dict[str, int] = field(default_factory=dict)
+    table_items: Optional[dict[str, list[str]]] = None
+    plot_items: dict[str, Union[PlotDataItem, ImageItem]] = field(default_factory=dict)
     plot_params: Optional[list[ParameterBase]] = None
+    plot_param_names: Optional[set[str]] = None
     annotation: Optional[str] = None
 
 
@@ -186,6 +190,15 @@ def update_plots(new_data, data_len, state):
     """
     Function that updates plots when live plotting
     """
+    # Assert that we are currenty plotting
+    if this.current is None or this.current.dataset is None:
+        return
+
+    # Check that we know the shapes of data
+    shapes = this.current.dataset.description.shapes
+    if shapes is None:
+        return
+
     write_count = this.current.dataset.cache._write_status
     # Don't update if we haven't started measuring yet
     if not write_count or any(wc == 0 for wc in write_count.values()):
@@ -193,59 +206,64 @@ def update_plots(new_data, data_len, state):
     run_desc = this.current.dataset.description
     data_cache = this.current.dataset.cache.data()
     params = run_desc.interdeps
-    shapes = run_desc.shapes
-    plot_items = this.current.plot_items.items()
-    table_items = (
-        this.current.table_items.items() if this.current.table_items is not None else ()
+    plot_items: Iterable[tuple[str, PlotDataItem | ImageItem | list[str]]] = (
+        this.current.plot_items.items()
     )
-    for param, plotitem in itertools.chain(plot_items, table_items):
+    table_items: Iterable[tuple[str, PlotDataItem | ImageItem | list[str]]] = (
+        this.current.table_items.items() if this.current.table_items is not None else {}
+    )
+    for param, plotitem in itertools.chain(plot_items, table_items):  # type: ignore
         # Keep track of how much of the plot we've written, and only update
         # parameters that are being measured.
         if param not in write_count:
             continue
+        param_write_count = write_count[param]
+        if param_write_count is None:
+            continue
+
         if param not in this.current.datacount:
-            this.current.datacount[param] = write_count[param]
-        elif write_count[param] == this.current.datacount[param]:
+            this.current.datacount[param] = param_write_count
+        elif param_write_count == this.current.datacount[param]:
             continue
         else:
-            this.current.datacount[param] = write_count[param]
+            this.current.datacount[param] = param_write_count
 
         # Update plots
-        if shapes[param] == (1,):
+        if shapes[param] == (1,) and this.current.table_items:
             val = data_cache[param][param][0]
             if isinstance(val, (float, np.floating)):
                 val = np.format_float_scientific(val)
             else:
                 val = str(val)
             this.current.table_items[param].append(val)
-        elif len(shapes[param]) == 1:
+        elif len(shapes[param]) == 1 and isinstance(plotitem, PlotDataItem):
             paramspec = params[param]
             setpoint_param = params.dependencies[paramspec][0]
             plotitem.setData(
                 data_cache[param][setpoint_param.name][: write_count[param]],
                 data_cache[param][param][: write_count[param]],
             )
-        else:
+        elif isinstance(plotitem, ImageItem):
             paramspec = params[param]
             bot_axis = params.dependencies[paramspec][0]
             left_axis = params.dependencies[paramspec][1]
             data = data_cache[param][param]
 
             # Check if we are in the first column or if we need to clear nans
-            if np.isnan(data[-1, -1]) or write_count[param] < shapes[param][1]:
+            if np.isnan(data[-1, -1]) or param_write_count < shapes[param][1]:
                 meanval = data.flat[: write_count[param]].mean()
                 data.flat[write_count[param] :] = meanval
 
             # Update axis scales as data comes in
             if plotitem.no_xscale:
                 # Set Y-scale until we have the entire first column
-                if plotitem.no_yscale and write_count[param] >= shapes[param][1]:
+                if plotitem.no_yscale and param_write_count >= shapes[param][1]:
                     ldata = data_cache[param][left_axis.name]
                     ymin, ymax = ldata[0, 0], ldata[0, -1]
                     plotitem.setpoint_y = np.linspace(ymin, ymax, shapes[param][1])
                     plotitem.no_yscale = False
                     plotitem.rescale()
-                elif plotitem.no_yscale and write_count[param] >= 2:
+                elif plotitem.no_yscale and param_write_count >= 2:
                     ldata = data_cache[param][left_axis.name]
                     ymin, step = ldata[0, 0], ldata[0, 1] - ldata[0, 0]
                     plotitem.setpoint_y = np.linspace(
@@ -257,7 +275,7 @@ def update_plots(new_data, data_len, state):
                     plotitem.rescale()
 
                 # Set X-scale
-                if write_count[param] / shapes[param][1] > 1:
+                if param_write_count / shapes[param][1] > 1:
                     bdata = data_cache[param][bot_axis.name]
                     xmin, step = bdata[0, 0], bdata[1, 0] - bdata[0, 0]
                     plotitem.setpoint_x = np.linspace(
@@ -278,6 +296,8 @@ def update_plots(new_data, data_len, state):
 
             # Update the plot
             plotitem.update(data)
+        else:
+            continue
 
     # Update table items if requested, expanding parameters that weren't measured
     # if necessary.
@@ -286,11 +306,15 @@ def update_plots(new_data, data_len, state):
         for item in this.current.table_items:
             if len(this.current.table_items[item]) < nItems:
                 this.current.table_items[item].append("")
-        col_titles = this.current.plot_window.table.getHorizontalHeaders()
-        if len(col_titles) < nItems:
-            col_titles.append(str(this.current.dataset.run_id))
-        this.current.plot_window.table.setData(this.current.table_items)
-        this.current.plot_window.table.setHorizontalHeaderLabels(col_titles)
+        plot_window = this.current.plot_window
+        if plot_window is not None and plot_window.table is not None:
+            col_titles = plot_window.table.getHorizontalHeaders()
+            if len(col_titles) < nItems:
+                col_titles.append(str(this.current.dataset.run_id))
+            plot_window.table.setData(this.current.table_items)
+            plot_window.table.setHorizontalHeaderLabels(col_titles)
+        else:
+            logger.error("Trying to fill in table that doesn't exist!")
 
     # Done update
     return
@@ -324,17 +348,19 @@ def subscriber(dataset, **kwargs):
     params = run_desc.interdeps
     shapes = run_desc.shapes
     if this.current.plot_params is None:
-        this.current.plot_params = set(params.names)
+        this.current.plot_param_names = set(params.names)
     else:
-        this.current.plot_params = set(p.full_name for p in this.current.plot_params)
+        this.current.plot_param_names = set(
+            p.full_name for p in this.current.plot_params
+        )
 
     for param in itertools.chain(params.dependencies, params.standalones):
         name = param.name
-        if name not in this.current.plot_params:
+        if name not in this.current.plot_param_names:
             logger.info(
                 "Parameter %s not in list of plot parameters %r",
                 name,
-                this.current.plot_params,
+                this.current.plot_param_names,
             )
             continue
 
@@ -343,12 +369,15 @@ def subscriber(dataset, **kwargs):
             logger.info("Adding 0D parameter %s", name)
             if win.table is None:
                 table = TableWidget(sortable=False)
-                t_widget = win.scene().addWidget(table)
+                scene = win.scene()
+                assert scene is not None
+                t_widget = scene.addWidget(table)
                 t_widget.setMinimumSize(300, 0)
                 win.addItem(t_widget)
                 this.current.table_items = {}
             elif this.current.table_items is None:
                 this.current.table_items = win.table.getData()
+            assert win.table is not None
             if name not in this.current.table_items:
                 if this.current.table_items:
                     nVals = len(next(iter(this.current.table_items.values())))
@@ -566,7 +595,8 @@ def _live_plot(wrapped):
         tuple(combined_parameters.values()),
         return_annotation=old_signature.return_annotation,
     )
-    wrapped_function.__signature__ = combined_signature
+    # Mypy does not recognize `__signature__` attribute of a function. see python/mypy#12472
+    wrapped_function.__signature__ = combined_signature  # type: ignore
 
     return wrapped_function
 

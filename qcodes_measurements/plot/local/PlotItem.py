@@ -1,9 +1,10 @@
-from qcodes.instrument.parameter import _BaseParameter
+from qcodes.parameters import Parameter
 
-from .RemoteProcessWrapper import RPGWrappedBase
-from .PlotDataItem import ExtendedPlotDataItem
 from .ImageItem import ImageItemWithHistogram
-from .UIItems import TextItem
+from .PlotDataItem import ExtendedPlotDataItem
+from .RemoteProcessWrapper import RPGWrappedBase
+from .UIItems import PlotAxis, TextItem
+
 
 class BasePlotItem(RPGWrappedBase):
     _base = "PlotItem"
@@ -44,16 +45,17 @@ class BasePlotItem(RPGWrappedBase):
         textbox_item.setParentItem(self)
         return textbox_item
 
-    def update_axes(self, param_x, param_y,
-                    param_x_setpoint=False, param_y_setpoint=False):
+    def update_axes(
+        self, param_x, param_y, param_x_setpoint=False, param_y_setpoint=False
+    ):
         """
         Update axis labels, using param_x, param_y to pull labels
         If left or bottom axis is from an ArrayParameter, set param_x_setpoint
         or param_y_setpoint to true
         """
-        if not isinstance(param_x, _BaseParameter):
+        if not isinstance(param_x, Parameter):
             raise TypeError(f"param_x must be a qcodes parameter. Got {type(param_x)}.")
-        if not isinstance(param_y, _BaseParameter):
+        if not isinstance(param_y, Parameter):
             raise TypeError(f"param_y must be a qcodes parameter. Got {type(param_y)}")
 
         if param_x_setpoint:
@@ -72,20 +74,24 @@ class BasePlotItem(RPGWrappedBase):
     @property
     def plot_title(self):
         return self.titleLabel.text
+
     @plot_title.setter
     def plot_title(self, title):
         self.setTitle(title)
 
     @property
-    def left_axis(self):
-        return self.getAxis('left')
+    def left_axis(self) -> PlotAxis:
+        return self.getAxis("left")
+
     @property
-    def bot_axis(self):
-        return self.getAxis('bottom')
+    def bot_axis(self) -> PlotAxis:
+        return self.getAxis("bottom")
 
     @property
     def traces(self):
-        raise NotImplementedError("Can't get a list of traces from a non-extended plot_item")
+        raise NotImplementedError(
+            "Can't get a list of traces from a non-extended plot_item"
+        )
 
 
 class PlotItem(BasePlotItem):
