@@ -1,42 +1,44 @@
 import os
 import re
-import json
-import numpy as np
-from typing import Optional, List
+from typing import List, Optional
 
-from qcodes import ParamSpec, load_by_id
-from qcodes.dataset.data_set import DataSet
+import numpy as np
+from qcodes.dataset import DataSetProtocol, ParamSpec, load_by_id
 
 from ..logging import get_logger
 from ..plot import pyplot
-from .local.PlotItem import BasePlotItem
+from .local.PlotItem import PlotItem
 
 __all__ = ["save_figure", "append_by_id", "plot_by_id", "plot_by_run", "plot_dataset"]
 
-TITLE_FORMAT = re.compile(r"(\w+) \([^)]+\) ?v.?(?:<br>)? ?(\w+) \([^)]+\) ((?:\(id: (?:[\d -]+)\) ?)+)")
+TITLE_FORMAT = re.compile(
+    r"(\w+) \([^)]+\) ?v.?(?:<br>)? ?(\w+) \([^)]+\) ((?:\(id: (?:[\d -]+)\) ?)+)"
+)
 ID_STR = re.compile(r"(id: [0-9-]+)")
 
 logger = get_logger("plot.plot_tools")
+
 
 def save_figure(plot, fname, fig_folder=None):
     """
     Save the figure on screen to the given directory, or by default, figures
     """
     if fig_folder is None:
-        fig_folder = os.path.join(os.getcwd(), 'figures')
+        fig_folder = os.path.join(os.getcwd(), "figures")
 
     if not os.path.exists(fig_folder):
         os.makedirs(fig_folder)
 
-    path = os.path.join(fig_folder, '{}.png'.format(fname))
+    path = os.path.join(fig_folder, "{}.png".format(fname))
     print("Saving to: {}".format(path))
     plot.export(path)
+
 
 def find_plot_by_paramspec(win: pyplot.PlotWindow, x: ParamSpec, y: ParamSpec):
     """
     Find a plot matching the given paramspecs in the window.
     """
-    plotitems = [item for item in win.items if isinstance(item, BasePlotItem)]
+    plotitems = [item for item in win.items if isinstance(item, PlotItem)]
     for plotitem in plotitems:
         title = plotitem.plot_title
         m = TITLE_FORMAT.match(title)
@@ -46,7 +48,12 @@ def find_plot_by_paramspec(win: pyplot.PlotWindow, x: ParamSpec, y: ParamSpec):
                 return plotitem
     return None
 
-def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None, params: Optional[List[str]]=None):
+
+def plot_dataset(
+    dataset: DataSetProtocol,
+    win: pyplot.PlotWindow | None = None,
+    params: Optional[List[str]] = None,
+):
     """
     Plot the given dataset.
 
@@ -61,19 +68,21 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None, params: Optional
             we should create a new window.
     """
     if win is None:
-        win = pyplot.PlotWindow(title='ID: {}'.format(dataset.run_id))
+        win = pyplot.PlotWindow(title="ID: {}".format(dataset.run_id))
         appending = False
     elif isinstance(win, pyplot.PlotWindow):
         appending = True
     else:
-        raise TypeError(f"Unexpected type for win. Expected pyplot.PlotWindow, got {type(win)}.")
+        raise TypeError(
+            f"Unexpected type for win. Expected pyplot.PlotWindow, got {type(win)}."
+        )
 
     # Plot each dependant dataset in the data
     data = dataset.get_parameter_data()
     for param, vals in data.items():
         # Check if we want to plot this item
         if params is not None and param not in params:
-            continue # This is not an item we want to plot
+            continue  # This is not an item we want to plot
         param = dataset.paramspecs[param]
         dep_params = [dataset.paramspecs[p] for p in param._depends_on]
 
@@ -82,26 +91,36 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None, params: Optional
             if appending:
                 plot = find_plot_by_paramspec(win, dep_params[0], param)
                 if plot is None:
-                    raise ValueError(f"Failed to find a plot matching the paramters of this sweep in the window.")
+                    raise ValueError(
+                        f"Failed to find a plot matching the paramters of this sweep in the window."
+                    )
                 plot.plot_title += f" (id: {dataset.run_id})"
-                if not plot.left_axis.checkParamspec(param):
-                    raise ValueError(f"Left axis label/units incompatible. "
-                                     f"Got: {param}, expecting: {plot.left_axis.label}, {plot.left_axis.units}.")
-                if not plot.bot_axis.checkParamspec(dep_params[0]):
-                    raise ValueError(f"Bottom axis label/units incompatible. "
-                                     f"Got: {dep_params[0]}, expecting: {plot.bot_axis.label}, {plot.bot_axis.units}.")
+                if plot.left_axis and not plot.left_axis.checkParamspec(param):
+                    raise ValueError(
+                        f"Left axis label/units incompatible. "
+                        f"Got: {param}, expecting: {plot.left_axis.label}, {plot.left_axis.units}."
+                    )
+                if plot.bot_axis and not plot.bot_axis.checkParamspec(dep_params[0]):
+                    raise ValueError(
+                        f"Bottom axis label/units incompatible. "
+                        f"Got: {dep_params[0]}, expecting: {plot.bot_axis.label}, {plot.bot_axis.units}."
+                    )
 
             if plot is None:
                 plot = win.addPlot()
-                plot.plot_title = (f"{dep_params[0].name} ({dep_params[0].label}) "
-                                   f"v.<br>{param.name} ({param.label}) "
-                                   f"(id: {dataset.run_id})")
+                plot.plot_title = (
+                    f"{dep_params[0].name} ({dep_params[0].label}) "
+                    f"v.<br>{param.name} ({param.label}) "
+                    f"(id: {dataset.run_id})"
+                )
 
             c_data = vals[param.name]
             if np.isnan(c_data).all(axis=None):
                 # No data in plot
                 continue
-            add_line_plot(plot, vals[dep_params[0].name], c_data, x=dep_params[0], y=param)
+            add_line_plot(
+                plot, vals[dep_params[0].name], c_data, x=dep_params[0], y=param
+            )
         elif len(dep_params) == 2:
             # Check if we are loading an old-style plot with no shape information
             if dataset.description.shapes is None:
@@ -110,50 +129,78 @@ def plot_dataset(dataset: DataSet, win: pyplot.PlotWindow=None, params: Optional
                 data = dataset.to_pandas_dataframe_dict(param.name)[param.name]
                 c_data = data.unstack().droplevel(0, axis=1)
                 if c_data.size != len(data):
-                    logger.error("Unable to unwrap dataset automatically. Unable to infer shape."
-                                 f"Inferred shape: {c_data.shape}. (Size: {c_data.size} != {len(dataset)})")
+                    logger.error(
+                        "Unable to unwrap dataset automatically. Unable to infer shape."
+                        f"Inferred shape: {c_data.shape}. (Size: {c_data.size} != {len(dataset)})"
+                    )
                     continue
                 setpoint_x = c_data.index.values
                 setpoint_y = c_data.columns.values
                 c_data = c_data.values
             else:
                 c_data = vals[param.name]
-                setpoint_x = vals[dep_params[0].name][:,0]
-                setpoint_y = vals[dep_params[1].name][0,:]
+                setpoint_x = vals[dep_params[0].name][:, 0]
+                setpoint_y = vals[dep_params[1].name][0, :]
             plot = None
             if appending:
                 plot = find_plot_by_paramspec(win, dep_params[0], dep_params[1])
+                if plot is None:
+                    raise ValueError("Failed to find matching plot to append")
                 plot.plot_title += f" (id: {dataset.run_id})"
-                if not plot.left_axis.checkParamspec(dep_params[1]):
-                    raise ValueError(f"Left axis label/units incompatible. "
-                                     f"Got: {dep_params[1]}, expecting: {plot.left_axis.label}, {plot.left_axis.units}.")
-                if not plot.bot_axis.checkParamspec(dep_params[0]):
-                    raise ValueError(f"Bottom axis label/units incompatible. "
-                                     f"Got: {dep_params[0]}, expecting: {plot.bot_axis.label}, {plot.bot_axis.units}.")
+                if plot.left_axis and not plot.left_axis.checkParamspec(dep_params[1]):
+                    raise ValueError(
+                        f"Left axis label/units incompatible. "
+                        f"Got: {dep_params[1]}, expecting: {plot.left_axis.label}, {plot.left_axis.units}."
+                    )
+                if plot.bot_axis and not plot.bot_axis.checkParamspec(dep_params[0]):
+                    raise ValueError(
+                        f"Bottom axis label/units incompatible. "
+                        f"Got: {dep_params[0]}, expecting: {plot.bot_axis.label}, {plot.bot_axis.units}."
+                    )
                 histogram = plot.items[0].histogram
                 if not histogram.axis.checkParamspec(param):
-                    raise ValueError(f"Color axis label/units incompatible. "
-                                     f"Got: {param}, expecting: {histogram.axis.label}, {histogram.axis.units}.")
+                    raise ValueError(
+                        f"Color axis label/units incompatible. "
+                        f"Got: {param}, expecting: {histogram.axis.label}, {histogram.axis.units}."
+                    )
 
             if plot is None:
                 plot = win.addPlot()
-                plot.plot_title = (f"{dep_params[0].name} ({dep_params[0].label}) "
-                                   f"v.<br>{dep_params[1].name} ({dep_params[1].label}) "
-                                   f"(id: {dataset.run_id})")
+                plot.plot_title = (
+                    f"{dep_params[0].name} ({dep_params[0].label}) "
+                    f"v.<br>{dep_params[1].name} ({dep_params[1].label}) "
+                    f"(id: {dataset.run_id})"
+                )
 
             if np.isnan(c_data).any(axis=None):
                 # Nan in plot
                 logger.warning("2D plot has NaN's in it. Ignoring plot")
                 continue
-            add_image_plot(plot, setpoint_x, setpoint_y, c_data,
-                           x=dep_params[0], y=dep_params[1], z=param)
+            add_image_plot(
+                plot,
+                setpoint_x,
+                setpoint_y,
+                c_data,
+                x=dep_params[0],
+                y=dep_params[1],
+                z=param,
+            )
         else:
-            raise ValueError("Invalid number of dimensions in dataset. Can only plot 1D or 2D traces.")
+            raise ValueError(
+                "Invalid number of dimensions in dataset. Can only plot 1D or 2D traces."
+            )
 
     return win
 
-def add_line_plot(plot: pyplot.PlotItem, setpoint_x: np.ndarray, data: np.ndarray,
-                  x: ParamSpec, y: ParamSpec, title=None):
+
+def add_line_plot(
+    plot: pyplot.PlotItem,
+    setpoint_x: np.ndarray,
+    data: np.ndarray,
+    x: ParamSpec,
+    y: ParamSpec,
+    title=None,
+):
     # Check that we are given a plot
     if not isinstance(plot, pyplot.PlotItem):
         raise TypeError("Must be given a plot to put image into")
@@ -161,18 +208,28 @@ def add_line_plot(plot: pyplot.PlotItem, setpoint_x: np.ndarray, data: np.ndarra
         plot.plot_title = title
 
     # Create line plot
-    lplot = plot.plot(setpoint_x=setpoint_x.flatten(), data=data.flatten(), pen='r')
+    lplot = plot.plot(setpoint_x=setpoint_x.flatten(), data=data.flatten(), pen="r")
 
     # Set Axis Labels
-    plot.left_axis.paramspec = y
-    plot.bot_axis.paramspec = x
+    if plot.left_axis:
+        plot.left_axis.paramspec = y
+    if plot.bot_axis:
+        plot.bot_axis.paramspec = x
 
     # Give back plot
     return lplot
 
-def add_image_plot(plot: pyplot.PlotItem,
-                   setpoint_x: np.ndarray, setpoint_y: np.ndarray, data: np.ndarray,
-                   x: ParamSpec, y: ParamSpec, z: ParamSpec, title=None):
+
+def add_image_plot(
+    plot: pyplot.PlotItem,
+    setpoint_x: np.ndarray,
+    setpoint_y: np.ndarray,
+    data: np.ndarray,
+    x: ParamSpec,
+    y: ParamSpec,
+    z: ParamSpec,
+    title=None,
+):
     # Check that we are given a plot
     if not isinstance(plot, pyplot.PlotItem):
         raise TypeError("Must be given a plot to put image into")
@@ -180,17 +237,19 @@ def add_image_plot(plot: pyplot.PlotItem,
         plot.plot_title = title
 
     # Create image plot
-    implot = plot.plot(setpoint_x=setpoint_x,
-                       setpoint_y=setpoint_y,
-                       data=data)
+    implot = plot.plot(setpoint_x=setpoint_x, setpoint_y=setpoint_y, data=data)
 
     # Set Axis Labels
-    plot.left_axis.paramspec = y
-    plot.bot_axis.paramspec = x
-    implot.histogram.axis.paramspec = z
+    if plot.left_axis:
+        plot.left_axis.paramspec = y
+    if plot.bot_axis:
+        plot.bot_axis.paramspec = x
+    if implot.histogram.axis:
+        implot.histogram.axis.paramspec = z
 
     # Give back the image plot
     return implot
+
 
 def plot_by_id(did, params=None, save_fig=False, fig_folder=None):
     """
@@ -211,6 +270,7 @@ def plot_by_id(did, params=None, save_fig=False, fig_folder=None):
 
     return win
 
+
 def append_by_id(win, did, params=None, save_fig=False, fig_folder=None):
     """
     Append a 1d trace to a plot
@@ -228,6 +288,7 @@ def append_by_id(win, did, params=None, save_fig=False, fig_folder=None):
     if save_fig:
         save_figure(win, did, fig_folder)
 
+
 def plot_by_run(exp, kt, params=None, save_fig=False, fig_folder=None):
     """
     Plot a dataset by exp id
@@ -241,21 +302,24 @@ def plot_by_run(exp, kt, params=None, save_fig=False, fig_folder=None):
 
     return win
 
+
 def add_gate_label(plots, did):
     """
     Add gate labels to a plot
     """
     ds = load_by_id(did)
-    json_meta = json.loads(ds.get_metadata('snapshot'))
-    sub_dict = json_meta['station']['instruments']['mdac']['submodules']
+    json_meta = ds.snapshot
+    if json_meta is None:
+        raise ValueError("Measurement contains no snapshot")
+    sub_dict = json_meta["station"]["instruments"]["mdac"]["submodules"]
 
     label_txt = []
     for ch in range(1, 65):
-        ch_str = 'ch{num:02d}'.format(num=ch)
-        label = sub_dict[ch_str]['parameters']['voltage']['label']
-        v_value = sub_dict[ch_str]['parameters']['voltage']['value']
+        ch_str = "ch{num:02d}".format(num=ch)
+        label = sub_dict[ch_str]["parameters"]["voltage"]["label"]
+        v_value = sub_dict[ch_str]["parameters"]["voltage"]["value"]
         if abs(v_value) > 1e-6:
-            label_txt.append('{}: {:+.4f}'.format(label, v_value))
+            label_txt.append("{}: {:+.4f}".format(label, v_value))
 
     if isinstance(plots, pyplot.PlotWindow):
         plots = plots.items
@@ -266,8 +330,8 @@ def add_gate_label(plots, did):
 
     for item in plots:
         if isinstance(item, pyplot.PlotItem):
-            txt = item.textbox('<br>'.join(label_txt))
-            txt.anchor('br')
+            txt = item.textbox("<br>".join(label_txt))
+            txt.anchor("br")
             txt.offset = (-10, -50)
         else:
             print("Item is a {}".format(type(item)))
@@ -285,6 +349,7 @@ def plot_Wtext(did, save_fig=False, fig_folder=None):
         save_figure(win, did, fig_folder)
 
     return win
+
 
 def plot_Wtext_by_run(exp, kt, save_fig=False, fig_folder=None):
     """

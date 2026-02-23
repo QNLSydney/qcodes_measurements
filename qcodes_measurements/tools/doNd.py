@@ -3,24 +3,23 @@ Wrappers around qcodes.utils.dataset.doNd functions that live-plot
 data during the sweep.
 """
 
+import functools
+import inspect
+import itertools
 import re
 import sys
-import inspect
-import functools
-import itertools
-import numpy as np
-from typing import Any, Optional, Union, Tuple, Sequence, Mapping
 from dataclasses import dataclass, field
+from typing import Any, Mapping, Optional, Sequence, Tuple, Union
 
+import numpy as np
+import qcodes.dataset
 from qcodes import config
 from qcodes.dataset.data_set import DataSet
-from qcodes.dataset.descriptions.param_spec import ParamSpecBase
-from qcodes.instrument.parameter import _BaseParameter
-import qcodes.utils.dataset.doNd as doNd
+from qcodes.parameters import ParameterBase, ParamSpecBase
 
-from ..plot import PlotWindow, PlotItem, PlotDataItem, ImageItem, TableWidget
-from ..plot.plot_tools import save_figure
 from ..logging import get_logger
+from ..plot import ImageItem, PlotDataItem, PlotItem, PlotWindow, TableWidget
+from ..plot.plot_tools import save_figure
 
 # Get access to module level variables
 this = sys.modules[__name__]
@@ -172,7 +171,7 @@ class LivePlotWindow:
     plot_items: Mapping[str, Union[PlotDataItem, ImageItem]] = field(
         default_factory=dict
     )
-    plot_params: Optional[list[_BaseParameter]] = None
+    plot_params: Optional[list[ParameterBase]] = None
     annotation: Optional[str] = None
 
 
@@ -473,7 +472,7 @@ def _live_plot(wrapped):
     def wrapped_function(
         *args: Any,
         plot: bool = True,
-        plot_params: Optional[list[_BaseParameter]] = None,
+        plot_params: Optional[list[ParameterBase]] = None,
         append: Optional[Union[bool, PlotWindow]] = False,
         annotation: Optional[str] = None,
         save: bool = True,
@@ -495,7 +494,7 @@ def _live_plot(wrapped):
             append=(append is not False),
             stack=stack,
             plot_params=plot_params,
-            annotation=annotation
+            annotation=annotation,
         )
 
         ret_val = None
@@ -564,7 +563,8 @@ def _live_plot(wrapped):
     combined_parameters.pop("args", None)
     combined_parameters.pop("kwargs", None)
     combined_signature = inspect.Signature(
-        combined_parameters.values(), return_annotation=old_signature.return_annotation
+        tuple(combined_parameters.values()),
+        return_annotation=old_signature.return_annotation,
     )
     wrapped_function.__signature__ = combined_signature
 
@@ -572,6 +572,6 @@ def _live_plot(wrapped):
 
 
 # Create wrapped doNd functions
-do0d = _live_plot(doNd.do0d)
-do1d = _live_plot(doNd.do1d)
-do2d = _live_plot(doNd.do2d)
+do0d = _live_plot(qcodes.dataset.do0d)
+do1d = _live_plot(qcodes.dataset.do1d)
+do2d = _live_plot(qcodes.dataset.do2d)

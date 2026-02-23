@@ -1,6 +1,7 @@
-from qcodes import InstrumentChannel
+from qcodes.instrument import InstrumentChannel
 
 from .states import ConnState
+
 
 class ChannelWrapper(InstrumentChannel):
     """
@@ -11,13 +12,12 @@ class ChannelWrapper(InstrumentChannel):
         - self.gate - The underlying Gate object
         - self.parent - The underlying DAC/BB channel
     """
+
     def __init__(self, parent, name):
         super().__init__(parent.source, name)
         self.gate = parent
         self._state = ConnState.UNDEF
-        self.add_parameter('state',
-                           get_cmd=self.get_state,
-                           set_cmd=self.set_state)
+        self.add_parameter("state", get_cmd=self.get_state, set_cmd=self.set_state)
 
     def get_state(self):
         return self._state
@@ -30,7 +30,7 @@ class ChannelWrapper(InstrumentChannel):
             print(f"Manually Bus {self.name}")
             self._state = ConnState.BUS
         elif val == ConnState.SMC:
-            print(f'Manually Open {self.name}')
+            print(f"Manually Open {self.name}")
             self._state = ConnState.SMC
         elif val == ConnState.DAC:
             print(f"Manually Connect DAC to {self.name}")

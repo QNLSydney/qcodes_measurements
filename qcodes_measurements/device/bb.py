@@ -1,7 +1,8 @@
+from typing import Any
 from warnings import warn
 
-from qcodes import InstrumentChannel, ChannelList
-from qcodes.instrument.base import InstrumentBase
+from qcodes.instrument import ChannelList, InstrumentBase, InstrumentChannel
+
 
 class BB(InstrumentBase):
     """
@@ -9,6 +10,7 @@ class BB(InstrumentBase):
     channels on the breakout box, keeps track of numbering
     for snapshot purposes
     """
+
     def __init__(self, name, chan_count=25):
         super().__init__(name)
 
@@ -28,27 +30,28 @@ class BBChan(InstrumentChannel):
         super().__init__(parent, name)
         self.dac_source = dac_source
 
-        self.add_parameter("voltage",
-                           get_cmd=self.dummy_voltage,
-                           set_cmd=self.dummy_voltage)
+        self.add_parameter(
+            "voltage", get_cmd=self.dummy_voltage, set_cmd=self.dummy_voltage
+        )
 
-    def __getattr__(self, name):
-        if name in self.parameters:
-            return self.parameters[name]
+    def __getattr__(self, key: str) -> Any:
+        if key in self.parameters:
+            return self.parameters[key]
         elif self.dac_source:
-            return getattr(self.dac_source, name)
+            return getattr(self.dac_source, key)
         raise AttributeError()
 
     def connect_dac(self, dac_source):
         self.dac_source = dac_source
-        if 'voltage' in self.parameters:
-            del self.parameters['voltage']
+        if "voltage" in self.parameters:
+            del self.parameters["voltage"]
         return self
 
     def dummy_voltage(self, val=None):
         if val is not None and val != 0:
             raise NotImplementedError("This gate is not connected to a DAC!")
         return 0
+
 
 class BB37(BB):
     def __init__(self, name):

@@ -1,5 +1,6 @@
 from functools import partial
-from typing import Optional, Dict
+from typing import Optional
+
 import requests
 from qcodes.instrument import Instrument
 
@@ -61,8 +62,13 @@ class FridgeTemps(Instrument):
         """
         raise NotImplementedError("Can't communicate directly with a fridge.")
 
-    def get_idn(self) -> Dict[str, Optional[str]]:
+    def get_idn(self) -> dict[str, Optional[str]]:
         """
         Returns details of the instrument and driver.
         """
-        return {"vendor": "QNL", "model": "Fridge URL Driver", "serial": "0001", "firmware": "0.1"}
+        return {
+            "vendor": "QNL",
+            "model": "Fridge URL Driver",
+            "serial": "0001",
+            "firmware": "0.1",
+        }

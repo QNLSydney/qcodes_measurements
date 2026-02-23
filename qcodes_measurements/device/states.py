@@ -1,5 +1,6 @@
 import enum
 
+
 class GateMode(str, enum.Enum):
     BIAS = enum.auto()
     COLD = enum.auto()
@@ -16,8 +17,18 @@ class ConnState(str, enum.Enum):
     PROBE = enum.auto()
     UNDEF = enum.auto()
 
-ConnState.OUTPUT_MODES = (ConnState.GND, ConnState.DAC, ConnState.DAC_BUS, ConnState.PROBE)
-ConnState.INPUT_MODES  = (ConnState.BUS, ConnState.SMC, ConnState.FLOAT)
+    OUTPUT_MODES: tuple["ConnState", ...]
+    INPUT_MODES: tuple["ConnState", ...]
+
+
+ConnState.OUTPUT_MODES = (
+    ConnState.GND,
+    ConnState.DAC,
+    ConnState.DAC_BUS,
+    ConnState.PROBE,
+)
+ConnState.INPUT_MODES = (ConnState.BUS, ConnState.SMC, ConnState.FLOAT)
+
 
 class DigitalMode(str, enum.Enum):
     """
@@ -26,15 +37,19 @@ class DigitalMode(str, enum.Enum):
     Note: HIGH/LOW/GND cause the gate value to be locked, and will not
     allow changes through a set
     """
-    IN = enum.auto() # Connect SMC, Disconnect DAC
-    OUT = enum.auto() # Disconnect SMC, Connect DAC
-    PROBE_OUT = enum.auto() # Connect SMC, Connect DAC
+
+    IN = enum.auto()  # Connect SMC, Disconnect DAC
+    OUT = enum.auto()  # Disconnect SMC, Connect DAC
+    PROBE_OUT = enum.auto()  # Connect SMC, Connect DAC
     BUS_OUT = enum.auto()
     HIGH = enum.auto()
     LOW = enum.auto()
     GND = enum.auto()
     FLOAT = enum.auto()
     UNDEF = enum.auto()
+
+    OUTPUT_MODES: tuple["DigitalMode", ...]
+    INPUT_MODES: tuple["DigitalMode", ...]
 
     @staticmethod
     def map_conn_state_to_digital_mode(conn_state):
@@ -58,6 +73,12 @@ class DigitalMode(str, enum.Enum):
         else:
             return DigitalMode.UNDEF
 
-DigitalMode.OUTPUT_MODES = (DigitalMode.OUT, DigitalMode.PROBE_OUT, DigitalMode.HIGH,
-                            DigitalMode.LOW, DigitalMode.GND)
+
+DigitalMode.OUTPUT_MODES = (
+    DigitalMode.OUT,
+    DigitalMode.PROBE_OUT,
+    DigitalMode.HIGH,
+    DigitalMode.LOW,
+    DigitalMode.GND,
+)
 DigitalMode.INPUT_MODES = (DigitalMode.IN, DigitalMode.FLOAT)

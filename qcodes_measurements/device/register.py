@@ -1,10 +1,13 @@
 """
 Represents a dense bitfield register within a digital device
 """
+
 from collections import namedtuple
-from qcodes.utils.metadata import Metadatable
+
+from qcodes.metadatable import Metadatable
 
 RegisterField = namedtuple("RegisterField", ("start_bit", "end_bit", "value"))
+
 
 class Register(Metadatable):
     """
@@ -12,6 +15,7 @@ class Register(Metadatable):
     track of the contents of a register, including whether the register is
     modified or committed to the device.
     """
+
     def __init__(self, name, address, fields, length=32, require_sync=False):
         """
         Initialize a register.
@@ -25,7 +29,7 @@ class Register(Metadatable):
             require_sync (bool): Mark whether we should keep track of whether the register has been sync'd with
                                  the underlying device.
         """
-        if length%8 != 0:
+        if length % 8 != 0:
             raise ValueError("Length must be an integer multiple of 8")
 
         self.name = name
@@ -35,14 +39,18 @@ class Register(Metadatable):
         self._committed_val = None
 
         self.fields = {}
-        self.bits = [None]*self.length
+        self.bits = [None] * self.length
         for field_name, start_bit, end_bit in fields:
             if start_bit < 0 or start_bit > length:
-                raise ValueError(f"start_bit ({start_bit}) for field {field_name} out of bounds for register of length {length}.")
+                raise ValueError(
+                    f"start_bit ({start_bit}) for field {field_name} out of bounds for register of length {length}."
+                )
             if end_bit < 0 or end_bit > length:
-                raise ValueError(f"end_bit ({end_bit}) for field {field_name} out of bounds for register of length {length}.")
-            self.fields[field_name] = RegisterField(start_bit, end_bit+1, 0)
-            for bit in range(start_bit, end_bit+1):
+                raise ValueError(
+                    f"end_bit ({end_bit}) for field {field_name} out of bounds for register of length {length}."
+                )
+            self.fields[field_name] = RegisterField(start_bit, end_bit + 1, 0)
+            for bit in range(start_bit, end_bit + 1):
                 if self.bits[bit] is not None:
                     raise ValueError("Overlapping bit ranges in register")
                 self.bits[bit] = field_name
@@ -50,7 +58,7 @@ class Register(Metadatable):
         super().__init__()
 
     def __bytes__(self):
-        return self.value.to_bytes(self.length//8, "big")
+        return self.value.to_bytes(self.length // 8, "big")
 
     def __repr__(self):
         d_flag = "D" if self.dirty else ""
@@ -61,15 +69,17 @@ class Register(Metadatable):
         Create a snapshot of the register
         """
         snap = {}
-        snap['name'] = self.name
-        snap['address'] = self.address
-        snap['length'] = self.length
-        snap['require_sync'] = self.require_sync
+        snap["name"] = self.name
+        snap["address"] = self.address
+        snap["length"] = self.length
+        snap["require_sync"] = self.require_sync
         if self.require_sync:
-            snap['committed_val'] = self.committed_val
-        snap['fields'] = tuple((name, start_bit, stop_bit, value) for
-                               name, (start_bit, stop_bit, value) in self.fields.items())
-        snap['value'] = self.value
+            snap["committed_val"] = self.committed_val
+        snap["fields"] = tuple(
+            (name, start_bit, stop_bit, value)
+            for name, (start_bit, stop_bit, value) in self.fields.items()
+        )
+        snap["value"] = self.value
         return snap
 
     def get_by_field(self, name):
@@ -86,15 +96,19 @@ class Register(Metadatable):
         """
         if isinstance(ind, int):
             if ind > self.length:
-                raise IndexError(f"Index out of bounds for register of length {self.length}.")
+                raise IndexError(
+                    f"Index out of bounds for register of length {self.length}."
+                )
             return (self.value >> (ind % self.length)) & 1
         if isinstance(ind, slice):
             if ind.step is not None and ind.step != 1:
-                raise IndexError("Registers do not support steps other than 1 in a slice")
+                raise IndexError(
+                    "Registers do not support steps other than 1 in a slice"
+                )
             # Calculate bit indices
             start, stop, _ = ind.indices(self.length)
             # Retrieve range from register
-            return (self.value >> start) & ((1 << (stop-start))-1)
+            return (self.value >> start) & ((1 << (stop - start)) - 1)
         raise TypeError("Index must be an integer or a slice")
 
     def __getitem__(self, ind):
@@ -109,31 +123,39 @@ class Register(Metadatable):
         Set value of register by field name
         """
         max_val = self.fields[name].end_bit - self.fields[name].start_bit
-        max_val = (1 << max_val)-1
+        max_val = (1 << max_val) - 1
         if not isinstance(val, int):
             raise TypeError("Value must be an integer in the range 0 - {max_val}.")
         if val > max_val:
-            raise ValueError(f"Value out of range for {name}. Should be in range 0 - {max_val}, got {val}.")
+            raise ValueError(
+                f"Value out of range for {name}. Should be in range 0 - {max_val}, got {val}."
+            )
         self.fields[name] = self.fields[name]._replace(value=val)
 
-    def set_by_bitind(self, ind, val):
+    def set_by_bitind(self, ind: int | slice, val):
         """
         Set value of bits in register by index or slice
         """
         # Calculate bit indices in register
         if isinstance(ind, int):
-            indices = (ind, )
+            indices = (ind,)
         elif isinstance(ind, slice):
             if ind.step is not None and ind.step != 1:
-                raise IndexError("Registers do not support steps other than 1 in a slice")
+                raise IndexError(
+                    "Registers do not support steps other than 1 in a slice"
+                )
             indices = range(*ind.indices(self.length))
+        else:
+            raise TypeError("ind must be an int or slice")
 
         # Validate value
         val = int(val)
-        start, stop = indices[0], indices[-1]+1
-        max_val = (1 << (stop-start))-1
+        start, stop = indices[0], indices[-1] + 1
+        max_val = (1 << (stop - start)) - 1
         if val > max_val:
-            raise ValueError(f"Value out of range for field. Should be in range 0 - {max_val}, got {val}.")
+            raise ValueError(
+                f"Value out of range for field. Should be in range 0 - {max_val}, got {val}."
+            )
 
         # Set each bit
         for i, index in enumerate(indices):
@@ -149,7 +171,9 @@ class Register(Metadatable):
             if bval:
                 new_val = field.value | (1 << bloc)
             else:
-                new_val = field.value & (((1 << (field.end_bit - field.start_bit))-1) ^ (1 << bloc))
+                new_val = field.value & (
+                    ((1 << (field.end_bit - field.start_bit)) - 1) ^ (1 << bloc)
+                )
             self.fields[field_name] = field._replace(value=new_val)
 
     def __setitem__(self, ind, val):
@@ -167,8 +191,8 @@ class Register(Metadatable):
         """
         value = 0
         for field in self.fields.values():
-            value |= (field.value << field.start_bit)
-        return value & ((1 << self.length)-1)
+            value |= field.value << field.start_bit
+        return value & ((1 << self.length) - 1)
 
     @property
     def committed_val(self):
@@ -193,7 +217,7 @@ class Register(Metadatable):
         Forcibly marks the register dirty.
         NOTE: This has no effect if self.require_sync is False.
         """
-        self.committed_val = None
+        self._committed_val = None
 
     def commit(self):
         """

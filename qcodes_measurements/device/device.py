@@ -1,16 +1,26 @@
-from qcodes import ChannelList, Parameter
-from qcodes.instrument.base import InstrumentBase
+from qcodes.instrument import ChannelList, InstrumentBase
+from qcodes.instrument.instrument_base import TParameter
+from qcodes.parameters import Parameter
 
-from .gate import Gate, Ohmic, GateWrapper, OhmicWrapper, \
-                  MDACGateWrapper, MDACOhmicWrapper, \
-                  BBGateWrapper, BBOhmicWrapper
+from .gate import (
+    BBGateWrapper,
+    BBOhmicWrapper,
+    Gate,
+    GateWrapper,
+    MDACGateWrapper,
+    MDACOhmicWrapper,
+    Ohmic,
+    OhmicWrapper,
+)
 
 try:
-    import MDAC
+    import MDAC  # type: ignore
 except ModuleNotFoundError:
-    class _Blank():
+
+    class _Blank:
         MDACChannel = type(None)
         MDAC = type(None)
+
     MDAC = _Blank()
 from .bb import BBChan
 
@@ -36,6 +46,7 @@ class Device(InstrumentBase):
         self.add_parameter(name, parameter_class=Gate, source=source, **kwargs)
         if state is not None:
             gate = self.get_channel_controller(self.parameters[name])
+            assert isinstance(gate, GateWrapper)
             if gate.state() != state:
                 gate.state(state)
         if initial_value is not None:
@@ -45,16 +56,21 @@ class Device(InstrumentBase):
         self.add_parameter(name, parameter_class=Ohmic, source=source, **kwargs)
         if state is not None:
             gate = self.get_channel_controller(self.parameters[name])
+            assert isinstance(gate, OhmicWrapper)
             gate.state(state)
 
-    def add_parameter(self, name, parameter_class=Parameter, **kwargs):
+    def add_parameter(  # type: ignore
+        self, name, parameter_class: type[Parameter] | None = Parameter, **kwargs
+    ) -> Parameter:
         """
         Add a new parameter to the instrument and store it in an appropriate list, if
         we are keeping track of gates/ohmics.
         """
-        super().add_parameter(name, parameter_class=parameter_class, **kwargs)
-        new_param = self.parameters[name]
+        new_param = super().add_parameter(
+            name, parameter_class=parameter_class, **kwargs
+        )
         self.store_new_param(new_param)
+        return new_param
 
     def store_new_param(self, new_param):
         """

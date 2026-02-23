@@ -1,24 +1,27 @@
 """
 Support functions for digital gates
 """
+
 from functools import partial
 
-from qcodes import ChannelList
-from qcodes.utils.validators import Numbers, Bool, MultiType, Enum
+from qcodes.instrument import ChannelList
+from qcodes.validators import Bool, Enum, MultiType, Numbers
 
 try:
-    import MDAC
+    import MDAC  # type: ignore
 except ModuleNotFoundError:
-    class _Blank():
+
+    class _Blank:
         MDACChannel = type(None)
         MDAC = type(None)
+
     MDAC = _Blank()
 from .bb import BBChan
-
 from .channel_wrapper import ChannelWrapper
-from .gate import Gate, MDACGateWrapper, BBGateWrapper
 from .device import Device
-from .states import DigitalMode, GateMode, ConnState
+from .gate import BBGateWrapper, Gate, MDACGateWrapper
+from .states import ConnState, DigitalMode, GateMode
+
 
 class DigitalGate(Gate):
     """
@@ -32,16 +35,28 @@ class DigitalGate(Gate):
         v_low: low voltage level
         v_hist: range around v_high/v_low around which a high/low value will be read
     """
-    def __init__(self, name, source, v_high, v_low, v_hist=0.2, label=None,
-                 io_mode=None, **kwargs):
+
+    def __init__(
+        self,
+        name,
+        source,
+        v_high,
+        v_low,
+        v_hist=0.2,
+        label=None,
+        io_mode=None,
+        **kwargs,
+    ):
         # Initialize the parameter
-        super().__init__(name=name,
-                         source=source,
-                         label=label,
-                         rate=None,
-                         max_step=None,
-                         default_mode=GateMode.FREE,
-                         **kwargs)
+        super().__init__(
+            name=name,
+            source=source,
+            label=label,
+            rate=None,
+            max_step=None,
+            default_mode=GateMode.FREE,
+            **kwargs,
+        )
 
         self.vals = MultiType(Bool(), Numbers())
         self._v_high = v_high
@@ -59,6 +74,7 @@ class DigitalGate(Gate):
         Get/Set high voltage level
         """
         return self._v_high
+
     @v_high.setter
     def v_high(self, val):
         self._v_high = val
@@ -74,6 +90,7 @@ class DigitalGate(Gate):
         Get/Set low voltage level
         """
         return self._v_low
+
     @v_low.setter
     def v_low(self, val):
         self._v_low = val
@@ -83,7 +100,7 @@ class DigitalGate(Gate):
             self(self())
         self.lock = lock
 
-    def get_raw(self): #pylint: disable=E0202
+    def get_raw(self):  # pylint: disable=E0202
         """
         Return the state of the gate if within the defined setpoints, otherwise return 0
         """
@@ -94,17 +111,18 @@ class DigitalGate(Gate):
             return 0
         return -1
 
-    def set_raw(self, value): #pylint: disable=E0202
+    def set_raw(self, value):  # pylint: disable=E0202
         """
         Set the output of this digital gate, unless the gate is locked, in which case don't do
         anything
         """
-        if self.lock: # Don't change value if the gate is locked.
+        if self.lock:  # Don't change value if the gate is locked.
             return
         if value:
             self.source.voltage(self.v_high)
         else:
             self.source.voltage(self.v_low)
+
 
 class DigitalGateWrapper(ChannelWrapper):
     """
@@ -114,46 +132,51 @@ class DigitalGateWrapper(ChannelWrapper):
         - self.gate - The underlying DigitalGate
         - self.parent - The underlying DAC/BB channel
     """
+
     def __init__(self, parent, name):
         if not isinstance(parent, DigitalGate):
             raise TypeError("DigitalGateWrapper can only wrap DigitalGates")
         super().__init__(parent, name)
 
-        self.add_parameter("out",
-                           get_cmd=parent,
-                           set_cmd=parent,
-                           vals=self.gate.vals)
+        self.add_parameter("out", get_cmd=parent, set_cmd=parent, vals=self.gate.vals)
 
-        self.add_parameter("io_mode",
-                           get_cmd=lambda: str(self.gate.io_mode),
-                           set_cmd=self._set_io_mode,
-                           vals=Enum(*DigitalMode))
+        self.add_parameter(
+            "io_mode",
+            get_cmd=lambda: str(self.gate.io_mode),
+            set_cmd=self._set_io_mode,
+            vals=Enum(*DigitalMode),
+        )
 
-        self.add_parameter("lock",
-                           get_cmd=partial(getattr, self.gate, "lock"),
-                           set_cmd=partial(setattr, self.gate, "lock"),
-                           vals=Bool())
+        self.add_parameter(
+            "lock",
+            get_cmd=partial(getattr, self.gate, "lock"),
+            set_cmd=partial(setattr, self.gate, "lock"),
+            vals=Bool(),
+        )
 
-        self.add_parameter("v_high",
-                           get_cmd=partial(getattr, self.gate, "v_high"),
-                           set_cmd=partial(setattr, self.gate, "v_high"),
-                           vals=self.parent.voltage.vals)
+        self.add_parameter(
+            "v_high",
+            get_cmd=partial(getattr, self.gate, "v_high"),
+            set_cmd=partial(setattr, self.gate, "v_high"),
+            vals=self.parent.voltage.vals,
+        )
 
-        self.add_parameter("v_low",
-                           get_cmd=partial(getattr, self.gate, "v_low"),
-                           set_cmd=partial(setattr, self.gate, "v_low"),
-                           vals=self.parent.voltage.vals)
+        self.add_parameter(
+            "v_low",
+            get_cmd=partial(getattr, self.gate, "v_low"),
+            set_cmd=partial(setattr, self.gate, "v_low"),
+            vals=self.parent.voltage.vals,
+        )
 
         # Note: we override the voltage parameter here, since by default the GateWrapper
         # pulls the voltage from self.gate, which for a digital gate returns 0/1
-        self.parameters['voltage'] = self.parent.voltage
+        self.parameters["voltage"] = self.parent.voltage
 
         # Once this object has been created, we can check the state of the underlying
         # gate and fill it in for the gate, it if is currently unknown
         if self.gate.io_mode == DigitalMode.UNDEF:
             state = self.state()
             self.gate.io_mode = DigitalMode.map_conn_state_to_digital_mode(state)
-
 
     def _set_io_mode(self, val):
         self.lock(False)
@@ -183,25 +206,30 @@ class DigitalGateWrapper(ChannelWrapper):
             raise ValueError("Invalid IO Mode")
         self.gate.io_mode = val
 
+
 class MDACDigitalGateWrapper(DigitalGateWrapper, MDACGateWrapper):
     """
     Digital gate wrapper of an MDAC, which allows set/get of state
     """
+
     def __init__(self, parent, name):
         super().__init__(parent, name)
         self.parent.filter.vals = Enum(0, 1, 2)
         self.parent.filter(0)
+
 
 class BBDigitalGateWrapper(DigitalGateWrapper, BBGateWrapper):
     """
     Digital gate wrapper of an BB, which allows set/get of state
     """
 
+
 class DigitalDevice(Device):
     """
     Device which expects digital control as well as potential analog
     voltages
     """
+
     def __init__(self, name):
         super().__init__(name)
 
@@ -212,16 +240,20 @@ class DigitalDevice(Device):
         # Add digital parameters
         self._v_high = 1.8
         self._v_low = 0
-        self.add_parameter("v_high",
-                           initial_value=1.8,
-                           get_cmd=partial(getattr, self, "_v_high"),
-                           set_cmd=self._update_vhigh,
-                           vals=Numbers())
-        self.add_parameter("v_low",
-                           initial_value=0,
-                           get_cmd=partial(getattr, self, "_v_low"),
-                           set_cmd=self._update_vlow,
-                           vals=Numbers())
+        self.add_parameter(
+            "v_high",
+            initial_value=1.8,
+            get_cmd=partial(getattr, self, "_v_high"),
+            set_cmd=self._update_vhigh,
+            vals=Numbers(),
+        )
+        self.add_parameter(
+            "v_low",
+            initial_value=0,
+            get_cmd=partial(getattr, self, "_v_low"),
+            set_cmd=self._update_vlow,
+            vals=Numbers(),
+        )
 
     def add_digital_gate(self, name, source, io_mode=None, **kwargs):
         if "initial_value" in kwargs and io_mode is not None:
@@ -229,9 +261,15 @@ class DigitalDevice(Device):
             del kwargs["initial_value"]
         else:
             initial_value = None
-        self.add_parameter(name, parameter_class=DigitalGate, source=source,
-                           v_high=self.v_high(), v_low=self.v_low(), io_mode=io_mode,
-                           **kwargs)
+        self.add_parameter(
+            name,
+            parameter_class=DigitalGate,
+            source=source,
+            v_high=self.v_high(),
+            v_low=self.v_low(),
+            io_mode=io_mode,
+            **kwargs,
+        )
         if io_mode is not None:
             gate = self.get_channel_controller(self.parameters[name])
             if gate.io_mode() != io_mode:
@@ -242,9 +280,13 @@ class DigitalDevice(Device):
     def store_new_param(self, new_param):
         if isinstance(new_param, DigitalGate):
             if isinstance(new_param.source, MDAC.MDACChannel):
-                self.digital_gates.append(MDACDigitalGateWrapper(new_param, new_param.name))
+                self.digital_gates.append(
+                    MDACDigitalGateWrapper(new_param, new_param.name)
+                )
             elif isinstance(new_param.source, BBChan):
-                self.digital_gates.append(BBDigitalGateWrapper(new_param, new_param.name))
+                self.digital_gates.append(
+                    BBDigitalGateWrapper(new_param, new_param.name)
+                )
             else:
                 self.digital_gates.append(DigitalGateWrapper(new_param, new_param.name))
         else:
@@ -254,6 +296,7 @@ class DigitalDevice(Device):
         for gate in self.digital_gates:
             gate.v_high(new_val)
         self._v_high = new_val
+
     def _update_vlow(self, new_val):
         for gate in self.digital_gates:
             gate.v_low(new_val)
