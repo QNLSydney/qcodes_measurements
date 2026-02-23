@@ -1,9 +1,17 @@
-from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
-
-from pyqtgraph import GraphicsWidget, GraphicsWidgetAnchor, LabelItem, Point, mkPen, mkBrush
+from pyqtgraph import (
+    GraphicsWidget,
+    GraphicsWidgetAnchor,
+    LabelItem,
+    Point,
+    mkBrush,
+    mkPen,
+)
+from Qt import QtCore, QtGui, QtWidgets
 
 from ...logging import get_logger
+
 logger = get_logger("DraggableTextItem")
+
 
 class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
     def __init__(self, *args, text="", offset=None):
@@ -52,18 +60,21 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
 
     def getOffset(self):
         return self.offset
+
     def setOffset(self, offs):
         if not isinstance(offs, tuple) or len(offs) != 2:
             raise ValueError("Must be a tuple (x, y)")
         self.anchor(self.item_anchor, self.object_anchor, offs)
 
     def updateSize(self):
-        self.setGeometry(0, 0, self.label_item.width()+10, self.label_item.height())
+        self.setGeometry(0, 0, self.label_item.width() + 10, self.label_item.height())
+
     def boundingRect(self):
         return QtCore.QRectF(0, 0, self.width(), self.height())
 
     def hoverEvent(self, ev):
         ev.acceptDrags(QtCore.Qt.LeftButton)
+
     def mouseDragEvent(self, ev):
         if ev.button() == QtCore.Qt.LeftButton:
             dpos = ev.pos() - ev.lastPos()
@@ -72,5 +83,6 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
     def setText(self, text):
         self.label_item.setText(str(text))
         self.updateSize()
+
     def getText(self):
         return self.label_item.text

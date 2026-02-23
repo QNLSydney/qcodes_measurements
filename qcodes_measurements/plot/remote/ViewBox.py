@@ -1,14 +1,23 @@
 from functools import partial
 from sys import exc_info
 
-from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
-from pyqtgraph import ViewBox, PlotDataItem, PlotCurveItem, \
-                      ImageItem, GraphicsObject, mkPen, mkBrush
+from pyqtgraph import (
+    GraphicsObject,
+    ImageItem,
+    PlotCurveItem,
+    PlotDataItem,
+    ViewBox,
+    mkBrush,
+    mkPen,
+)
+from Qt import QtCore, QtGui, QtWidgets
 
-from .PlotMenu import PlotMenuMixin
-from .DataItem import ExtendedDataItem
 from ...logging import get_logger
+from .DataItem import ExtendedDataItem
+from .PlotMenu import PlotMenuMixin
+
 logger = get_logger("ViewBox")
+
 
 class CustomViewBox(PlotMenuMixin, ViewBox):
     def __init__(self, *args, **kwargs):
@@ -23,7 +32,7 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
         self.removeItem(self.rbScaleBox)
 
         # The mouse mode is not used, since we override what left clicking does anyway
-        removeMenuItems = ('Mouse Mode', )
+        removeMenuItems = ("Mouse Mode",)
         for menuItem in removeMenuItems:
             actions = self.menu.actions()
             for action in actions:
@@ -31,7 +40,9 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
                     self.menu.removeAction(action)
 
         # Extra menu actions
-        self.makeTracesDifferentAction = QtGui.QAction("Make All Traces Different", self.menu)
+        self.makeTracesDifferentAction = QtGui.QAction(
+            "Make All Traces Different", self.menu
+        )
         self.makeTracesDifferentAction.triggered.connect(self.makeTracesDifferent)
 
     def mouseClickEvent(self, ev):
@@ -50,7 +61,9 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
             try:
                 self.raiseContextMenu(ev)
             except Exception as e:
-                logger.exception("Exception trying to raise context menu!", exc_info=exc_info())
+                logger.exception(
+                    "Exception trying to raise context menu!", exc_info=exc_info()
+                )
                 raise
             return True
 
@@ -92,7 +105,9 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
                 return True
 
             # Get a list of the items near this event
-            itemNumbers = [x for x in self.addedItems if isinstance(x, (PlotDataItem, ImageItem))]
+            itemNumbers = [
+                x for x in self.addedItems if isinstance(x, (PlotDataItem, ImageItem))
+            ]
             itemNumbers = dict((x[1], x[0]) for x in enumerate(itemNumbers))
             items = filter(filterNear, self.scene().itemsNearEvent(event))
             self.addPlotContextMenus(items, itemNumbers, self.menu)
@@ -180,9 +195,9 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
 
             # Add scale items
             rbActions = (
-                ('Expand', partial(self.expand, axis='XY')),
-                ('Expand X', partial(self.expand, axis='X')),
-                ('Expand Y', partial(self.expand, axis='Y')),
+                ("Expand", partial(self.expand, axis="XY")),
+                ("Expand X", partial(self.expand, axis="X")),
+                ("Expand Y", partial(self.expand, axis="Y")),
             )
             for action in rbActions:
                 qaction = QtGui.QAction(action[0], self.menu)
@@ -192,7 +207,11 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
         # Add plot items to the menu. First get a list of items in the view
         items = self.getViewBox().childGroup.childItems()
         # Figure out an item numbering for labelling purposes
-        itemNumbers = [x for x in self.parentObject().childItems() if isinstance(x, (ExtendedDataItem, PlotDataItem, ImageItem))]
+        itemNumbers = [
+            x
+            for x in self.parentObject().childItems()
+            if isinstance(x, (ExtendedDataItem, PlotDataItem, ImageItem))
+        ]
         itemNumbers = dict((x[1], x[0]) for x in enumerate(itemNumbers))
 
         # Then, filter items under the box
@@ -205,18 +224,18 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
 
         return self.menu
 
-    def expand(self, axis='XY'):
+    def expand(self, axis="XY"):
         # Get the viewbox to scale
         vb = self.getViewBox()
         # Get the size of the scale box
         p = self.mapRectToItem(vb.childGroup, self.boundingRect())
 
         # Set axes to existing if we don't want to set them
-        if 'X' not in axis:
+        if "X" not in axis:
             existingRect = vb.viewRect()
             p.setLeft(existingRect.left())
             p.setRight(existingRect.right())
-        if 'Y' not in axis:
+        if "Y" not in axis:
             existingRect = vb.viewRect()
             p.setBottom(existingRect.bottom())
             p.setTop(existingRect.top())
@@ -224,4 +243,4 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
         # Do scale
         vb.setRange(rect=p, padding=0)
         vb.axHistoryPointer += 1
-        vb.axHistory = vb.axHistory[:vb.axHistoryPointer] + [p]
+        vb.axHistory = vb.axHistory[: vb.axHistoryPointer] + [p]

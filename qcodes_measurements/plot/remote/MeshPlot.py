@@ -2,18 +2,26 @@ from itertools import islice
 from typing import List, Union
 
 import numpy as np
-
-from pyqtgraph.Qt import QtCore
 from pyqtgraph import GraphicsObject, HistogramLUTItem, mkPen
+from Qt import QtCore
 
+from ...logging import get_logger
+from .colors import COLORMAPS, DEFAULT_CMAP
 from .PlotWindow import ExtendedPlotWindow
 from .ViewBox import CustomViewBox
-from .colors import DEFAULT_CMAP, COLORMAPS
-from ...logging import get_logger
+
 logger = get_logger("MeshPlot")
 
+
 class MeshPlot(GraphicsObject):
-    def __init__(self, *args, positions: np.array=None, data: np.array=None, colormap: str=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        positions: np.array | None = None,
+        data: np.array | None = None,
+        colormap: str | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
 
         # Initialize data structures
@@ -26,7 +34,9 @@ class MeshPlot(GraphicsObject):
         if positions is not None and data is not None:
             self.calc_lims()
         elif not (positions is None and data is None):
-            raise ValueError("Either positions and data must both be given, or neither.")
+            raise ValueError(
+                "Either positions and data must both be given, or neither."
+            )
 
         # Initialize menus
         self.menu = None
@@ -64,12 +74,12 @@ class MeshPlot(GraphicsObject):
 
         # Update histogram and autorange
         hist, bins = np.histogram(self.data, "auto")
-        newBins = np.ndarray(bins.size+1)
-        newHist = np.ndarray(hist.size+2)
+        newBins = np.ndarray(bins.size + 1)
+        newHist = np.ndarray(hist.size + 2)
         newBins[0] = bins[0]
         newBins[-1] = bins[-1]
-        newBins[1:-1] = (bins[:-1] + bins[1:])/2
-        newHist[[0,-1]] = 0
+        newBins[1:-1] = (bins[:-1] + bins[1:]) / 2
+        newHist[[0, -1]] = 0
         newHist[1:-1] = hist
         self._LUTitem.plot.setData(newBins, newHist)
         self._LUTitem.setLevels(newBins[0], newBins[-1])
@@ -91,8 +101,13 @@ class MeshPlot(GraphicsObject):
         for x, y in islice(self.positions, 1, None):
             self.xmin, self.xmax = min(self.xmin, x), max(self.xmax, x)
             self.ymin, self.ymax = min(self.ymin, y), max(self.ymax, y)
-        logger.debug("Calculated limits (%f, %f) - (%f, %f)", self.xmin, self.ymin,
-                     self.xmax, self.ymax)
+        logger.debug(
+            "Calculated limits (%f, %f) - (%f, %f)",
+            self.xmin,
+            self.ymin,
+            self.xmax,
+            self.ymax,
+        )
 
     def width(self):
         return self.xmax - self.xmin
@@ -137,12 +152,13 @@ class MeshPlot(GraphicsObject):
         minr, maxr = self._LUTitem.getLevels()
         logger.debug("Recoloring to changed levels: (%f, %f)", minr, maxr)
         if self.data is not None:
-            scaled = (self.data - minr)/(maxr - minr)
+            scaled = (self.data - minr) / (maxr - minr)
 
             logger.debug("Calculating new colors")
             self.rgb_data = self._LUTitem.gradient.colorMap().map(scaled, mode="qcolor")
             logger.debug("Done")
             self.update()
+
     ###
     # Functions relating to drawing
 
@@ -157,7 +173,7 @@ class MeshPlot(GraphicsObject):
         visible = self.parentItem().boundingRect()
         if self.polygons is not None and self.polygons:
             p.setPen(mkPen(None))
-            for poly in self.polygons: #pylint: disable=not-an-iterable
+            for poly in self.polygons:  # pylint: disable=not-an-iterable
                 if not poly[1].boundingRect().intersects(visible):
                     continue
                 p.setBrush(self.rgb_data[poly[0]])
@@ -183,6 +199,8 @@ class MeshPlot(GraphicsObject):
             # ourselves to the plot window.
             pass
         else:
-            raise NotImplementedError("parentChanged is not implemented for anything "
-                                      "other than ExtendedPlotWindows at this time. "
-                                      f"Got {type(view_box)}.")
+            raise NotImplementedError(
+                "parentChanged is not implemented for anything "
+                "other than ExtendedPlotWindows at this time. "
+                f"Got {type(view_box)}."
+            )

@@ -1,16 +1,18 @@
 from functools import partial
-from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
+
 import numpy as np
 import scipy.linalg
+from pyqtgraph import ColorMap, HistogramLUTItem, ImageItem, graphicsItems
+from Qt import QtCore, QtGui, QtWidgets
 
-from pyqtgraph import ImageItem, ColorMap, graphicsItems, HistogramLUTItem
-
+from ...logging import get_logger
+from .colors import COLORMAPS, DEFAULT_CMAP
 from .DataItem import ExtendedDataItem
 from .PlotWindow import ExtendedPlotWindow
 from .ViewBox import CustomViewBox
-from .colors import COLORMAPS, DEFAULT_CMAP
-from ...logging import get_logger
+
 logger = get_logger("ImageItem")
+
 
 class ExtendedImageItem(ExtendedDataItem, ImageItem):
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
@@ -45,9 +47,13 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
                 if g in COLORMAPS:
                     cmap = COLORMAPS[g]
                 else:
-                    pos = [x[0] for x in gradients[g]['ticks']]
-                    colors = [x[1] for x in gradients[g]['ticks']]
-                    mode = ColorMap.RGB if gradients[g]['mode'] == 'rgb' else ColorMap.HSV_POS
+                    pos = [x[0] for x in gradients[g]["ticks"]]
+                    colors = [x[1] for x in gradients[g]["ticks"]]
+                    mode = (
+                        ColorMap.RGB
+                        if gradients[g]["mode"] == "rgb"
+                        else ColorMap.HSV_POS
+                    )
                     cmap = ColorMap(pos, colors, mode=mode)
                     COLORMAPS[g] = cmap
 
@@ -73,15 +79,21 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
             yrange = rect.top(), rect.bottom()
 
             qaction = QtGui.QAction("Colour By Marquee", self.menu)
-            qaction.triggered.connect(partial(self.colorByMarquee, xrange=xrange, yrange=yrange))
+            qaction.triggered.connect(
+                partial(self.colorByMarquee, xrange=xrange, yrange=yrange)
+            )
             self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Plane Fit", self.menu)
-            qaction.triggered.connect(partial(self.planeFit, xrange=xrange, yrange=yrange))
+            qaction.triggered.connect(
+                partial(self.planeFit, xrange=xrange, yrange=yrange)
+            )
             self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Level Columns", self.menu)
-            qaction.triggered.connect(partial(self.levelColumns, xrange=xrange, yrange=yrange))
+            qaction.triggered.connect(
+                partial(self.levelColumns, xrange=xrange, yrange=yrange)
+            )
             self.menu.addAction(qaction)
 
         self.menu.setTitle("Image Item")
@@ -106,7 +118,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         limits = np.searchsorted(data, limits)
         if flipped:
             length = len(data)
-            limits = tuple(sorted(length-x for x in limits))
+            limits = tuple(sorted(length - x for x in limits))
         return limits
 
     def colorByMarquee(self, xrange, yrange):
@@ -117,7 +129,13 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
 
         logger.info("Doing a colorByMarquee between x: %r, y: %r", xrange, yrange)
-        logger.debug("Calculated limits: x: (%d, %d), y: (%d, %d)", xmin_p, xmax_p, ymin_p, ymax_p)
+        logger.debug(
+            "Calculated limits: x: (%d, %d), y: (%d, %d)",
+            xmin_p,
+            xmax_p,
+            ymin_p,
+            ymax_p,
+        )
 
         # Then calculate the min/max range of the array
         data = self.image[xmin_p:xmax_p, ymin_p:ymax_p]
@@ -134,10 +152,18 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         ymin_p, ymax_p = self.getLimits(self.setpoint_y, (ymin, ymax))
 
         logger.info("Doing a planeFit between x: %r, y: %r", xrange, yrange)
-        logger.debug("Calculated limits: x: (%d, %d), y: (%d, %d)", xmin_p, xmax_p, ymin_p, ymax_p)
+        logger.debug(
+            "Calculated limits: x: (%d, %d), y: (%d, %d)",
+            xmin_p,
+            xmax_p,
+            ymin_p,
+            ymax_p,
+        )
 
         # Get the coordinate grid
-        X, Y = np.meshgrid(self.setpoint_x[xmin_p:xmax_p], self.setpoint_y[ymin_p:ymax_p])
+        X, Y = np.meshgrid(
+            self.setpoint_x[xmin_p:xmax_p], self.setpoint_y[ymin_p:ymax_p]
+        )
         X = X.flatten()
         Y = Y.flatten()
         CG = np.c_[X, Y, np.ones(X.shape)]
@@ -145,14 +171,14 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         # Get the data in the correct format
         data = self.image[xmin_p:xmax_p, ymin_p:ymax_p]
         data = data.T.flatten()
-        assert(data[1] == self.image[xmin_p+1, ymin_p])
+        assert data[1] == self.image[xmin_p + 1, ymin_p]
 
         # Perform the fit
         C, _, _, _ = scipy.linalg.lstsq(CG, data, overwrite_a=True, overwrite_b=True)
 
         # Then, do the plane fit on the image
         X, Y = np.meshgrid(self.setpoint_x, self.setpoint_y)
-        Z = C[0]*X + C[1]*Y + C[2]
+        Z = C[0] * X + C[1] * Y + C[2]
         image = self.image - Z.T
         self.setImage(image)
 
@@ -174,14 +200,15 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         self.setImage(image)
 
     def rescale(self):
-        step_x = (self.setpoint_x[-1] - self.setpoint_x[0])/len(self.setpoint_x)
-        step_y = (self.setpoint_y[-1] - self.setpoint_y[0])/len(self.setpoint_y)
+        step_x = (self.setpoint_x[-1] - self.setpoint_x[0]) / len(self.setpoint_x)
+        step_y = (self.setpoint_y[-1] - self.setpoint_y[0]) / len(self.setpoint_y)
 
         self.resetTransform()
         tr = QtGui.QTransform()
         tr.translate(self.setpoint_x[0], self.setpoint_y[0])
         tr.scale(step_x, step_y)
         self.setTransform(tr)
+
 
 class ImageItemWithHistogram(ExtendedImageItem):
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
@@ -193,7 +220,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
 
         # Update _LUTitem
         self._LUTitem.setImageItem(self)
-        self._LUTitem.autoHistogramRange() # enable autoscaling
+        self._LUTitem.autoHistogramRange()  # enable autoscaling
 
         # Attach a signal handler on parent changed
         self._parent = None
@@ -232,6 +259,8 @@ class ImageItemWithHistogram(ExtendedImageItem):
             # ourselves to the plot window.
             pass
         else:
-            raise NotImplementedError("parentChanged is not implemented for anything "
-                                      "other than ExtendedPlotWindows at this time. "
-                                      f"Got {type(view_box)}.")
+            raise NotImplementedError(
+                "parentChanged is not implemented for anything "
+                "other than ExtendedPlotWindows at this time. "
+                f"Got {type(view_box)}."
+            )

@@ -1,17 +1,20 @@
 import struct
 
 import scipy.spatial as spatial
+from Qt import QtCore, QtGui
 
-from pyqtgraph.Qt import QtCore, QtGui
-
-from .MeshPlot import MeshPlot
-from .DataItem import ExtendedDataItem
 from ...logging import get_logger
+from .DataItem import ExtendedDataItem
+from .MeshPlot import MeshPlot
+
 logger = get_logger("VoronoiPlot")
+
 
 class VoronoiPlot(ExtendedDataItem, MeshPlot):
     def __init__(self, *args, positions=None, data=None, colormap=None, **kwargs):
-        super().__init__(*args, positions=positions, data=data, colormap=colormap, **kwargs)
+        super().__init__(
+            *args, positions=positions, data=data, colormap=colormap, **kwargs
+        )
 
         # Reserve spot for voronoi
         self.voronoi = None
@@ -35,17 +38,17 @@ class VoronoiPlot(ExtendedDataItem, MeshPlot):
         for ind, p in enumerate(self.voronoi.point_region):
             p_vertices = self.voronoi.regions[p]
             n_vertices = len(p_vertices)
-            buf = bytearray(4 + n_vertices*16)
-            struct.pack_into('>i', buf, 0, n_vertices)
+            buf = bytearray(4 + n_vertices * 16)
+            struct.pack_into(">i", buf, 0, n_vertices)
             for i, point in enumerate(p_vertices):
                 if point == -1:
                     break
                 point = self.voronoi.vertices[point]
-                struct.pack_into('>2d', buf, 4+i*16, point[0], point[1])
+                struct.pack_into(">2d", buf, 4 + i * 16, point[0], point[1])
             else:
                 ds = QtCore.QDataStream(QtCore.QByteArray.fromRawData(buf))
                 poly = QtGui.QPolygonF()
-                ds >> poly # pylint: disable=pointless-statement
+                ds >> poly  # pylint: disable=pointless-statement
                 self.polygons.append((ind, poly))
 
         logger.debug("Clearing Voronoi")

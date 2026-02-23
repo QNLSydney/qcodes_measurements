@@ -1,13 +1,14 @@
 from functools import partial
 
 import numpy as np
-from pyqtgraph.Qt import QtGui, QtWidgets
-
 from pyqtgraph import PlotDataItem, mkColor
+from Qt import QtGui, QtWidgets
 
-from .DataItem import ExtendedDataItem
 from ...logging import get_logger
+from .DataItem import ExtendedDataItem
+
 logger = get_logger("PlotDataItem")
+
 
 class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
     def __init__(self, *args, **kwargs):
@@ -42,9 +43,9 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
         return self.menu
 
     def selectColor(self):
-        color = self.opts['pen']
+        color = self.opts["pen"]
         if isinstance(color, QtGui.QPen):
-            color = color.color() # pylint: disable=no-member
+            color = color.color()  # pylint: disable=no-member
         elif not isinstance(color, QtGui.QColor):
             color = mkColor(color)
         self.colorDialog.setCurrentColor(color)
@@ -75,4 +76,4 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
         self.setData(x=xData, y=yData, connect=connect, *args, **kwargs)
 
     def setName(self, name):
-        self.opts['name'] = str(name)
+        self.opts["name"] = str(name)

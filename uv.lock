@@ -1440,6 +1440,7 @@ dependencies = [
     { name = "pyqtgraph" },
     { name = "pyside6" },
     { name = "qcodes" },
+    { name = "qt-py" },
     { name = "requests" },
     { name = "scipy" },
     { name = "tabulate" },
@@ -1459,6 +1460,7 @@ requires-dist = [
     { name = "pyqtgraph", specifier = ">=0.14" },
     { name = "pyside6", specifier = ">6.8" },
     { name = "qcodes", specifier = ">0.50" },
+    { name = "qt-py", specifier = ">=2.0.3" },
     { name = "requests", specifier = ">=2.32" },
     { name = "scipy", specifier = ">1.17" },
     { name = "tabulate", specifier = ">=0.9" },
@@ -1469,6 +1471,18 @@ requires-dist = [
 dev = [
     { name = "pylint", specifier = ">=4.0.0" },
     { name = "ty", specifier = ">=0.0.18" },
+]
+
+[[package]]
+name = "qt-py"
+version = "2.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "types-pyside6" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/02/16/38b9f30e90266adc5361920831b24e8ccf119da1a52a0496d1c7bf0a2583/qt_py-2.0.3.tar.gz", hash = "sha256:4e47c6dfd987fa422fe06c2e25983f8ce45896a11ae7e85f8d6d0fe09fca853f", size = 63961, upload-time = "2026-02-10T19:38:25.412Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/ce/e00ed5d0d6c5ebc8a9289ad8aaa7c6bf0b45e69c8a8a03949d9a9dbfc186/qt_py-2.0.3-py3-none-any.whl", hash = "sha256:57f9be6af06dcb320eb089f3faf9261d8935336b226c1db97a7dc0050d62c29a", size = 46114, upload-time = "2026-02-10T19:38:23.724Z" },
 ]
 
 [[package]]
@@ -1784,6 +1798,14 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0d/da/f4ada0fd08a9e4138fe3fd2bcd3797753593f423f19b1634a814b9b2a401/ty-0.0.18-py3-none-win32.whl", hash = "sha256:c5768607c94977dacddc2f459ace6a11a408a0f57888dd59abb62d28d4fee4f7", size = 9677964, upload-time = "2026-02-20T21:51:42.039Z" },
     { url = "https://files.pythonhosted.org/packages/5e/fa/090ed9746e5c59fc26d8f5f96dc8441825171f1f47752f1778dad690b08b/ty-0.0.18-py3-none-win_amd64.whl", hash = "sha256:b78d0fa1103d36fc2fce92f2092adace52a74654ab7884d54cdaec8eb5016a4d", size = 10636576, upload-time = "2026-02-20T21:51:29.159Z" },
     { url = "https://files.pythonhosted.org/packages/92/4f/5dd60904c8105cda4d0be34d3a446c180933c76b84ae0742e58f02133713/ty-0.0.18-py3-none-win_arm64.whl", hash = "sha256:01770c3c82137c6b216aa3251478f0b197e181054ee92243772de553d3586398", size = 10095449, upload-time = "2026-02-20T21:51:34.914Z" },
+]
+
+[[package]]
+name = "types-pyside6"
+version = "6.10.1.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/89/ebea68732d692df588cc3f5308bd341c0431f4acf70f39e3680089a83222/types_pyside6-6.10.1.1-py2.py3-none-any.whl", hash = "sha256:30ff49550c8f40e0606d70f9fbcf1f0c4b688d896df38f4f6a6912c231cbfa16", size = 590032, upload-time = "2026-01-30T15:53:10.556Z" },
 ]
 
 [[package]]

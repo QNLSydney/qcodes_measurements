@@ -1,9 +1,11 @@
-from pyqtgraph.Qt import QtCore
-from pyqtgraph import PlotCurveItem, PlotDataItem, ImageItem
+from pyqtgraph import ImageItem, PlotCurveItem, PlotDataItem
+from Qt import QtCore
 
-from .DataItem import ExtendedDataItem
 from ...logging import get_logger
+from .DataItem import ExtendedDataItem
+
 logger = get_logger("PlotMenu")
+
 
 class PlotMenuMixin:
     def raiseContextMenu(self, ev):
@@ -18,7 +20,7 @@ class PlotMenuMixin:
         i = 1
         actions = menu.actions()
         while i < len(actions):
-            if actions[i].isSeparator() and actions[i-1].isSeparator():
+            if actions[i].isSeparator() and actions[i - 1].isSeparator():
                 menu.removeAction(actions[i])
                 actions.remove(actions[i])
                 continue
@@ -97,6 +99,7 @@ class PlotMenuMixin:
                     menuItems.append(self.menu.addMenu(item[1]))
 
         return itemsToAdd
+
 
 class ImageMenuMixin:
     pass

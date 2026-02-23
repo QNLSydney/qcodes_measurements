@@ -1,14 +1,23 @@
 import re
 import sys
+from typing import Any
+
 import numpy as np
-import pyqtgraph.Qt.QtGui
-import pyqtgraph.Qt.QtWidgets
+from Qt import QtGui, QtWidgets
 
 from ...logging import get_logger
-from ..multiprocess import ObjectProxy, QtProcess, ClosedError
+from ..multiprocess import ClosedError, ObjectProxy, QtProcess
+
 
 # Get access to module level variables
-this = sys.modules[__name__]
+class _Globals:
+    app: QtWidgets.QApplication
+    proc: QtProcess
+    rpg: Any
+    rbuiltins: Any
+
+
+this = _Globals()
 rpg = None
 logger = get_logger("RPGWrapper")
 
@@ -53,10 +62,10 @@ def _set_defaults(remote):
 
 def start_remote():
     # Check that a QApplication has been created
-    if pyqtgraph.Qt.QtWidgets.QApplication.instance() is None:
-        this.app = pyqtgraph.Qt.QtWidgets.QApplication([])
+    if QtWidgets.QApplication.instance() is None:
+        this.app = QtWidgets.QApplication([])
     else:
-        this.app = pyqtgraph.Qt.QtWidgets.QApplication.instance()
+        this.app = QtWidgets.QApplication.instance()
 
     this.proc = QtProcess(debug=False)
     this.rpg = this.proc._import("qcodes_measurements.plot.rpyplot", timeout=20)
@@ -171,7 +180,7 @@ class RPGWrappedBase(ObjectProxy):
                 return inst
 
             # Get name of remote type
-            remote_type = inst._getSpecialAttr('__class__').__name__
+            remote_type = inst._getSpecialAttr("__class__").__name__
 
             # Check if we have a list of objects:
             if remote_type in ("tuple", "list"):

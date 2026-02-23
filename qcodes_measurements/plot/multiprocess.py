@@ -173,7 +173,7 @@ class RemoteQtEventHandler(RemoteEventHandler):
         self.timer = None
 
     def startEventTimer(self):
-        from pyqtgraph.Qt import QtCore
+        from Qt import QtCore
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.processRequests)
@@ -183,7 +183,7 @@ class RemoteQtEventHandler(RemoteEventHandler):
         try:
             return RemoteEventHandler.processRequests(self)
         except (ClosedError, BrokenPipeError):
-            from pyqtgraph.Qt import QtWidgets
+            from Qt import QtWidgets
 
             if self.timer is not None:
                 self.timer.stop()
@@ -222,7 +222,7 @@ class QtProcess(Process):
         if "target" not in kwds:
             kwds["target"] = startQtEventLoop
 
-        from pyqtgraph.Qt import (
+        from Qt import (
             QtWidgets,
         )  # # avoid module-level import to keep bootstrap snappy.
 
@@ -237,9 +237,7 @@ class QtProcess(Process):
         self.startEventTimer()
 
     def startEventTimer(self):
-        from pyqtgraph.Qt import (
-            QtCore,
-        )  # # avoid module-level import to keep bootstrap snappy.
+        from Qt import QtCore  # # avoid module-level import to keep bootstrap snappy.
 
         self.timer = QtCore.QTimer()
         if self._processRequests:
@@ -275,7 +273,7 @@ def startQtEventLoop(name, conn, ppid, debug=False):
     sys.stderr = LoggingStream(logger, "error")
 
     logger.info("Connected; starting remote proxy.")
-    from pyqtgraph.Qt import QtWidgets
+    from Qt import QtWidgets
 
     app = QtWidgets.QApplication.instance()
     if app is None:

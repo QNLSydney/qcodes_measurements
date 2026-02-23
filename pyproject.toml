@@ -19,6 +19,7 @@ dependencies = [
     "tqdm>4.67",
     "requests>=2.32",
     "pyside6>6.8",
+    "qt-py>=2.0.3",
 ]
 
 [dependency-groups]
