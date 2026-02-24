@@ -243,8 +243,8 @@ class ImageItemWithHistogram(ExtendedImageItem):
     def getHistogramLUTItem(self):
         return self._LUTitem
 
-    def parentChanged(self):
-        super().parentChanged()
+    def changeParent(self):
+        super().changeParent()
         # Add the histogram to the parent
         view_box = self.getViewBox()
         if isinstance(view_box, ExtendedPlotWindow):
@@ -261,7 +261,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
             pass
         else:
             raise NotImplementedError(
-                "parentChanged is not implemented for anything "
+                "changeParent is not implemented for anything "
                 "other than ExtendedPlotWindows at this time. "
                 f"Got {type(view_box)}."
             )
