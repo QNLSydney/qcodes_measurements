@@ -27,7 +27,7 @@ class VoronoiPlot(ExtendedDataItem, MeshPlot):
         Convert the raw data into a voronoi plot
         """
         logger.debug("Generating voronoi graph")
-        if len(self.positions) > 2:
+        if self.positions is not None and len(self.positions) > 2:
             self.voronoi = spatial.Voronoi(self.positions)
         else:
             return
@@ -46,7 +46,7 @@ class VoronoiPlot(ExtendedDataItem, MeshPlot):
                 point = self.voronoi.vertices[point]
                 struct.pack_into(">2d", buf, 4 + i * 16, point[0], point[1])
             else:
-                ds = QtCore.QDataStream(QtCore.QByteArray.fromRawData(buf))
+                ds = QtCore.QDataStream(QtCore.QByteArray(buf))
                 poly = QtGui.QPolygonF()
                 ds >> poly  # pylint: disable=pointless-statement
                 self.polygons.append((ind, poly))

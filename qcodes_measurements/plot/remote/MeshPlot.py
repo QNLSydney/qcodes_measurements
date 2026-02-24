@@ -28,7 +28,7 @@ class MeshPlot(GraphicsObject):
         self.positions = positions
         self.data = data
         self.rgb_data: Union[None, np.ndarray] = None
-        self.polygons: List[QtGui.QPolygonF] = []
+        self.polygons: List[tuple[int, QtGui.QPolygonF]] = []
         self.xmin, self.xmax = 0, 0
         self.ymin, self.ymax = 0, 0
         if positions is not None and data is not None:
@@ -171,7 +171,7 @@ class MeshPlot(GraphicsObject):
     def paint(self, p, _options, _widget):
         logger.debug("Starting paint")
         visible = self.parentItem().boundingRect()
-        if self.polygons is not None and self.polygons:
+        if self.polygons is not None and self.polygons and self.rgb_data is not None:
             p.setPen(mkPen(None))
             for poly in self.polygons:  # pylint: disable=not-an-iterable
                 if not poly[1].boundingRect().intersects(visible):

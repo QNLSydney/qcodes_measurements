@@ -15,15 +15,11 @@
 from math import ceil
 from typing import Dict, List, Tuple, Union
 
+# In addition, try and load extra matplotlib colormaps
+import matplotlib as mpl
 from numpy import linspace, ndarray
 from pyqtgraph import ColorMap
 from pyqtgraph.graphicsItems import GradientEditorItem
-
-# In addition, try and load extra matplotlib colormaps
-try:
-    import matplotlib as mpl
-except ImportError:
-    mpl = None
 
 __all__ = ["COLORMAPS", "DEFAULT_CMAP"]
 
@@ -1072,22 +1068,21 @@ __data__: Dict[str, Union[List, Tuple, ndarray]] = {
 }
 
 # Add some extra matplotlib colors
-if mpl is not None:
-    gradient = linspace(0, 1, 256)
-    # More perceptually uniform color schemes
-    __data__["cividis"] = mpl.colormaps["cividis"](gradient)[:, 0:3]
-    # Diverging color schemes
-    __data__["twilight"] = mpl.colormaps["twilight"](gradient)[:, 0:3]
-    __data__["twilight_shifted"] = mpl.colormaps["twilight_shifted"](gradient)[:, 0:3]
-    __data__["Spectral"] = mpl.colormaps["Spectral"](gradient)[:, 0:3]
-    __data__["SpectralBack"] = mpl.colormaps["Spectral"](gradient)[:, 0:3][::-1]
-    __data__["coolwarm"] = mpl.colormaps["coolwarm"](gradient)[:, 0:3]
-    __data__["bwr"] = mpl.colormaps["bwr"](gradient)[:, 0:3]
-    __data__["RdBu"] = mpl.colormaps["RdBu"](gradient)[:, 0:3]
-    # Others
-    __data__["ocean"] = mpl.colormaps["ocean"](gradient)[:, 0:3]
-    __data__["gist_earth"] = mpl.colormaps["gist_earth"](gradient)[:, 0:3]
-    __data__["terrain"] = mpl.colormaps["terrain"](gradient)[:, 0:3]
+gradient = linspace(0, 1, 256)
+# More perceptually uniform color schemes
+__data__["cividis"] = mpl.colormaps["cividis"](gradient)[:, 0:3]
+# Diverging color schemes
+__data__["twilight"] = mpl.colormaps["twilight"](gradient)[:, 0:3]
+__data__["twilight_shifted"] = mpl.colormaps["twilight_shifted"](gradient)[:, 0:3]
+__data__["Spectral"] = mpl.colormaps["Spectral"](gradient)[:, 0:3]
+__data__["SpectralBack"] = mpl.colormaps["Spectral"](gradient)[:, 0:3][::-1]
+__data__["coolwarm"] = mpl.colormaps["coolwarm"](gradient)[:, 0:3]
+__data__["bwr"] = mpl.colormaps["bwr"](gradient)[:, 0:3]
+__data__["RdBu"] = mpl.colormaps["RdBu"](gradient)[:, 0:3]
+# Others
+__data__["ocean"] = mpl.colormaps["ocean"](gradient)[:, 0:3]
+__data__["gist_earth"] = mpl.colormaps["gist_earth"](gradient)[:, 0:3]
+__data__["terrain"] = mpl.colormaps["terrain"](gradient)[:, 0:3]
 
 
 COLORMAPS = {}
