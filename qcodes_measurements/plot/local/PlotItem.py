@@ -1,4 +1,6 @@
-from qcodes.parameters import Parameter
+from typing import cast
+
+from qcodes.parameters import ArrayParameter, Parameter
 
 from .ImageItem import ImageItemWithHistogram
 from .PlotDataItem import ExtendedPlotDataItem
@@ -59,12 +61,22 @@ class BasePlotItem(RPGWrappedBase):
             raise TypeError(f"param_y must be a qcodes parameter. Got {type(param_y)}")
 
         if param_x_setpoint:
+            assert (
+                isinstance(param_x, ArrayParameter)
+                and param_x.setpoint_labels is not None
+                and param_x.setpoint_units is not None
+            )
             self.bot_axis.label = param_x.setpoint_labels[0]
             self.bot_axis.units = param_x.setpoint_units[0]
         else:
             self.bot_axis.label = param_x.label
             self.bot_axis.units = param_x.unit
         if param_y_setpoint:
+            assert (
+                isinstance(param_y, ArrayParameter)
+                and param_y.setpoint_labels is not None
+                and param_y.setpoint_units is not None
+            )
             self.left_axis.label = param_y.setpoint_labels[0]
             self.left_axis.units = param_y.setpoint_units[0]
         else:
@@ -81,11 +93,15 @@ class BasePlotItem(RPGWrappedBase):
 
     @property
     def left_axis(self) -> PlotAxis:
-        return self.getAxis("left")
+        axis = self.getAxis("left")
+        assert isinstance(axis, PlotAxis)
+        return axis
 
     @property
     def bot_axis(self) -> PlotAxis:
-        return self.getAxis("bottom")
+        axis = self.getAxis("bottom")
+        assert isinstance(axis, PlotAxis)
+        return axis
 
     @property
     def traces(self):

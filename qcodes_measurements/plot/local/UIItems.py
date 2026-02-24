@@ -2,10 +2,12 @@ from qcodes import ParamSpec
 
 from .RemoteProcessWrapper import RPGWrappedBase
 
+
 class TableWidget(RPGWrappedBase):
     """
     Table
     """
+
     _base = "TableWidget"
 
     def getData(self):
@@ -14,6 +16,7 @@ class TableWidget(RPGWrappedBase):
         """
         nRows = self.rowCount()
         nCols = self.columnCount()
+        assert isinstance(nRows, int) and isinstance(nCols, int)
         rowTitles = []
         rowData = []
         for i in range(nRows):
@@ -29,23 +32,24 @@ class TableWidget(RPGWrappedBase):
         Get the headers from the table.
         """
         nCols = self.columnCount()
+        assert isinstance(nCols, int)
         colTitles = []
         for i in range(nCols):
             colTitles.append(self.horizontalHeaderItem(i).text())
         return colTitles
 
+
 class LegendItem(RPGWrappedBase):
     """
     Legend handling code
     """
+
     _base = "LegendItem"
+
 
 class TextItem(RPGWrappedBase):
     _base = "DraggableTextItem"
-    _ANCHORS = {'tl': (0,0),
-                'tr': (1,0),
-                'bl': (0,1),
-                'br': (1,1)}
+    _ANCHORS = {"tl": (0, 0), "tr": (1, 0), "bl": (0, 1), "br": (1, 1)}
 
     def setParentItem(self, p):
         self._base_inst.setParentItem(p)
@@ -56,13 +60,14 @@ class TextItem(RPGWrappedBase):
         (tl, tr, bl, br)
         """
         anchor_point = TextItem._ANCHORS[anchor]
-        self._base_inst.anchor(itemPos=anchor_point,
-                               parentPos=anchor_point,
-                               offset=(0,0))
+        self._base_inst.anchor(
+            itemPos=anchor_point, parentPos=anchor_point, offset=(0, 0)
+        )
 
     @property
     def offset(self):
         return self.getOffset()
+
     @offset.setter
     def offset(self, offs):
         if not isinstance(offs, tuple) or len(offs) != 2:
@@ -73,6 +78,7 @@ class TextItem(RPGWrappedBase):
     def text(self):
         text = "".join(self.getText()).replace("<br>", "\n")
         return text
+
     @text.setter
     def text(self, text):
         # Replace new lines with HTML line breaks
@@ -81,12 +87,14 @@ class TextItem(RPGWrappedBase):
         text = text.replace("\n", "<br>")
         self.setText(str(text))
 
+
 class PlotAxis(RPGWrappedBase):
     _base = "AxisItem"
 
     @property
     def label(self):
         return self.labelText
+
     @label.setter
     def label(self, text):
         self.setLabel(text=text, units=self.labelUnits)
@@ -94,6 +102,7 @@ class PlotAxis(RPGWrappedBase):
     @property
     def units(self):
         return self.labelUnits
+
     @units.setter
     def units(self, units):
         self.setLabel(text=self.labelText, units=units)
@@ -101,6 +110,7 @@ class PlotAxis(RPGWrappedBase):
     @property
     def unit(self):
         return self.labelUnits
+
     @unit.setter
     def unit(self, units):
         self.setLabel(text=self.labelText, units=units)
@@ -111,7 +121,9 @@ class PlotAxis(RPGWrappedBase):
         if self.unit != paramspec.unit:
             return False
         return True
+
     def setParamspec(self, paramspec: ParamSpec):
         self.label = paramspec.label
         self.unit = paramspec.unit
+
     paramspec = property(None, setParamspec)

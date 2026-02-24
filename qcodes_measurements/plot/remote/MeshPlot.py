@@ -3,7 +3,7 @@ from typing import List, Union
 
 import numpy as np
 from pyqtgraph import GraphicsObject, HistogramLUTItem, mkPen
-from Qt import QtCore
+from Qt import QtCore, QtGui
 
 from ...logging import get_logger
 from .colors import COLORMAPS, DEFAULT_CMAP
@@ -17,8 +17,8 @@ class MeshPlot(GraphicsObject):
     def __init__(
         self,
         *args,
-        positions: np.array | None = None,
-        data: np.array | None = None,
+        positions: np.ndarray | None = None,
+        data: np.ndarray | None = None,
         colormap: str | None = None,
         **kwargs,
     ):
@@ -27,8 +27,8 @@ class MeshPlot(GraphicsObject):
         # Initialize data structures
         self.positions = positions
         self.data = data
-        self.rgb_data: Union[None, np.array] = None
-        self.polygons: List[QtCore.QPolygonF] = []
+        self.rgb_data: Union[None, np.ndarray] = None
+        self.polygons: List[QtGui.QPolygonF] = []
         self.xmin, self.xmax = 0, 0
         self.ymin, self.ymax = 0, 0
         if positions is not None and data is not None:

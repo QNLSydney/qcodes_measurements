@@ -1,14 +1,17 @@
 from typing import List
-from pyqtgraph.Qt.QtWidgets import QGraphicsProxyWidget
 
 from pyqtgraph import GraphicsLayoutWidget
 from pyqtgraph.exporters import ImageExporter, SVGExporter
+from pyqtgraph.Qt.QtWidgets import QGraphicsProxyWidget
 
 from ...logging import get_logger
+
 logger = get_logger("PlotWindow")
+
 
 class ExtendedPlotWindow(GraphicsLayoutWidget):
     _windows: List["ExtendedPlotWindow"] = []
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._windows.append(self)
@@ -21,6 +24,8 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
             exporter = ImageExporter(self.scene())
         elif export_type == "svg":
             exporter = SVGExporter(self.scene())
+        else:
+            raise ValueError("Unrecogized exporter. Must be image or svg.")
         exporter.export(fname)
         del exporter
 

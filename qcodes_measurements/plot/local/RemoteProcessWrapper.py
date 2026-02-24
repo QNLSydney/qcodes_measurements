@@ -107,11 +107,12 @@ class RPGWrappedBase(ObjectProxy):
     _subclass_types: dict[str, type] = {}
 
     # Reserve names for local variables, so they aren't proxied.
-    _base_inst = None
+    _base: str = ""
+    _base_inst: ObjectProxy = None
 
     # Cache remote functions, allowing proxy options for each to be set
-    _remote_functions = None
-    _remote_function_options = None
+    _remote_functions: dict = {}
+    _remote_function_options: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):  # pylint: disable=super-init-not-called
         self._remote_functions = {}
@@ -230,7 +231,7 @@ class RPGWrappedBase(ObjectProxy):
     def wrap_getters(self, f):
         return auto_wrap(f)
 
-    def __setattr__(self, name, val, **kwargs):  # pylint: disable=arguments-differ
+    def __setattr__(self, name, val, **kwargs):  # pylint: disable
         for cls in self.__class__.__mro__:
             if name in cls.__dict__:
                 object.__setattr__(self, name, val)

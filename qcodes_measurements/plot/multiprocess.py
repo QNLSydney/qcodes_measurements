@@ -1,7 +1,6 @@
 # pylint: disable=import-outside-toplevel,invalid-name,wrong-import-position
 import atexit
 import multiprocessing
-import multiprocessing.connection
 import os
 import sys
 import time

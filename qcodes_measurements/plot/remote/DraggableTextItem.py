@@ -6,7 +6,7 @@ from pyqtgraph import (
     mkBrush,
     mkPen,
 )
-from Qt import QtCore, QtGui, QtWidgets
+from Qt import QtCore, QtWidgets
 
 from ...logging import get_logger
 
@@ -17,9 +17,11 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
     def __init__(self, *args, text="", offset=None):
         GraphicsWidget.__init__(self)
         GraphicsWidgetAnchor.__init__(self)
-        self.setFlag(self.ItemIgnoresTransformations)
-        self.layout = QtWidgets.QGraphicsGridLayout()
-        self.setLayout(self.layout)
+        self.setFlag(
+            QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations
+        )
+        self.graphics_layout = QtWidgets.QGraphicsGridLayout()
+        self.setLayout(self.graphics_layout)
         self.item_anchor = (0, 0)
         self.object_anchor = (0, 0)
         if offset is None:
@@ -29,7 +31,7 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
 
         self.label_item = LabelItem()
         self.label_item.setText(text)
-        self.layout.addItem(self.label_item, 0, 0)
+        self.graphics_layout.addItem(self.label_item, 0, 0)
 
         self.pen = mkPen(255, 255, 255, 100)
         self.brush = mkBrush(100, 100, 100, 50)
@@ -73,10 +75,10 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
         return QtCore.QRectF(0, 0, self.width(), self.height())
 
     def hoverEvent(self, ev):
-        ev.acceptDrags(QtCore.Qt.LeftButton)
+        ev.acceptDrags(QtCore.Qt.MouseButton.LeftButton)
 
     def mouseDragEvent(self, ev):
-        if ev.button() == QtCore.Qt.LeftButton:
+        if ev.button() == QtCore.Qt.MouseButton.LeftButton:
             dpos = ev.pos() - ev.lastPos()
             self.autoAnchor(self.pos() + dpos)
 

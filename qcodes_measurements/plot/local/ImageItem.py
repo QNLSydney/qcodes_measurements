@@ -1,9 +1,12 @@
-import numpy as np
-from qcodes.parameters import Parameter, ArrayParameter
+from typing import cast
 
-from .RemoteProcessWrapper import RPGWrappedBase, ensure_ndarray, get_remote
-from .ExtendedDataItem import ExtendedDataItem
+import numpy as np
+from qcodes.parameters import ArrayParameter, Parameter
+
 from .ColorMap import ColorMap
+from .ExtendedDataItem import ExtendedDataItem
+from .RemoteProcessWrapper import RPGWrappedBase, ensure_ndarray, get_remote
+from .UIItems import PlotAxis
 
 
 class HistogramLUTItem(RPGWrappedBase):
@@ -21,8 +24,8 @@ class HistogramLUTItem(RPGWrappedBase):
         self._remote_function_options["imageChanged"] = {"callSync": "off"}
 
     @property
-    def axis(self):
-        return self.__getattr__("axis", _location="remote")
+    def axis(self) -> PlotAxis:
+        return cast(PlotAxis, self.__getattr__("axis", _location="remote"))
 
     @property
     def allowAdd(self):
@@ -124,7 +127,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
     _base = "ImageItemWithHistogram"
 
     # Local Variables
-    _histogram = None
+    _histogram: None | HistogramLUTItem = None
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
@@ -167,9 +170,11 @@ class ImageItemWithHistogram(ExtendedImageItem):
         self.histogram.axis.units = param_z.unit
 
     @property
-    def histogram(self):
+    def histogram(self) -> HistogramLUTItem:
         if self._histogram is None:
             self._histogram = self.getHistogramLUTItem()
+        if self._histogram is None:
+            raise ValueError("No histogram found!")
         return self._histogram
 
     @property

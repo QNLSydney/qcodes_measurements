@@ -2,7 +2,8 @@ from functools import partial
 
 import numpy as np
 import scipy.linalg
-from pyqtgraph import ColorMap, HistogramLUTItem, ImageItem, graphicsItems
+from pyqtgraph import ColorMap, HistogramLUTItem, ImageItem
+from pyqtgraph.graphicsItems import GradientEditorItem
 from Qt import QtCore, QtGui, QtWidgets
 
 from ...logging import get_logger
@@ -42,7 +43,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
             l = 80
             self.gradientSelectorMenu = QtWidgets.QMenu()
             self.gradientSelectorMenu.setTitle("Color Scale")
-            gradients = graphicsItems.GradientEditorItem.Gradients
+            gradients = GradientEditorItem.Gradients
             for g in gradients:
                 if g in COLORMAPS:
                     cmap = COLORMAPS[g]

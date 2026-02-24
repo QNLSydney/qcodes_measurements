@@ -8,10 +8,10 @@ class ColorMap(RPGWrappedBase):
     _all_colors: Dict[str, "ColorMap"] = {}
 
     # Reserve names of local variables
-    _name = None
+    _name: str = ""
 
     def __init__(self, name, pos, color, *args, **kwargs):
-        self._name = None
+        self._name = name
         super().__init__(pos, color, *args, **kwargs)
 
         # Keep track of all color maps, and add them to the list of available colormaps

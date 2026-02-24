@@ -17,8 +17,12 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
 
         # Plot color selection dialog
         self.colorDialog = QtWidgets.QColorDialog()
-        self.colorDialog.setOption(QtWidgets.QColorDialog.ShowAlphaChannel, True)
-        self.colorDialog.setOption(QtWidgets.QColorDialog.DontUseNativeDialog, True)
+        self.colorDialog.setOption(
+            QtWidgets.QColorDialog.ColorDialogOption.ShowAlphaChannel, True
+        )
+        self.colorDialog.setOption(
+            QtWidgets.QColorDialog.ColorDialogOption.DontUseNativeDialog, True
+        )
         self.colorDialog.colorSelected.connect(self.colorSelected)
 
         # Store x-setpoint, since we may add nan values back in

@@ -1,8 +1,9 @@
 from typing import Sequence
 
+from .PlotItem import PlotItem
 from .RemoteProcessWrapper import RPGWrappedBase, get_remote
 from .UIItems import TableWidget
-from .PlotItem import PlotItem
+
 
 class BasePlotWindow(RPGWrappedBase):
     _base = "GraphicsLayoutWidget"
@@ -19,8 +20,11 @@ class BasePlotWindow(RPGWrappedBase):
             self.win_title = title
 
     @property
-    def win_title(self):
-        return self.windowTitle()
+    def win_title(self) -> str:
+        title = self.windowTitle()
+        assert isinstance(title, str)
+        return title
+
     @win_title.setter
     def win_title(self, title):
         self.setWindowTitle(str(title))
@@ -47,6 +51,7 @@ class BasePlotWindow(RPGWrappedBase):
     @property
     def items(self):
         return self.getLayoutItems(_returnType="proxy")
+
 
 class PlotWindow(BasePlotWindow):
     _base = "ExtendedPlotWindow"

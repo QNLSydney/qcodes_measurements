@@ -71,7 +71,7 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
 
     def mouseDragEvent(self, ev, axis=None):
         # Draw the box
-        if ev.button() & QtCore.Qt.LeftButton:
+        if ev.button() & QtCore.Qt.MouseButton.LeftButton:
             ev.accept()
             if not self.scaleBox.isVisible():
                 self.scaleBox.show()
@@ -181,7 +181,7 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
 
     # On right-click, raise the context menu
     def mouseClickEvent(self, ev):
-        if ev.button() == QtCore.Qt.RightButton:
+        if ev.button() == QtCore.Qt.MouseButton.RightButton:
             if self.raiseContextMenu(ev):
                 ev.accept()
 
@@ -227,6 +227,7 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
     def expand(self, axis="XY"):
         # Get the viewbox to scale
         vb = self.getViewBox()
+        assert vb is not None
         # Get the size of the scale box
         p = self.mapRectToItem(vb.childGroup, self.boundingRect())
 
