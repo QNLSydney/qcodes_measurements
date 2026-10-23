@@ -50,6 +50,42 @@ Use `do0d` for a single measurement or `do2d` for a two-dimensional sweep. Pass
 `plot=False` to disable plotting or `save=False` to skip saving figures. Plot an
 existing dataset with `qcodes_measurements.plot.plot_dataset(dataset)`.
 
+## Devices
+
+Define named gates and ohmic contacts in `device.yaml`:
+
+```yaml
+instruments:
+  device:
+    type: qcodes_measurements.device.Device
+    init:
+      default_gate_limit: [-2.5, 0]
+      default_ohmic_limit: [-0.002, 0.002]
+      gates:
+        G1:
+          source: mdac.ch01
+          label: Gate 1
+          limits: [-1.5, 0]
+      ohmics:
+        S:
+          source: mdac.ch02
+          label: Source bias
+          scale: 100  # 100:1 voltage divider on the ohmic source
+```
+
+Combine this with your instrument definitions in `instrument.yaml`:
+
+```python
+from qcodes.station import Station
+
+station = Station(config_file=["instrument.yaml", "device.yaml"])
+mdac = station.load_mdac()
+device = station.load_device()
+
+# And set voltages on gates
+device.G1(-0.1)
+```
+
 ## Instrument mirrors
 
 Run each mirror in its own terminal. Connect to an MDAC on `COM4` and a Yoko at
