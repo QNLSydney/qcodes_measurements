@@ -3,8 +3,11 @@ Support functions for digital gates
 """
 
 from functools import partial
+from typing import Unpack
 
 from qcodes.instrument import ChannelList
+from qcodes.instrument.instrument_base import InstrumentBaseKWArgs
+from qcodes.parameters import ParameterBase
 from qcodes.validators import Bool, Enum, MultiType, Numbers
 
 try:
@@ -43,26 +46,22 @@ class DigitalGate(Gate):
         io_mode=None,
         **kwargs,
     ):
+        self._v_high = v_high
+        self._v_low = v_low
+        self.v_hist = v_hist
+        self.io_mode = DigitalMode.UNDEF if io_mode is None else io_mode
+        self.lock = False
+
         # Initialize the parameter
         super().__init__(
             name=name,
             source=source,
             label=label,
-            rate=None,
-            max_step=None,
             default_mode=GateMode.FREE,
             **kwargs,
         )
 
         self.vals = MultiType(Bool(), Numbers())
-        self._v_high = v_high
-        self._v_low = v_low
-        self.v_hist = v_hist
-        if io_mode is None:
-            io_mode = DigitalMode.UNDEF
-        self.io_mode = io_mode
-        # If a gate is locked, it's value won't be changed
-        self.lock = False
 
     @property
     def v_high(self):
@@ -226,24 +225,24 @@ class DigitalDevice(Device):
     voltages
     """
 
-    def __init__(self, name):
-        super().__init__(name)
+    def __init__(self, name: str, **kwargs: Unpack[InstrumentBaseKWArgs]) -> None:
+        super().__init__(name, **kwargs)
 
         # Add digital gates to the device
         digital_gates = ChannelList(self, "digital_gates", DigitalGateWrapper)
-        self.add_submodule("digital_gates", digital_gates)
+        self.digital_gates = self.add_submodule("digital_gates", digital_gates)
 
         # Add digital parameters
         self._v_high = 1.8
         self._v_low = 0
-        self.add_parameter(
+        self.v_high = self.add_parameter(
             "v_high",
             initial_value=1.8,
             get_cmd=partial(getattr, self, "_v_high"),
             set_cmd=self._update_vhigh,
             vals=Numbers(),
         )
-        self.add_parameter(
+        self.v_low = self.add_parameter(
             "v_low",
             initial_value=0,
             get_cmd=partial(getattr, self, "_v_low"),
@@ -268,12 +267,13 @@ class DigitalDevice(Device):
         )
         if io_mode is not None:
             gate = self.get_channel_controller(self.parameters[name])
+            assert isinstance(gate, DigitalGateWrapper)
             if gate.io_mode() != io_mode:
                 gate.io_mode(io_mode)
             if initial_value is not None:
                 self.parameters[name](initial_value)
 
-    def store_new_param(self, new_param):
+    def store_new_param(self, new_param: ParameterBase) -> None:
         if isinstance(new_param, DigitalGate):
             if isinstance(new_param.source, MDAC.MDACChannel):
                 self.digital_gates.append(MDACDigitalGateWrapper(new_param, new_param.name))

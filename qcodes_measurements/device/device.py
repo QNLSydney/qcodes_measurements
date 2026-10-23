@@ -1,5 +1,8 @@
+from typing import Any, Unpack
+
 from qcodes.instrument import ChannelList, InstrumentBase
-from qcodes.parameters import Parameter
+from qcodes.instrument.instrument_base import InstrumentBaseKWArgs, TParameter
+from qcodes.parameters import ParameterBase
 
 from .gate import (
     BBGateWrapper,
@@ -21,16 +24,16 @@ from .bb import BBChan
 
 
 class Device(InstrumentBase):
-    def __init__(self, name):
-        super().__init__(name)
+    def __init__(self, name: str, **kwargs: Unpack[InstrumentBaseKWArgs]) -> None:
+        super().__init__(name, **kwargs)
 
         # Add gates to the device
         gates = ChannelList(self, "gates", GateWrapper)
-        self.add_submodule("gates", gates)
+        self.gates = self.add_submodule("gates", gates)
 
         # Add ohmics to the device
         ohmics = ChannelList(self, "ohmics", OhmicWrapper)
-        self.add_submodule("ohmics", ohmics)
+        self.ohmics = self.add_submodule("ohmics", ohmics)
 
     def add_gate(self, name, source, state=None, **kwargs):
         if "initial_value" in kwargs and state is not None:
@@ -55,8 +58,11 @@ class Device(InstrumentBase):
             gate.state(state)
 
     def add_parameter(
-        self, name, parameter_class: type[Parameter] | None = Parameter, **kwargs
-    ) -> Parameter:
+        self,
+        name: str,
+        parameter_class: type[TParameter] | None = None,
+        **kwargs: Any,
+    ) -> TParameter:
         """
         Add a new parameter to the instrument and store it in an appropriate list, if
         we are keeping track of gates/ohmics.
@@ -65,7 +71,7 @@ class Device(InstrumentBase):
         self.store_new_param(new_param)
         return new_param
 
-    def store_new_param(self, new_param):
+    def store_new_param(self, new_param: ParameterBase) -> None:
         """
         Store the new parameter in an appropriate list of gates or ohmics
         """

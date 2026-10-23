@@ -42,7 +42,7 @@ class BBChan(InstrumentChannel):
     def connect_dac(self, dac_source):
         self.dac_source = dac_source
         if "voltage" in self.parameters:
-            del self.parameters["voltage"]
+            self.remove_parameter("voltage")
         return self
 
     def dummy_voltage(self, val=None):

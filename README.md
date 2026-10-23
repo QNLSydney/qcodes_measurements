@@ -42,6 +42,64 @@ To plot an existing dataset, use `qcodes_measurements.plot.plot_dataset(dataset)
 The bundled MDAC driver is available as `qcodes_measurements.drivers.MDAC`;
 device wrappers also support an existing top-level `MDAC` installation.
 
+`Device.add_parameter` follows QCoDeS's generic API: it accepts any
+`ParameterBase` subclass and returns that subclass, including `Gate`, `Ohmic`,
+and `DigitalGate`. Omitting `parameter_class`, or passing `None`, creates a
+regular `Parameter`. Gates and ohmics also get channel controllers in
+`device.gates` and `device.ohmics`; digital gates use `device.digital_gates`
+on a `DigitalDevice`.
+
+A QCoDeS 0.61.1 station config can instantiate an empty device:
+
+```yaml
+instruments:
+  device:
+    type: qcodes_measurements.device.Device
+    init:
+      label: Sample
+```
+
+After loading the DAC and device, wire up contacts in Python:
+
+```python
+from qcodes.station import Station
+from qcodes_measurements.device import Device
+
+station = Station(config_file="station.yaml")
+mdac = station.load_instrument("mdac")  # Include the DAC's config in station.yaml.
+device = station.load_instrument("device")
+assert isinstance(device, Device)
+device.add_gate("G1", mdac.ch01)
+device.add_ohmic("S", mdac.ch02)
+```
+
+QCoDeS 0.61.1's native `add_parameters` section cannot configure these contact
+wrappers. Its schema rejects a per-parameter `type` field, and its loader creates
+a `DelegateParameter` whenever `source` is present. That source must resolve to
+a **parameter within the instrument being configured**, rather than a channel
+on another station instrument. Changing `Gate` to its fully qualified name, or
+appending `.voltage` to `mdac.ch01`, does not remove these limitations.
+
+To support contact definitions entirely in YAML, `Device` would need an explicit
+configuration entry point, for example a new `init.contacts` constructor argument
+containing the contact definitions. It would need to resolve source paths against
+an explicitly supplied station or QCoDeS's instrument registry, select the
+parameter class, and call `add_gate`, `add_ohmic`, or `add_digital_gate`. Sources
+would have to be loaded first. Connection states and digital IO modes should be
+applied before initial voltages, as those helper methods already do. Such an
+`init.contacts` argument is a proposed extension and is not implemented here.
+Supporting the original `add_parameters` layout would instead require extending
+QCoDeS's station loader and schema, because source resolution happens before
+`Device.add_parameter` is called and custom type options are not forwarded.
+
+`Device` currently derives from `InstrumentBase`, so stations snapshot it under
+`components`. It has no `Instrument` registration or `close` method, and does not
+participate in station instrument revival, forced reconnection, or bulk instrument
+cleanup. Full station lifecycle support would require deriving from `Instrument`
+(and handling the standard `IDN` parameter) or providing a separate `Instrument`
+adapter. Its controllers intentionally have their underlying DAC channels as
+parents; changing the device's base class alone would not reparent them.
+
 Run development checks with uv:
 
 ```sh

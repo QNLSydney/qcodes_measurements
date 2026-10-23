@@ -17,7 +17,7 @@ class ChannelWrapper(InstrumentChannel):
         super().__init__(parent.source, name)
         self.gate = parent
         self._state = ConnState.UNDEF
-        self.add_parameter("state", get_cmd=self.get_state, set_cmd=self.set_state)
+        self.state = self.add_parameter("state", get_cmd=self.get_state, set_cmd=self.set_state)
 
     def get_state(self):
         return self._state

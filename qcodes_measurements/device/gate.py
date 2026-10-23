@@ -60,7 +60,7 @@ class Gate(Parameter):
         self.source = source
         self.rate = rate
         self.max_step = max_step
-        self.gate_mode = default_mode
+        self._gate_mode = self._parse_gate_mode(default_mode)
 
         # Check whether we have a hardware ramp
         if hasattr(source, "ramp"):
@@ -69,7 +69,9 @@ class Gate(Parameter):
             self.has_ramp = False
 
         # Initialize the parameter
-        super().__init__(name=name, label=label, unit="V", vals=self.vals, **kwargs)
+        super().__init__(
+            name=name, label=label, unit="V", vals=self._get_gate_validator(), **kwargs
+        )
 
         # Set the cache to a wrapped Gate cache
         self.cache = _GateCache(self)
@@ -84,20 +86,23 @@ class Gate(Parameter):
 
     @gate_mode.setter
     def gate_mode(self, val):
-        if isinstance(val, GateMode):
-            pass
-        elif isinstance(val, str):
-            val = GateMode[val]
-        else:
-            raise TypeError(f"Invalid gate mode. Must be one of {tuple(GateMode)}.")
+        self._gate_mode = self._parse_gate_mode(val)
+        self.vals = self._get_gate_validator()
 
-        self._gate_mode = val
-        if val is GateMode.BIAS:
-            self.vals = vals.Numbers(0, 0.5)
-        elif val is GateMode.COLD:
-            self.vals = vals.Numbers(-2.5, 0)
-        else:
-            self.vals = self.source.voltage.vals
+    @staticmethod
+    def _parse_gate_mode(val) -> GateMode:
+        if isinstance(val, GateMode):
+            return val
+        elif isinstance(val, str):
+            return GateMode[val]
+        raise TypeError(f"Invalid gate mode. Must be one of {tuple(GateMode)}.")
+
+    def _get_gate_validator(self):
+        if self._gate_mode is GateMode.BIAS:
+            return vals.Numbers(0, 0.5)
+        elif self._gate_mode is GateMode.COLD:
+            return vals.Numbers(-2.5, 0)
+        return self.source.voltage.vals
 
     # Overwrite snapshot so that we pass the call onto the underlying voltage
     # parameter. Further, we'll force an update since other types of set often
@@ -152,7 +157,9 @@ class Gate(Parameter):
         Validation handled by the set wrapper.
         """
         # Set the value if we are close
-        if abs(value - self.cache.raw_value) <= self.max_step:
+        # The wrapped cache is installed after Parameter.__init__, which can
+        # already call set_raw to apply initial_value. Read the source directly.
+        if abs(value - self.source.voltage.cache.get()) <= self.max_step:
             self.source.voltage(value)
             return
 
@@ -221,6 +228,9 @@ class Ohmic(Parameter):
         if label is None:
             label = name
 
+        # QCoDeS may call set_raw while applying initial_value in super().__init__.
+        self.source = source
+
         # Initialize the parameter
         super().__init__(
             name=f"{name}",
@@ -229,8 +239,6 @@ class Ohmic(Parameter):
             vals=vals.Numbers(-2e-3, 2e-3),
             **kwargs,
         )
-        self.source = source
-
         # Create a wrapped cache
         self.cache = _GateCache(self)
 
