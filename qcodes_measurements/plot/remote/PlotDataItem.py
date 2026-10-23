@@ -2,7 +2,7 @@ from functools import partial
 
 import numpy as np
 from pyqtgraph import PlotDataItem, mkColor
-from Qt import QtGui, QtWidgets
+from PySide6 import QtGui, QtWidgets
 
 from ...logging import get_logger
 from .DataItem import ExtendedDataItem

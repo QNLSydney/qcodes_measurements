@@ -108,10 +108,14 @@ class Process(RemoteEventHandler):
         # Start the process. We'll set the file that multiprocessing loads to this file
         old_main = getattr(sys.modules["__main__"], "__file__", None)
         sys.modules["__main__"].__file__ = __file__
-        self.proc = multiprocessing.Process(target=target, kwargs=data)
-        self.proc.start()
-        if old_main is not None:
-            sys.modules["__main__"].__file__ = old_main
+        try:
+            self.proc = multiprocessing.get_context("spawn").Process(target=target, kwargs=data)
+            self.proc.start()
+        finally:
+            if old_main is None:
+                del sys.modules["__main__"].__file__
+            else:
+                sys.modules["__main__"].__file__ = old_main
 
         ## Close one end of pipe to ensure there is only one writer per pipe
         child_conn.close()
@@ -132,7 +136,7 @@ class Process(RemoteEventHandler):
             start = time.time()
             while self.proc.is_alive():
                 if timeout is not None and time.time() - start > timeout:
-                    raise Exception("Timed out waiting for remote process to end.")
+                    raise TimeoutError("Timed out waiting for remote process to end.")
                 self.proc.join(0.05)
             self.conn.close()
             self.logger.info(
@@ -148,8 +152,8 @@ def startEventLoop(name, conn, ppid, debug=False):
     logger = get_logger(debug=debug)
 
     # Redirect stdout and stderr to the logger
-    sys.stdout = LoggingStream(logger.info)
-    sys.stderr = LoggingStream(logger.error)
+    sys.stdout = LoggingStream(logger, "info")
+    sys.stderr = LoggingStream(logger, "error")
 
     logger.info("Connected; starting remote proxy.\n")
 
@@ -172,7 +176,7 @@ class RemoteQtEventHandler(RemoteEventHandler):
         self.timer = None
 
     def startEventTimer(self):
-        from Qt import QtCore
+        from PySide6 import QtCore
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.processRequests)
@@ -182,7 +186,7 @@ class RemoteQtEventHandler(RemoteEventHandler):
         try:
             return RemoteEventHandler.processRequests(self)
         except (ClosedError, BrokenPipeError):
-            from Qt import QtWidgets
+            from PySide6 import QtWidgets
 
             if self.timer is not None:
                 self.timer.stop()
@@ -221,13 +225,13 @@ class QtProcess(Process):
         if "target" not in kwds:
             kwds["target"] = startQtEventLoop
 
-        from Qt import (
+        from PySide6 import (
             QtWidgets,
         )  # # avoid module-level import to keep bootstrap snappy.
 
         self._processRequests = kwds.pop("processRequests", True)
         if self._processRequests and QtWidgets.QApplication.instance() is None:
-            raise Exception(
+            raise RuntimeError(
                 "Must create QApplication before starting QtProcess, "
                 "or use QtProcess(processRequests=False)"
             )
@@ -236,7 +240,7 @@ class QtProcess(Process):
         self.startEventTimer()
 
     def startEventTimer(self):
-        from Qt import QtCore  # # avoid module-level import to keep bootstrap snappy.
+        from PySide6 import QtCore  # # avoid module-level import to keep bootstrap snappy.
 
         self.timer = QtCore.QTimer()
         if self._processRequests:
@@ -272,7 +276,7 @@ def startQtEventLoop(name, conn, ppid, debug=False):
     sys.stderr = LoggingStream(logger, "error")
 
     logger.info("Connected; starting remote proxy.")
-    from Qt import QtWidgets
+    from PySide6 import QtWidgets
 
     app = QtWidgets.QApplication.instance()
     if app is None:
@@ -283,4 +287,4 @@ def startQtEventLoop(name, conn, ppid, debug=False):
 
     handler = RemoteQtEventHandler(conn, name, ppid, logger=logger)
     handler.startEventTimer()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

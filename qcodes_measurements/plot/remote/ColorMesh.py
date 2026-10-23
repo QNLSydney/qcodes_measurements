@@ -4,7 +4,7 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
-from Qt import QtCore, QtGui
+from PySide6 import QtCore, QtGui
 
 from ...logging import get_logger
 from .DataItem import ExtendedDataItem

@@ -1,6 +1,5 @@
 import io
 import os
-import sys
 import logging
 from typing import Optional
 
@@ -51,7 +50,7 @@ def set_log_level(level="INFO", name=None):
     local_logger.setLevel(level)
     get_logger().debug(f"Set log level of %r to %r", logger, level)
 
-class LoggingStream(io.IOBase):
+class LoggingStream(io.TextIOBase):
     """
     Implement a stream handler that redirects all writes to a logger.
     """
@@ -79,7 +78,9 @@ class LoggingStream(io.IOBase):
         """
         return True
 
-    def write(self, msg):
+    def write(self, msg: str) -> int:
+        length = len(msg)
         msg = msg.strip("\r\n")
         if msg:
             getattr(self.logger, self.level)(msg)
+        return length

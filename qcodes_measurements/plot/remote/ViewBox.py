@@ -10,7 +10,7 @@ from pyqtgraph import (
     mkBrush,
     mkPen,
 )
-from Qt import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...logging import get_logger
 from .DataItem import ExtendedDataItem

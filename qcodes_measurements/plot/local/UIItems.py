@@ -1,4 +1,4 @@
-from qcodes import ParamSpec
+from qcodes.parameters import ParamSpecBase
 
 from .RemoteProcessWrapper import RPGWrappedBase
 
@@ -115,14 +115,14 @@ class PlotAxis(RPGWrappedBase):
     def unit(self, units):
         self.setLabel(text=self.labelText, units=units)
 
-    def checkParamspec(self, paramspec: ParamSpec):
+    def checkParamspec(self, paramspec: ParamSpecBase):
         if self.label != paramspec.label:
             return False
         if self.unit != paramspec.unit:
             return False
         return True
 
-    def setParamspec(self, paramspec: ParamSpec):
+    def setParamspec(self, paramspec: ParamSpecBase):
         self.label = paramspec.label
         self.unit = paramspec.unit
 

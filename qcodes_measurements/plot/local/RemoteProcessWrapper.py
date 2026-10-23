@@ -3,7 +3,7 @@ import sys
 from typing import Any
 
 import numpy as np
-from Qt import QtGui, QtWidgets
+from PySide6 import QtGui, QtWidgets
 
 from ...logging import get_logger
 from ..multiprocess import ClosedError, ObjectProxy, QtProcess

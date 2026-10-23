@@ -1,5 +1,5 @@
 from pyqtgraph import ImageItem, PlotCurveItem, PlotDataItem
-from Qt import QtCore
+from PySide6 import QtCore
 
 from ...logging import get_logger
 from .DataItem import ExtendedDataItem

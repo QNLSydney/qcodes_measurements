@@ -3,7 +3,7 @@ from typing import List, Union
 
 import numpy as np
 from pyqtgraph import GraphicsObject, HistogramLUTItem, mkPen
-from Qt import QtCore, QtGui
+from PySide6 import QtCore, QtGui
 
 from ...logging import get_logger
 from .colors import COLORMAPS, DEFAULT_CMAP

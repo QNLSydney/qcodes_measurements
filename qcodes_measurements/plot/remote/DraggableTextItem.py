@@ -6,7 +6,7 @@ from pyqtgraph import (
     mkBrush,
     mkPen,
 )
-from Qt import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from ...logging import get_logger
 

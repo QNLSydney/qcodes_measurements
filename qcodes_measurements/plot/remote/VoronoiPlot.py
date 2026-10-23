@@ -1,7 +1,7 @@
 import struct
 
 import scipy.spatial as spatial
-from Qt import QtCore, QtGui
+from PySide6 import QtCore, QtGui
 
 from ...logging import get_logger
 from .DataItem import ExtendedDataItem

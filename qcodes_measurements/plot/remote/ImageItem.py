@@ -4,7 +4,7 @@ import numpy as np
 import scipy.linalg
 from pyqtgraph import ColorMap, HistogramLUTItem, ImageItem
 from pyqtgraph.graphicsItems import GradientEditorItem
-from Qt import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...logging import get_logger
 from .colors import COLORMAPS, DEFAULT_CMAP
