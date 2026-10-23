@@ -10,6 +10,11 @@ Requires Python 3.12 or newer.
 uv sync
 ```
 
+To add to a measurement package, you can use the fully resolved URL:
+```
+uv add https://github.com/QNLSydney/qcodes_measurements.git
+```
+
 ## Measurements
 
 Create an experiment and run a sweep with live plotting:
