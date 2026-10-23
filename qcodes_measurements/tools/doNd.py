@@ -67,8 +67,10 @@ def _get_window(append, size=(1000, 600)):
         # Append to the given window
         win = append
     elif isinstance(append, bool):
-        # Append to the last trace if true
-        win = PlotWindow.getWindows()[-1]
+        windows = PlotWindow.getWindows()
+        if not windows:
+            return _get_window(False, size)
+        win = windows[-1]
     else:
         raise ValueError(
             "Unknown argument to append. Either give a plot window"
@@ -93,6 +95,8 @@ def _explode_ids(ids_str: str) -> tuple[int, ...]:
 
 
 def _reduce_ids(ids: Sequence[int]):
+    if not ids:
+        return []
     strings = []
     i = 1
     r = 0
@@ -161,6 +165,7 @@ def _register_subscriber():
                 "callback_kwargs": {},
             },
         }
+    if "qcm" not in config.subscription.default_subscribers:
         config.subscription.default_subscribers.append("qcm")
 
 
@@ -186,81 +191,85 @@ def do_nothing(new_data, data_len, state):
     return
 
 
-def update_plots(new_data, data_len, state):
+def update_plots(new_data=None, data_len=None, state=None, *, live=None):
     """
     Function that updates plots when live plotting
     """
+    current = live if live is not None else this.current
+
     # Assert that we are currenty plotting
-    if this.current is None or this.current.dataset is None:
+    if current is None or current.dataset is None:
         return
 
     # Check that we know the shapes of data
-    shapes = this.current.dataset.description.shapes
-    if shapes is None:
+    shapes = current.dataset.description.shapes
+    # Refresh the cache before reading its write counts (also supports disk caches).
+    if new_data is not None and current.dataset.cache.live is not True:
         return
-
-    write_count = this.current.dataset.cache._write_status
-    # Don't update if we haven't started measuring yet
-    if not write_count or any(wc == 0 for wc in write_count.values()):
+    data_cache = current.dataset.cache.data()
+    write_count = current.dataset.cache._write_status  # pylint: disable=protected-access
+    if not data_cache:
         return
-    run_desc = this.current.dataset.description
-    data_cache = this.current.dataset.cache.data()
+    run_desc = current.dataset.description
     params = run_desc.interdeps
     plot_items: Iterable[tuple[str, PlotDataItem | ImageItem | list[str]]] = (
-        this.current.plot_items.items()
+        current.plot_items.items()
     )
     table_items: Iterable[tuple[str, PlotDataItem | ImageItem | list[str]]] = (
-        this.current.table_items.items() if this.current.table_items is not None else {}
+        current.table_items.items() if current.table_items is not None else ()
     )
-    for param, plotitem in itertools.chain(plot_items, table_items):  # type: ignore
+    for param, plotitem in itertools.chain(plot_items, table_items):
         # Keep track of how much of the plot we've written, and only update
         # parameters that are being measured.
         if param not in write_count:
             continue
         param_write_count = write_count[param]
         if param_write_count is None:
+            param_write_count = data_cache[param][param].size
+        if param_write_count == 0:
             continue
+        shape = shapes[param] if shapes is not None else data_cache[param][param].shape
 
-        if param not in this.current.datacount:
-            this.current.datacount[param] = param_write_count
-        elif param_write_count == this.current.datacount[param]:
+        if param not in current.datacount:
+            current.datacount[param] = param_write_count
+        elif param_write_count == current.datacount[param]:
             continue
         else:
-            this.current.datacount[param] = param_write_count
+            current.datacount[param] = param_write_count
 
         # Update plots
-        if shapes[param] == (1,) and this.current.table_items:
+        if current.table_items is not None and param in current.table_items:
             val = data_cache[param][param][0]
             if isinstance(val, (float, np.floating)):
                 val = np.format_float_scientific(val)
             else:
                 val = str(val)
-            this.current.table_items[param].append(val)
-        elif len(shapes[param]) == 1 and isinstance(plotitem, PlotDataItem):
+            current.table_items[param].append(val)
+        elif isinstance(plotitem, PlotDataItem):
             paramspec = params[param]
             setpoint_param = params.dependencies[paramspec][0]
             plotitem.setData(
-                data_cache[param][setpoint_param.name][: write_count[param]],
-                data_cache[param][param][: write_count[param]],
+                data_cache[param][setpoint_param.name].ravel()[:param_write_count],
+                data_cache[param][param].ravel()[:param_write_count],
             )
-        elif isinstance(plotitem, ImageItem):
+        elif isinstance(plotitem, ImageItem) and len(shape) == 2:
             paramspec = params[param]
             bot_axis = params.dependencies[paramspec][0]
             left_axis = params.dependencies[paramspec][1]
-            data = data_cache[param][param]
+            data = data_cache[param][param].copy()
 
             # Check if we are in the first column or if we need to clear nans
-            if np.isnan(data[-1, -1]) or param_write_count < shapes[param][1]:
-                meanval = data.flat[: write_count[param]].mean()
-                data.flat[write_count[param] :] = meanval
+            if np.isnan(data[-1, -1]) or param_write_count < shape[1]:
+                meanval = data.flat[: param_write_count].mean()
+                data.flat[param_write_count :] = meanval
 
             # Update axis scales as data comes in
             if plotitem.no_xscale:
                 # Set Y-scale until we have the entire first column
-                if plotitem.no_yscale and param_write_count >= shapes[param][1]:
+                if plotitem.no_yscale and param_write_count >= shape[1]:
                     ldata = data_cache[param][left_axis.name]
                     ymin, ymax = ldata[0, 0], ldata[0, -1]
-                    plotitem.setpoint_y = np.linspace(ymin, ymax, shapes[param][1])
+                    plotitem.setpoint_y = np.linspace(ymin, ymax, shape[1])
                     plotitem.no_yscale = False
                     plotitem.rescale()
                 elif plotitem.no_yscale and param_write_count >= 2:
@@ -268,29 +277,29 @@ def update_plots(new_data, data_len, state):
                     ymin, step = ldata[0, 0], ldata[0, 1] - ldata[0, 0]
                     plotitem.setpoint_y = np.linspace(
                         ymin,
-                        ymin + step * shapes[param][1],
-                        shapes[param][1],
+                        ymin + step * shape[1],
+                        shape[1],
                         endpoint=False,
                     )
                     plotitem.rescale()
 
                 # Set X-scale
-                if param_write_count / shapes[param][1] > 1:
+                if param_write_count / shape[1] > 1:
                     bdata = data_cache[param][bot_axis.name]
                     xmin, step = bdata[0, 0], bdata[1, 0] - bdata[0, 0]
                     plotitem.setpoint_x = np.linspace(
                         xmin,
-                        xmin + step * shapes[param][0],
-                        shapes[param][0],
+                        xmin + step * shape[0],
+                        shape[0],
                         endpoint=False,
                     )
                     plotitem.no_xscale = False
                     plotitem.rescale()
             # Rescale x-axis when we have all values in case of F.P. error
-            if write_count[param] == shapes[param][0] * shapes[param][1]:
+            if param_write_count == shape[0] * shape[1]:
                 bdata = data_cache[param][bot_axis.name]
                 xmin, xmax = bdata[0, 0], bdata[-1, 0]
-                plotitem.setpoint_x = np.linspace(xmin, xmax, shapes[param][0])
+                plotitem.setpoint_x = np.linspace(xmin, xmax, shape[0])
                 plotitem.no_xscale = False
                 plotitem.rescale()
 
@@ -301,17 +310,17 @@ def update_plots(new_data, data_len, state):
 
     # Update table items if requested, expanding parameters that weren't measured
     # if necessary.
-    if this.current.table_items:
-        nItems = max(len(x) for x in this.current.table_items.values())
-        for item in this.current.table_items:
-            if len(this.current.table_items[item]) < nItems:
-                this.current.table_items[item].append("")
-        plot_window = this.current.plot_window
+    if current.table_items:
+        nItems = max(len(x) for x in current.table_items.values())
+        for item in current.table_items:
+            if len(current.table_items[item]) < nItems:
+                current.table_items[item].append("")
+        plot_window = current.plot_window
         if plot_window is not None and plot_window.table is not None:
             col_titles = plot_window.table.getHorizontalHeaders()
             if len(col_titles) < nItems:
-                col_titles.append(str(this.current.dataset.run_id))
-            plot_window.table.setData(this.current.table_items)
+                col_titles.append(str(current.dataset.run_id))
+            plot_window.table.setData(current.table_items)
             plot_window.table.setHorizontalHeaderLabels(col_titles)
         else:
             logger.error("Trying to fill in table that doesn't exist!")
@@ -325,47 +334,49 @@ def subscriber(dataset, **kwargs):
     Attach a plot window to the dataset and supply an update
     method that will update the live plots.
     """
+    current = this.current
+
     # First, check if we actually want to do anything. If not, we return
     # a blank function
-    if this.current is None or this.current.plot_window is None:
+    if current is None or current.plot_window is None:
         logger.info(f"Live plotting disabled for {dataset.run_id}.")
         return do_nothing
 
     # Update the plot title
-    window_run_ids = _explode_ids(f"({this.current.plot_window.win_title})")
-    if not window_run_ids or window_run_ids is None:
+    window_run_ids = _explode_ids(f"({current.plot_window.win_title})")
+    if not window_run_ids:
         window_run_ids = (dataset.run_id,)
     else:
         window_run_ids = window_run_ids + (dataset.run_id,)
     run_id_str = ", ".join(_reduce_ids(window_run_ids))
-    this.current.plot_window.win_title = f"ID: {run_id_str}"
+    current.plot_window.win_title = f"ID: {run_id_str}"
 
     # Otherwise, register parameters into the window
-    this.current.dataset = dataset
-    win = this.current.plot_window
+    current.dataset = dataset
+    win = current.plot_window
     win.run_id = dataset.run_id
     run_desc = dataset.description
     params = run_desc.interdeps
     shapes = run_desc.shapes
-    if this.current.plot_params is None:
-        this.current.plot_param_names = set(params.names)
+    if current.plot_params is None:
+        current.plot_param_names = set(params.names)
     else:
-        this.current.plot_param_names = set(
-            p.full_name for p in this.current.plot_params
+        current.plot_param_names = set(
+            p.full_name for p in current.plot_params
         )
 
     for param in itertools.chain(params.dependencies, params.standalones):
         name = param.name
-        if name not in this.current.plot_param_names:
+        if name not in current.plot_param_names:
             logger.info(
                 "Parameter %s not in list of plot parameters %r",
                 name,
-                this.current.plot_param_names,
+                current.plot_param_names,
             )
             continue
 
         # Figure out the shape of the parameter
-        if shapes[name] == (1,):
+        if param not in params.dependencies:
             logger.info("Adding 0D parameter %s", name)
             if win.table is None:
                 table = TableWidget(sortable=False)
@@ -374,31 +385,31 @@ def subscriber(dataset, **kwargs):
                 t_widget = scene.addWidget(table)
                 t_widget.setMinimumSize(300, 0)
                 win.addItem(t_widget)
-                this.current.table_items = {}
-            elif this.current.table_items is None:
-                this.current.table_items = win.table.getData()
+                current.table_items = {}
+            elif current.table_items is None:
+                current.table_items = win.table.getData()
             assert win.table is not None
-            if name not in this.current.table_items:
-                if this.current.table_items:
-                    nVals = len(next(iter(this.current.table_items.values())))
+            if name not in current.table_items:
+                if current.table_items:
+                    nVals = len(next(iter(current.table_items.values())))
                 else:
                     nVals = 0
-                this.current.table_items[name] = [""] * nVals
+                current.table_items[name] = [""] * nVals
             win.table.setHorizontalHeaderLabels(list(str(s) for s in window_run_ids))
-        elif len(shapes[name]) == 1:
-            logger.info("Adding 1D parameter %s with shape %r", name, shapes[name])
+        elif len(params.dependencies[param]) == 1:
+            logger.info("Adding 1D parameter %s with shape %r", name, shapes[name] if shapes is not None else None)
             bot_axis = params.dependencies[param][0]
 
             # If we need to stack or append, find the right plot
             plotitem = None
-            if this.current.stack:
+            if current.stack:
                 try:
                     plotitem = next(
                         iter(i for i in win.items if isinstance(i, PlotItem))
                     )
                 except StopIteration:
                     pass
-            elif this.current.append:
+            elif current.append:
                 plotitem = _compatible_plot_item(win, bot_axis, param)
                 if plotitem is None:
                     logger.warning(
@@ -424,18 +435,18 @@ def subscriber(dataset, **kwargs):
                 plotitem.plot_title = f"{paramstr} (id: {run_id_str})"
             # Add new trace to the plot
             plotdata = plotitem.plot(setpoint_x=[], pen=(255, 0, 0), name=param.name)
-            this.current.plot_items[param.name] = plotdata
-        elif len(shapes[name]) == 2:
-            logger.info("Adding 2D parameter %s with shape %r", name, shapes[name])
+            current.plot_items[param.name] = plotdata
+        elif len(params.dependencies[param]) == 2 and shapes is not None:
+            logger.info("Adding 2D parameter %s with shape %r", name, shapes[name] if shapes is not None else None)
             bot_axis = params.dependencies[param][0]
             left_axis = params.dependencies[param][1]
 
             plotitem = None
-            if this.current.stack:
+            if current.stack:
                 logger.warning(
                     "Can't stack 2D param %r. Will create a new plot instead.", name
                 )
-            if this.current.append:
+            if current.append:
                 plotitem = _compatible_plot_item(win, bot_axis, left_axis)
                 if plotitem is None:
                     logger.warning(
@@ -470,7 +481,7 @@ def subscriber(dataset, **kwargs):
             )
             plotdata.no_xscale = True
             plotdata.no_yscale = True
-            this.current.plot_items[name] = plotdata
+            current.plot_items[name] = plotdata
         else:
             logger.warning(
                 "Trying to plot a dataset with more than 2 dimensions. "
@@ -478,10 +489,10 @@ def subscriber(dataset, **kwargs):
             )
 
     # Add annotation to the plot if requested
-    if this.current.annotation is not None and win.items:
-        win.items[0].textbox(this.current.annotation)
+    if current.annotation is not None and win.items:
+        win.items[0].textbox(current.annotation)
 
-    return update_plots
+    return functools.partial(update_plots, live=current)
 
 
 def _live_plot(wrapped):
@@ -518,7 +529,8 @@ def _live_plot(wrapped):
         else:
             win = None
 
-        this.current = LivePlotWindow(
+        previous = this.current
+        current = LivePlotWindow(
             plot_window=win,
             append=(append is not False),
             stack=stack,
@@ -526,10 +538,18 @@ def _live_plot(wrapped):
             annotation=annotation,
         )
 
+        this.current = current
         ret_val = None
         try:
             ret_val = wrapped(*args, **kwargs)
         finally:
+            # QCoDeS has flushed the final results before returning or raising.
+            # Reset global state even if plotting or exporting fails.
+            this.current = previous
+            try:
+                update_plots(live=current)
+            except Exception:
+                logger.exception("Failed to update final live plot")
             # Try and save the plot if save was requested. If the run failed, we still try
             # to pull a run ID out of the window in order to save.
             if win is not None and save:
@@ -540,19 +560,14 @@ def _live_plot(wrapped):
                 if run_id is not None:
                     try:
                         save_figure(win, run_id)
-                    except:
-                        logger.error(f"Failed to save figure {run_id}.")
+                    except Exception:
+                        logger.exception("Failed to save figure %s", run_id)
                 else:
                     logger.warning("Couldn't find run id for sweep. Not saved!")
 
-            # Add the window to the return
+            # QCoDeS returns tuples of matplotlib axes; older callers may use lists.
             if win is not None and ret_val is not None:
-                if ret_val[1] == [None]:
-                    ret_val[1].clear()
-                    ret_val[1].append(win)
-
-            # And reset this.current
-            this.current = None
+                ret_val = (ret_val[0], [win], ret_val[2])
 
         # Return the sweep result
         return ret_val
