@@ -1,12 +1,13 @@
 from .channel_wrapper import ChannelWrapper
 from .states import ConnState
 
+
 class MDACWrapper(ChannelWrapper):
     def get_state(self):
-        gnd = self.parent.gnd() == 'close'
-        smc = self.parent.smc() == 'close'
-        bus = self.parent.bus() == 'close'
-        dac_output = self.parent.dac_output() == 'close'
+        gnd = self.parent.gnd() == "close"
+        smc = self.parent.smc() == "close"
+        bus = self.parent.bus() == "close"
+        dac_output = self.parent.dac_output() == "close"
         state = None
         if gnd:
             if not smc and not bus:
@@ -30,40 +31,40 @@ class MDACWrapper(ChannelWrapper):
         if val in ConnState.INPUT_MODES:
             self.parent.voltage(0)
         if val == ConnState.GND:
-            self.parent.gnd('close')
-            self.parent.smc('open')
-            self.parent.bus('open')
-            self.parent.dac_output('open')
+            self.parent.gnd("close")
+            self.parent.smc("open")
+            self.parent.bus("open")
+            self.parent.dac_output("open")
         elif val == ConnState.BUS:
-            self.parent.bus('close')
-            self.parent.smc('open')
-            self.parent.gnd('open')
-            self.parent.dac_output('open')
+            self.parent.bus("close")
+            self.parent.smc("open")
+            self.parent.gnd("open")
+            self.parent.dac_output("open")
         elif val == ConnState.DAC:
-            self.parent.dac_output('close')
-            self.parent.bus('open')
-            self.parent.smc('open')
-            self.parent.gnd('open')
+            self.parent.dac_output("close")
+            self.parent.bus("open")
+            self.parent.smc("open")
+            self.parent.gnd("open")
         elif val == ConnState.SMC:
-            self.parent.smc('close')
-            self.parent.dac_output('open')
-            self.parent.bus('open')
-            self.parent.gnd('open')
+            self.parent.smc("close")
+            self.parent.dac_output("open")
+            self.parent.bus("open")
+            self.parent.gnd("open")
         elif val == ConnState.PROBE:
-            self.parent.dac_output('close')
-            self.parent.smc('close')
-            self.parent.bus('open')
-            self.parent.gnd('open')
+            self.parent.dac_output("close")
+            self.parent.smc("close")
+            self.parent.bus("open")
+            self.parent.gnd("open")
         elif val == ConnState.FLOAT:
-            self.parent.dac_output('open')
-            self.parent.smc('open')
-            self.parent.bus('open')
-            self.parent.gnd('open')
+            self.parent.dac_output("open")
+            self.parent.smc("open")
+            self.parent.bus("open")
+            self.parent.gnd("open")
         elif val == ConnState.DAC_BUS:
-            self.parent.bus('close')
-            self.parent.dac_output('close')
-            self.parent.smc('open')
-            self.parent.gnd('open')
+            self.parent.bus("close")
+            self.parent.dac_output("close")
+            self.parent.smc("open")
+            self.parent.gnd("open")
         else:
             super().set_state(val)
 

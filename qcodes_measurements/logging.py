@@ -1,12 +1,12 @@
 import io
-import os
 import logging
-from typing import Optional
+import os
 
 __all__ = ["LoggingStream", "get_logger", "set_log_level"]
 
 # Get access to module level variables
-logger: Optional[logging.Logger] = None
+_logger: logging.Logger | None = None
+
 
 def get_logger(name=None, debug=False) -> logging.Logger:
     # Disable logging to stderr and capture warnings
@@ -14,9 +14,9 @@ def get_logger(name=None, debug=False) -> logging.Logger:
     logging.captureWarnings(True)
 
     # Create a root logger the first time this module is called
-    if logger is None:
+    if _logger is None:
         local_logger = logging.getLogger("qcm")
-        globals()["logger"] = logging.getLogger("qcm")
+        globals()["_logger"] = logging.getLogger("qcm")
 
         if debug:
             local_logger.setLevel(logging.DEBUG)
@@ -25,11 +25,11 @@ def get_logger(name=None, debug=False) -> logging.Logger:
         # Create a handler for the logger
         log_handler = logging.FileHandler("rpyplot.log")
         log_handler.setLevel(logging.DEBUG)
-        log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        log_format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         log_handler.setFormatter(log_format)
         local_logger.addHandler(log_handler)
     else:
-        local_logger = logger
+        local_logger = _logger
 
     # Get the requested logger
     if "QCM_REMOTE" in os.environ:
@@ -41,6 +41,7 @@ def get_logger(name=None, debug=False) -> logging.Logger:
         return local_logger
     return local_logger.getChild(name)
 
+
 def set_log_level(level="INFO", name=None):
     """
     Set the log level for a given module (name) to the level.
@@ -48,7 +49,8 @@ def set_log_level(level="INFO", name=None):
     # Get the logger
     local_logger = get_logger(name)
     local_logger.setLevel(level)
-    get_logger().debug(f"Set log level of %r to %r", logger, level)
+    get_logger().debug("Set log level of %r to %r", _logger, level)
+
 
 class LoggingStream(io.TextIOBase):
     """

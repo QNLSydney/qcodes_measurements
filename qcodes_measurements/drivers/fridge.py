@@ -1,5 +1,4 @@
 from functools import partial
-from typing import Optional
 
 import requests
 from qcodes.instrument import Instrument
@@ -16,7 +15,7 @@ class FridgeTemps(Instrument):
         super().__init__(name)
         self.url = url
 
-        params = requests.get(url)
+        params = requests.get(url, timeout=10)
         if params.status_code != 200:
             raise RuntimeError("Unable to query fridge")
         params = set(params.json().keys())
@@ -37,7 +36,7 @@ class FridgeTemps(Instrument):
             )
 
     def get_param(self, param):
-        temps = requests.get(self.url)
+        temps = requests.get(self.url, timeout=10)
         if temps.status_code != 200:
             raise RuntimeError("Unable to query fridge")
         temps = temps.json()
@@ -62,7 +61,7 @@ class FridgeTemps(Instrument):
         """
         raise NotImplementedError("Can't communicate directly with a fridge.")
 
-    def get_idn(self) -> dict[str, Optional[str]]:
+    def get_idn(self) -> dict[str, str | None]:
         """
         Returns details of the instrument and driver.
         """

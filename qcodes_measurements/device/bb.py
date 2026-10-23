@@ -18,9 +18,9 @@ class BB(InstrumentBase):
 
         channels = ChannelList(self, "channels", BBChan)
         for i in range(chan_count):
-            channel = BBChan(self, f"ch{i+1:02}")
+            channel = BBChan(self, f"ch{i + 1:02}")
             channels.append(channel)
-            self.add_submodule(f"ch{i+1:02}", channel)
+            self.add_submodule(f"ch{i + 1:02}", channel)
         channels.lock()
         self.add_submodule("channels", channels)
 
@@ -30,9 +30,7 @@ class BBChan(InstrumentChannel):
         super().__init__(parent, name)
         self.dac_source = dac_source
 
-        self.add_parameter(
-            "voltage", get_cmd=self.dummy_voltage, set_cmd=self.dummy_voltage
-        )
+        self.add_parameter("voltage", get_cmd=self.dummy_voltage, set_cmd=self.dummy_voltage)
 
     def __getattr__(self, key: str) -> Any:
         if key in self.parameters:
@@ -56,10 +54,10 @@ class BBChan(InstrumentChannel):
 class BB37(BB):
     def __init__(self, name):
         super().__init__(name, chan_count=37)
-        warn("Use BB with chan_count=37 instead", DeprecationWarning)
+        warn("Use BB with chan_count=37 instead", DeprecationWarning, stacklevel=2)
 
 
 class BB37Chan(BBChan):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warn("Use BBChan instead...", DeprecationWarning)
+        warn("Use BBChan instead...", DeprecationWarning, stacklevel=2)

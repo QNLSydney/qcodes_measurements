@@ -1,8 +1,8 @@
 from qcodes.parameters import Parameter
 
+
 class CombinedParameter(Parameter):
-    def __init__(self, *parameters,
-                 name=None, label=None, unit=None):
+    def __init__(self, *parameters, name=None, label=None, unit=None):
 
         if name is None:
             raise ValueError("name is required. Got None.")
@@ -23,9 +23,9 @@ class CombinedParameter(Parameter):
         """
         return self._parameters[0]()
 
-    def set_raw(self, val):
+    def set_raw(self, value) -> None:  # ty: ignore[invalid-method-override]  # QCoDeS dynamic Command assignment.
         """
         Set each parameter to val
         """
         for parameter in self._parameters:
-            parameter(val)
+            parameter(value)

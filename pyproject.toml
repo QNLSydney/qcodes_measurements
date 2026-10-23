@@ -36,3 +36,36 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.2",
 ]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+respect-gitignore = false
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# These modules intentionally re-export the public plotting API.
+"**/__init__.py" = ["F401", "F403"]
+"qcodes_measurements/plot/rpyplot.py" = ["F401"]
+# StrEnum would change the existing auto-generated values and string representation.
+"qcodes_measurements/device/states.py" = ["UP042"]
+
+[tool.ty.src]
+include = ["qcodes_measurements", "tests"]
+respect-ignore-files = false
+
+[tool.pylint.main]
+extension-pkg-allow-list = ["PySide6"]
+persistent = false
+
+[tool.pylint.messages_control]
+# Preserve the public Qt/pyqtgraph naming conventions and callback signatures.
+# Ruff handles style; Pylint checks errors and non-style warnings.
+disable = ["C", "R", "abstract-method", "protected-access", "unused-argument"]
+
+[tool.pylint.typecheck]
+# Qt signals and SciPy's extension exports are resolved by ty.
+generated-members = ["connect", "disconnect"]
+ignored-modules = ["scipy.spatial"]

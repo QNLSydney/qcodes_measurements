@@ -96,15 +96,11 @@ class Register(Metadatable):
         """
         if isinstance(ind, int):
             if ind > self.length:
-                raise IndexError(
-                    f"Index out of bounds for register of length {self.length}."
-                )
+                raise IndexError(f"Index out of bounds for register of length {self.length}.")
             return (self.value >> (ind % self.length)) & 1
         if isinstance(ind, slice):
             if ind.step is not None and ind.step != 1:
-                raise IndexError(
-                    "Registers do not support steps other than 1 in a slice"
-                )
+                raise IndexError("Registers do not support steps other than 1 in a slice")
             # Calculate bit indices
             start, stop, _ = ind.indices(self.length)
             # Retrieve range from register
@@ -141,9 +137,7 @@ class Register(Metadatable):
             indices = (ind,)
         elif isinstance(ind, slice):
             if ind.step is not None and ind.step != 1:
-                raise IndexError(
-                    "Registers do not support steps other than 1 in a slice"
-                )
+                raise IndexError("Registers do not support steps other than 1 in a slice")
             indices = range(*ind.indices(self.length))
         else:
             raise TypeError("ind must be an int or slice")
