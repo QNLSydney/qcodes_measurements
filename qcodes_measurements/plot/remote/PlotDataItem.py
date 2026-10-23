@@ -56,6 +56,11 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
     def colorSelected(self, color):
         self.setPen(color)
 
+    def setTraceData(self, x, y, *args, **kwargs):
+        """Keep the original setpoints and replace the trace in a single request."""
+        self.setpoint_x = x
+        self.setData(x, y, *args, **kwargs)
+
     def update(self, yData, *args, **kwargs):
         # Filter out nan values, due to https://github.com/pyqtgraph/pyqtgraph/issues/1057
         if not isinstance(yData, np.ndarray):

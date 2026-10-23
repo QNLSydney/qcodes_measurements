@@ -67,6 +67,7 @@ class ExtendedPlotDataItem(PlotDataItem):
         self.setpoint_x = ensure_ndarray(setpoint_x)
         self._remote_function_options["update"] = {"callSync": "off"}
         self._remote_function_options["setData"] = {"callSync": "off"}
+        self._remote_function_options["setTraceData"] = {"callSync": "off"}
 
     def __wrap__(self, *args, **kwargs):
         setpoint_x = kwargs.pop("setpoint_x", None)
@@ -74,6 +75,7 @@ class ExtendedPlotDataItem(PlotDataItem):
         super().__wrap__(*args, **kwargs)
         self._remote_function_options["update"] = {"callSync": "off"}
         self._remote_function_options["setData"] = {"callSync": "off"}
+        self._remote_function_options["setTraceData"] = {"callSync": "off"}
 
         if setpoint_x is not None:
             # If we know what our setpoints are, use them
@@ -98,5 +100,8 @@ class ExtendedPlotDataItem(PlotDataItem):
         """
         Set the x, y in the plot, without filtering for NaN values.
         """
-        self.setpoint_x = ensure_ndarray(x)
-        self.__getattr__("setData", _location="remote")(x, y, *args, **kwargs)
+        # Store setpoints and plot the data in one command; sending x separately
+        # would serialize and transfer the full array twice on every live update.
+        self.__getattr__("setTraceData", _location="remote")(
+            ensure_ndarray(x), ensure_ndarray(y), *args, **kwargs
+        )

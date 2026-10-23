@@ -219,6 +219,7 @@ def update_plots(new_data=None, data_len=None, state=None, *, live=None):
     table_items: Iterable[tuple[str, PlotDataItem | ImageItem | list[str]]] = (
         current.table_items.items() if current.table_items is not None else ()
     )
+    table_changed = False
     for param, plotitem in itertools.chain(plot_items, table_items):
         # Keep track of how much of the plot we've written, and only update
         # parameters that are being measured.
@@ -250,6 +251,7 @@ def update_plots(new_data=None, data_len=None, state=None, *, live=None):
             else:
                 val = str(val)
             current.table_items[param].append(val)
+            table_changed = True
         elif isinstance(plotitem, PlotDataItem):
             paramspec = params[param]
             setpoint_param = params.dependencies[paramspec][0]
@@ -315,18 +317,19 @@ def update_plots(new_data=None, data_len=None, state=None, *, live=None):
 
     # Update table items if requested, expanding parameters that weren't measured
     # if necessary.
-    if current.table_items:
+    if current.table_items and table_changed:
         nItems = max(len(x) for x in current.table_items.values())
         for item in current.table_items:
             if len(current.table_items[item]) < nItems:
                 current.table_items[item].append("")
         plot_window = current.plot_window
-        if plot_window is not None and plot_window.table is not None:
-            col_titles = plot_window.table.getHorizontalHeaders()
+        table = plot_window.table if plot_window is not None else None
+        if table is not None:
+            col_titles = table.getHorizontalHeaders()
             if len(col_titles) < nItems:
                 col_titles.append(str(current.dataset.run_id))
-            plot_window.table.setData(current.table_items)
-            plot_window.table.setHorizontalHeaderLabels(col_titles)
+            table.setData(current.table_items)
+            table.setHorizontalHeaderLabels(col_titles)
         else:
             logger.error("Trying to fill in table that doesn't exist!")
 

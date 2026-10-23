@@ -1,6 +1,5 @@
 from typing import cast
 
-import numpy as np
 from qcodes.parameters import ArrayParameter, Parameter
 
 from ..axis import image_axis
@@ -39,6 +38,9 @@ class HistogramLUTItem(RPGWrappedBase):
 
 class ImageItem(ExtendedDataItem, RPGWrappedBase):
     _base = "ImageItem"
+    # Acquisition bookkeeping belongs locally, avoiding a round trip per frame.
+    no_xscale = False
+    no_yscale = False
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
         if self._base == "ImageItem":
@@ -132,14 +134,17 @@ class ImageItemWithHistogram(ExtendedImageItem):
 
     # Local Variables
     _histogram: None | HistogramLUTItem = None
+    _histogram_paused = False
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
         self._histogram = None
+        self._remote_function_options["setImageData"] = {"callSync": "off"}
 
     def __wrap__(self, *args, **kwargs):
         super().__wrap__(*args, **kwargs)
         self._histogram = None
+        self._remote_function_options["setImageData"] = {"callSync": "off"}
 
     def pause_update(self):
         """
@@ -147,6 +152,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
         """
         try:
             self._base_inst.sigImageChanged.disconnect()
+            self._histogram_paused = True
         except AttributeError:
             pass
 
@@ -154,15 +160,16 @@ class ImageItemWithHistogram(ExtendedImageItem):
         """
         Resume histogram autoupdate
         """
-        self._base_inst.sigImageChanged.connect(self.histogram.imageChanged)
+        # Pass the remote slot, rather than a local autowrap closure, to Qt.
+        self._base_inst.sigImageChanged.connect(self.histogram._base_inst.imageChanged)
+        self._histogram_paused = False
 
     def update(self, data, *args, **kwargs):
-        super().update(data, *args, **kwargs)
-        # Only update the range if requested
-        if kwargs.get("update_range", True):
-            z_range = (np.min(data), np.max(data))
-            self.histogram.imageChanged()
-            self.histogram.setLevels(*z_range)
+        self.__getattr__("setImageData", _location="remote")(
+            ensure_ndarray(data),
+            update_range=kwargs.get("update_range", True),
+            histogram_paused=self._histogram_paused,
+        )
 
     def update_histogram_axis(self, param_z):
         """

@@ -238,6 +238,22 @@ class ImageItemWithHistogram(ExtendedImageItem):
     def getHistogramLUTItem(self):
         return self._LUTitem
 
+    def setImageData(self, data, *, update_range=True, histogram_paused=False):
+        """Update image and levels together, calculating the histogram only once."""
+        if update_range:
+            levels = (np.min(data), np.max(data))
+            if self.image is None:
+                # Replace the histogram's initial deferred levels before the
+                # first image is installed; pyqtgraph reapplies them afterwards.
+                self.setLevels(levels)
+            self.setImage(data, autoLevels=False, levels=levels, autoDownsample=True)
+            if histogram_paused:
+                # Preserve explicitly requested refreshes while automatic updates
+                # are disconnected by pause_update().
+                self._LUTitem.imageChanged()
+        else:
+            self.setImage(data, autoDownsample=True)
+
     def changeParent(self):
         super().changeParent()
         # Add the histogram to the parent
