@@ -1,18 +1,19 @@
-from typing import Any
+from typing import Any, Unpack
 from warnings import warn
 
-from qcodes.instrument import ChannelList, InstrumentBase, InstrumentChannel
+from qcodes.instrument import ChannelList, Instrument, InstrumentChannel
+from qcodes.instrument.instrument_base import InstrumentBaseKWArgs
 
 
-class BB(InstrumentBase):
+class BB(Instrument):
     """
     Breakout box instance, makes a channel list out of all
     channels on the breakout box, keeps track of numbering
     for snapshot purposes
     """
 
-    def __init__(self, name, chan_count=25):
-        super().__init__(name)
+    def __init__(self, name: str, chan_count: int = 25, **kwargs: Unpack[InstrumentBaseKWArgs]):
+        super().__init__(name, **kwargs)
 
         self.chan_count = chan_count
 
@@ -24,6 +25,11 @@ class BB(InstrumentBase):
         channels.lock()
         self.add_submodule("channels", channels)
 
+    def get_idn(self) -> dict[str, str | None]:
+        return dict(
+            vendor="qcodes_measurements", model=type(self).__name__, serial=None, firmware=None
+        )
+
 
 class BBChan(InstrumentChannel):
     def __init__(self, parent, name, dac_source=None):
@@ -33,11 +39,13 @@ class BBChan(InstrumentChannel):
         self.add_parameter("voltage", get_cmd=self.dummy_voltage, set_cmd=self.dummy_voltage)
 
     def __getattr__(self, key: str) -> Any:
-        if key in self.parameters:
-            return self.parameters[key]
-        elif self.dac_source:
-            return getattr(self.dac_source, key)
-        raise AttributeError()
+        try:
+            return super().__getattr__(key)
+        except AttributeError:
+            source = self.__dict__.get("dac_source")
+            if source is not None:
+                return getattr(source, key)
+            raise
 
     def connect_dac(self, dac_source):
         self.dac_source = dac_source
@@ -52,8 +60,8 @@ class BBChan(InstrumentChannel):
 
 
 class BB37(BB):
-    def __init__(self, name):
-        super().__init__(name, chan_count=37)
+    def __init__(self, name: str, **kwargs: Unpack[InstrumentBaseKWArgs]):
+        super().__init__(name, chan_count=37, **kwargs)
         warn("Use BB with chan_count=37 instead", DeprecationWarning, stacklevel=2)
 
 

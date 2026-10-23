@@ -2,20 +2,21 @@
 Support functions for digital gates
 """
 
+from collections.abc import Sequence
 from functools import partial
 from typing import Unpack
 
 from qcodes.instrument import ChannelList
-from qcodes.instrument.instrument_base import InstrumentBaseKWArgs
+from qcodes.instrument.instrument_base import InstrumentBaseKWArgs, TParameter
 from qcodes.parameters import ParameterBase
 from qcodes.validators import Bool, Enum, MultiType, Numbers
 
 from ..drivers import MDAC
 from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
-from .device import Device
+from .device import ContactDefinitions, Device
 from .gate import BBGateWrapper, Gate, MDACGateWrapper
-from .states import ConnState, DigitalMode, GateMode
+from .states import ConnState, DigitalMode
 
 
 class DigitalGate(Gate):
@@ -47,17 +48,17 @@ class DigitalGate(Gate):
         self.v_hist = v_hist
         self.io_mode = DigitalMode.UNDEF if io_mode is None else io_mode
         self.lock = False
+        kwargs.setdefault("limits", None)
+        kwargs.setdefault("vals", MultiType(Bool(), Numbers()))
+        kwargs.setdefault("unit", "")
 
         # Initialize the parameter
         super().__init__(
             name=name,
             source=source,
             label=label,
-            default_mode=GateMode.FREE,
             **kwargs,
         )
-
-        self.vals = MultiType(Bool(), Numbers())
 
     @property
     def v_high(self):
@@ -68,12 +69,15 @@ class DigitalGate(Gate):
 
     @v_high.setter
     def v_high(self, val):
+        value = self() if self.io_mode in DigitalMode.OUTPUT_MODES else None
         self._v_high = val
         lock = self.lock
         self.lock = False
-        if self.io_mode in DigitalMode.OUTPUT_MODES:
-            self(self())
-        self.lock = lock
+        try:
+            if value is not None and value != -1:
+                self(value)
+        finally:
+            self.lock = lock
 
     @property
     def v_low(self):
@@ -84,23 +88,28 @@ class DigitalGate(Gate):
 
     @v_low.setter
     def v_low(self, val):
+        value = self() if self.io_mode in DigitalMode.OUTPUT_MODES else None
         self._v_low = val
         lock = self.lock
         self.lock = False
-        if self.io_mode in DigitalMode.OUTPUT_MODES:
-            self(self())
-        self.lock = lock
+        try:
+            if value is not None and value != -1:
+                self(value)
+        finally:
+            self.lock = lock
 
-    def get_raw(self):  # pylint: disable=E0202
+    def _voltage_to_raw(self, value):
         """
-        Return the state of the gate if within the defined setpoints, otherwise return 0
+        Return the logical state near a defined level, or -1 for an unknown level.
         """
-        voltage = self.source.voltage()
-        if abs(voltage - self.v_high) < self.v_hist:
+        if abs(value - self.v_high) < self.v_hist:
             return 1
-        if abs(voltage - self.v_low) < self.v_hist:
+        if abs(value - self.v_low) < self.v_hist:
             return 0
         return -1
+
+    def _raw_to_voltage(self, value):
+        return self.v_high if value else self.v_low
 
     def set_raw(self, value):  # pylint: disable=E0202
         """
@@ -133,7 +142,7 @@ class DigitalGateWrapper(ChannelWrapper):
 
         self.add_parameter(
             "io_mode",
-            get_cmd=lambda: str(self.gate.io_mode),
+            get_cmd=lambda: self.gate.io_mode,
             set_cmd=self._set_io_mode,
             vals=Enum(*DigitalMode),
         )
@@ -171,8 +180,8 @@ class DigitalGateWrapper(ChannelWrapper):
 
     def _set_io_mode(self, val):
         self.lock(False)
-        if val in DigitalMode.INPUT_MODES:
-            self.voltage(0)
+        if val in DigitalMode.INPUT_MODES and self.voltage() != 0:
+            self.gate._set_voltage(0)
         if val == DigitalMode.IN:
             self.smc()
         elif val == DigitalMode.OUT:
@@ -203,11 +212,6 @@ class MDACDigitalGateWrapper(DigitalGateWrapper, MDACGateWrapper):
     Digital gate wrapper of an MDAC, which allows set/get of state
     """
 
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
-        self.parent.filter.vals = Enum(0, 1, 2)
-        self.parent.filter(0)
-
 
 class BBDigitalGateWrapper(DigitalGateWrapper, BBGateWrapper):
     """
@@ -221,53 +225,125 @@ class DigitalDevice(Device):
     voltages
     """
 
-    def __init__(self, name: str, **kwargs: Unpack[InstrumentBaseKWArgs]) -> None:
-        super().__init__(name, **kwargs)
+    def __init__(
+        self,
+        name: str,
+        *,
+        gates: ContactDefinitions | None = None,
+        ohmics: ContactDefinitions | None = None,
+        default_gate_limit: Sequence[float] | None = (-2.5, 0),
+        default_ohmic_limit: Sequence[float] | None = (-2e-3, 2e-3),
+        v_high: float = 1.8,
+        v_low: float = 0,
+        **kwargs: Unpack[InstrumentBaseKWArgs],
+    ) -> None:
+        super().__init__(
+            name,
+            default_gate_limit=default_gate_limit,
+            default_ohmic_limit=default_ohmic_limit,
+            **kwargs,
+        )
 
         # Add digital gates to the device
         digital_gates = ChannelList(self, "digital_gates", DigitalGateWrapper)
         self.digital_gates = self.add_submodule("digital_gates", digital_gates)
 
         # Add digital parameters
-        self._v_high = 1.8
-        self._v_low = 0
+        self._v_high = v_high
+        self._v_low = v_low
         self.v_high = self.add_parameter(
             "v_high",
-            initial_value=1.8,
+            initial_value=v_high,
             get_cmd=partial(getattr, self, "_v_high"),
             set_cmd=self._update_vhigh,
             vals=Numbers(),
         )
         self.v_low = self.add_parameter(
             "v_low",
-            initial_value=0,
+            initial_value=v_low,
             get_cmd=partial(getattr, self, "_v_low"),
             set_cmd=self._update_vlow,
             vals=Numbers(),
         )
+        self._configure_contacts(gates, ohmics)
 
     def add_digital_gate(self, name, source, io_mode=None, **kwargs):
-        if "initial_value" in kwargs and io_mode is not None:
-            initial_value = kwargs["initial_value"]
-            del kwargs["initial_value"]
-        else:
-            initial_value = None
-        self.add_parameter(
-            name,
-            parameter_class=DigitalGate,
-            source=source,
-            v_high=self.v_high(),
-            v_low=self.v_low(),
-            io_mode=io_mode,
-            **kwargs,
+        return self._add_contact(name, DigitalGate, source, io_mode=io_mode, **kwargs)
+
+    def add_parameter(
+        self,
+        name: str,
+        parameter_class: type[TParameter] | None = None,
+        **kwargs,
+    ) -> TParameter:
+        if parameter_class is not None and issubclass(parameter_class, DigitalGate):
+            kwargs.setdefault("v_high", self._v_high)
+            kwargs.setdefault("v_low", self._v_low)
+            kwargs.setdefault("limits", None)
+        return super().add_parameter(name, parameter_class, **kwargs)
+
+    def _configured_class(self, kind, parameter_type):
+        if kind == "gates" and parameter_type in (
+            "DigitalGate",
+            "qcodes_measurements.device.DigitalGate",
+        ):
+            return DigitalGate
+        return super()._configured_class(kind, parameter_type)
+
+    def _configure_controller(self, parameter, controller, state, io_mode, value):
+        if io_mode is None:
+            super()._configure_controller(parameter, controller, state, None, value)
+            if isinstance(parameter, DigitalGate) and state is not None:
+                parameter.io_mode = DigitalMode.map_conn_state_to_digital_mode(controller.state())
+            return
+        if not isinstance(parameter, DigitalGate):
+            raise ValueError("io_mode is only supported for digital gates")
+        mode = (
+            DigitalMode[io_mode]
+            if isinstance(io_mode, str) and not isinstance(io_mode, DigitalMode)
+            else io_mode
         )
-        if io_mode is not None:
-            gate = self.get_channel_controller(self.parameters[name])
-            assert isinstance(gate, DigitalGateWrapper)
-            if gate.io_mode() != io_mode:
-                gate.io_mode(io_mode)
-            if initial_value is not None:
-                self.parameters[name](initial_value)
+        mode_states = {
+            DigitalMode.IN: ConnState.SMC,
+            DigitalMode.OUT: ConnState.DAC,
+            DigitalMode.PROBE_OUT: ConnState.PROBE,
+            DigitalMode.BUS_OUT: ConnState.DAC_BUS,
+            DigitalMode.HIGH: ConnState.DAC,
+            DigitalMode.LOW: ConnState.DAC,
+            DigitalMode.GND: ConnState.GND,
+            DigitalMode.FLOAT: ConnState.FLOAT,
+        }
+        if mode not in mode_states:
+            raise ValueError(f"Invalid IO mode {mode!r}")
+        desired_state = mode_states[mode]
+        if state is not None and state != desired_state:
+            raise ValueError("state and io_mode request different connection states")
+        voltage = parameter.source.voltage()
+        if mode in (DigitalMode.HIGH, DigitalMode.LOW):
+            target = parameter.v_high if mode is DigitalMode.HIGH else parameter.v_low
+            if value is None and voltage != target:
+                raise ValueError(
+                    f"{parameter.name}: {mode.name} requires an explicit default_value"
+                )
+            if (
+                value is not None
+                and parameter._raw_to_voltage(parameter._from_value_to_raw_value(value)) != target
+            ):
+                raise ValueError("default_value conflicts with io_mode")
+        super()._configure_controller(parameter, controller, desired_state, None, value)
+        parameter.io_mode = mode
+        parameter.lock = False
+
+    def _finalize_contact(self, parameter, io_mode):
+        if isinstance(parameter, DigitalGate) and io_mode is not None:
+            parameter.lock = parameter.io_mode in (DigitalMode.HIGH, DigitalMode.LOW)
+
+    def lookup_source(self, source):
+        source = self.resolve_source(source)
+        for controller in self.digital_gates:
+            if controller.gate.source is source:
+                return controller
+        return super().lookup_source(source)
 
     def store_new_param(self, new_param: ParameterBase) -> None:
         if isinstance(new_param, DigitalGate):

@@ -10,13 +10,16 @@ class MDACWrapper(ChannelWrapper):
         dac_output = self.parent.dac_output() == "close"
         state = None
         if gnd:
-            if not smc and not bus:
+            if not smc and not bus and not dac_output:
                 state = ConnState.GND
             else:
                 state = ConnState.UNDEF
         else:
             if bus:
-                state = ConnState.BUS
+                if smc:
+                    state = ConnState.UNDEF
+                else:
+                    state = ConnState.DAC_BUS if dac_output else ConnState.BUS
             elif dac_output and not smc:
                 state = ConnState.DAC
             elif dac_output and smc:
@@ -28,8 +31,9 @@ class MDACWrapper(ChannelWrapper):
         return state
 
     def set_state(self, val):
-        if val in ConnState.INPUT_MODES:
-            self.parent.voltage(0)
+        if val in ConnState.INPUT_MODES and self.parent.voltage() != 0:
+            # Connection changes must not bypass the contact's ramping logic.
+            self.gate._set_voltage(0)
         if val == ConnState.GND:
             self.parent.gnd("close")
             self.parent.smc("open")

@@ -1,12 +1,6 @@
 import enum
 
 
-class GateMode(str, enum.Enum):
-    BIAS = enum.auto()
-    COLD = enum.auto()
-    FREE = enum.auto()
-
-
 class ConnState(str, enum.Enum):
     BUS = enum.auto()
     GND = enum.auto()
@@ -65,7 +59,7 @@ class DigitalMode(str, enum.Enum):
         elif conn_state == ConnState.DAC_BUS:
             return DigitalMode.BUS_OUT
         elif conn_state == ConnState.SMC:
-            return DigitalMode.OUT
+            return DigitalMode.IN
         elif conn_state == ConnState.FLOAT:
             return DigitalMode.FLOAT
         elif conn_state == ConnState.PROBE:

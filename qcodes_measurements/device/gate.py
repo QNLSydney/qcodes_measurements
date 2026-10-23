@@ -1,26 +1,22 @@
+from collections.abc import Sequence
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from math import isclose
 from time import sleep
 from typing import Any
 
-import qcodes.validators as vals
-from qcodes.instrument import InstrumentBase, InstrumentChannel
+from qcodes.instrument import InstrumentBase
 from qcodes.parameters import Parameter
 from qcodes.parameters.cache import _Cache
+from qcodes.validators import Numbers, Validator
 
 from ..drivers import MDAC
 from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
 from .mdac_wrappers import MDACWrapper
-from .states import ConnState, GateMode
-
-# for now the type the parameter may contain is not restricted at all
-ParamDataType = Any
-ParamRawDataType = Any
+from .states import ConnState
 
 __all__ = [
-    "GateMode",
     "ConnState",
     "Gate",
     "GateWrapper",
@@ -33,7 +29,123 @@ __all__ = [
 ]
 
 
-class Gate(Parameter):
+def limit_validator(limits: Sequence[float] | None) -> Numbers | None:
+    """Limits are expressed in the contact's units, before scale and offset."""
+    if limits is None:
+        return None
+    if len(limits) != 2:
+        raise ValueError("limits must contain exactly [lower, upper]")
+    return Numbers(*limits)
+
+
+class _VoltageParameter(Parameter):
+    """Voltage contact with a channel source and a cache that follows that source."""
+
+    def __init__(
+        self,
+        name: str,
+        source: InstrumentBase,
+        *,
+        label: str,
+        unit: str = "V",
+        limits: Sequence[float] | None,
+        vals: Validator | None = None,
+        rate: float = 0.05,
+        max_step: float = 5e-3,
+        default_value=None,
+        **kwargs: Any,
+    ):
+        if not isinstance(source, InstrumentBase) or not isinstance(
+            getattr(source, "voltage", None), Parameter
+        ):
+            raise TypeError("The source must be an instrument/channel with a voltage parameter")
+        if not source.voltage.settable or not source.voltage.gettable:
+            raise TypeError("The source voltage must support both get and set")
+        if rate <= 0 or max_step <= 0:
+            raise ValueError("rate and max_step must be positive")
+        if "default_mode" in kwargs or "gate_mode" in kwargs:
+            raise ValueError("GateMode has been removed; use limits or vals")
+        initial_value = kwargs.pop("initial_value", None)
+        if initial_value is not None and default_value is not None:
+            raise ValueError("Specify only one of default_value and initial_value")
+        requested_value = default_value if default_value is not None else initial_value
+        initial_cache_value = kwargs.pop("initial_cache_value", None)
+        if requested_value is not None and initial_cache_value is not None:
+            raise ValueError("An initial cache value cannot be combined with an initial value")
+        self.source = source
+        self.source_name = source.full_name
+        self.rate = rate
+        self.max_step = max_step
+        self.has_ramp = hasattr(source, "ramp")
+        super().__init__(
+            name=name,
+            label=label,
+            unit=unit,
+            vals=vals if vals is not None else limit_validator(limits),
+            **kwargs,
+        )
+        self._meta_attrs.append("source_name")
+        self.cache = _SourceCache(self)
+        if initial_cache_value is not None:
+            self.cache.set(initial_cache_value)
+        if requested_value is not None:
+            self.set(requested_value)
+
+    def _voltage_to_raw(self, value):
+        return value
+
+    def _raw_to_voltage(self, value):
+        return value
+
+    def get_raw(self):  # pylint: disable=method-hidden
+        return self._voltage_to_raw(self.source.voltage())
+
+    def validate(self, value) -> None:
+        super().validate(value)
+        self.source.voltage.validate(self._raw_to_voltage(self._from_value_to_raw_value(value)))
+
+    @contextmanager
+    def soft_ramp(self, rate=None, step=None):
+        old_step = self.source.voltage.step
+        old_delay = self.source.voltage.inter_delay
+        step = self.max_step / 10 if step is None else step
+        rate = self.rate if rate is None else rate
+        if step <= 0 or rate <= 0:
+            raise ValueError("Ramp rate and step must be positive")
+        try:
+            self.source.voltage.step = step
+            self.source.voltage.inter_delay = step / rate
+            yield self.source.voltage
+        finally:
+            self.source.voltage.step = old_step
+            self.source.voltage.inter_delay = old_delay
+
+    def set_raw(self, value) -> None:  # ty: ignore[invalid-method-override]  # QCoDeS dynamic Command assignment.
+        self._set_voltage(value)
+
+    def _set_voltage(self, value) -> None:
+        # Read the actual voltage so a stale cache cannot cause a large step.
+        current = self.source.voltage()
+        if value == current:
+            return
+        if abs(value - current) <= self.max_step:
+            self.source.voltage(value)
+        elif self.has_ramp:
+            if isinstance(self.source.ramp, Parameter):
+                with self.source.rate.set_to(self.rate):
+                    self.source.ramp(value)
+                    while not isclose(value, self.source.voltage(), abs_tol=1e-4):
+                        sleep(0.005)
+            else:
+                self.source.ramp(value, self.rate)
+                while not isclose(value, self.source.voltage(), abs_tol=1e-4):
+                    sleep(0.005)
+        else:
+            with self.soft_ramp() as ramp:
+                ramp(value)
+
+
+class Gate(_VoltageParameter):
     def __init__(
         self,
         name,
@@ -41,224 +153,63 @@ class Gate(Parameter):
         label=None,
         rate=0.05,
         max_step=5e-3,
-        default_mode="COLD",
+        *,
+        unit="V",
+        limits=(-2.5, 0),
         **kwargs,
     ):
-        # Check that the source is a valid voltage source
-        if not isinstance(source, (InstrumentBase, InstrumentChannel)):
-            raise TypeError("The source must be an instrument or instrument channel.")
-        if not hasattr(source, "voltage") or not hasattr(source.voltage, "set"):
-            raise TypeError("The source for a gate must be able to set a voltage")
-
-        if label is None:
-            label = name
-
-        self.source = source
-        self.rate = rate
-        self.max_step = max_step
-        self._gate_mode = self._parse_gate_mode(default_mode)
-
-        # Check whether we have a hardware ramp
-        if hasattr(source, "ramp"):
-            self.has_ramp = True
-        else:
-            self.has_ramp = False
-
-        # Initialize the parameter
         super().__init__(
-            name=name, label=label, unit="V", vals=self._get_gate_validator(), **kwargs
+            name,
+            source,
+            label=name if label is None else label,
+            unit=unit,
+            limits=limits,
+            rate=rate,
+            max_step=max_step,
+            **kwargs,
         )
 
-        # Set the cache to a wrapped Gate cache
-        self.cache = _GateCache(self)
 
-    @property
-    def gate_mode(self):
-        """
-        Create the concept of a gate mode that changes the validators
-        depending on the state of the gate
-        """
-        return self._gate_mode
-
-    @gate_mode.setter
-    def gate_mode(self, val):
-        self._gate_mode = self._parse_gate_mode(val)
-        self.vals = self._get_gate_validator()
-
-    @staticmethod
-    def _parse_gate_mode(val) -> GateMode:
-        if isinstance(val, GateMode):
-            return val
-        elif isinstance(val, str):
-            return GateMode[val]
-        raise TypeError(f"Invalid gate mode. Must be one of {tuple(GateMode)}.")
-
-    def _get_gate_validator(self):
-        if self._gate_mode is GateMode.BIAS:
-            return vals.Numbers(0, 0.5)
-        elif self._gate_mode is GateMode.COLD:
-            return vals.Numbers(-2.5, 0)
-        return self.source.voltage.vals
-
-    # Overwrite snapshot so that we pass the call onto the underlying voltage
-    # parameter. Further, we'll force an update since other types of set often
-    # cause this parameter to be overwritten
-    def snapshot_base(self, update=True, params_to_skip_update=None):
-        snap = self.source.voltage.snapshot_base(update, params_to_skip_update)
-        snap["full_name"] = self.full_name
-        snap["name"] = self.name
-        snap["instrument"] = repr(self.instrument)
-        snap["label"] = self.label
-        snap["value"] = self._from_raw_value_to_value(snap["value"])
-        snap["raw_value"] = snap["value"]
-        snap["scale"] = getattr(self, "scale", None)
-        return snap
-
-    @contextmanager
-    def soft_ramp(self, rate=None, step=None):
-        """
-        Set up a software ramp on the voltage parameter, saving the previous values
-        of step/delay if available
-        """
-        # Save the old step/inter_delay
-        old_step = self.source.voltage.step
-        old_delay = self.source.voltage.inter_delay
-
-        # Calculate a new step/inter_delay
-        if step is None:
-            step = self.max_step / 10
-        if rate is None:
-            rate = self.rate
-        delay = step / rate
-        try:
-            self.source.voltage.step = step
-            self.source.voltage.inter_delay = delay
-            yield self.source.voltage
-        finally:
-            self.source.voltage.step = old_step
-            self.source.voltage.inter_delay = old_delay
-
-    # Make getters and setters
-    def get_raw(self):  # pylint: disable=method-hidden
-        """
-        Get refers to the voltage of the underlying source
-        """
-        return self.source.voltage()
-
-    def set_raw(self, value) -> None:  # ty: ignore[invalid-method-override]  # QCoDeS dynamic Command assignment.
-        """
-        Set the voltage to the selected value, ramping if the step is
-        larger than max_step.
-
-        Validation handled by the set wrapper.
-        """
-        # Set the value if we are close
-        # The wrapped cache is installed after Parameter.__init__, which can
-        # already call set_raw to apply initial_value. Read the source directly.
-        if abs(value - self.source.voltage.cache.get()) <= self.max_step:
-            self.source.voltage(value)
-            return
-
-        # Otherwise ramp, using the hardware ramp if available
-        # Two different ways to do it, with a ramp function or ramp parameter
-        if self.has_ramp:
-            if isinstance(self.source.ramp, Parameter):
-                with self.source.rate.set_to(self.rate):
-                    self.source.ramp(value)
-                    while not isclose(
-                        value, self._from_value_to_raw_value(self.get()), abs_tol=1e-4
-                    ):
-                        sleep(0.005)
-            else:
-                self.source.ramp(value, self.rate)
-                while not isclose(value, self._from_value_to_raw_value(self.get()), abs_tol=1e-4):
-                    sleep(0.005)
-        else:
-            # set up a soft ramp and ramp with that instead
-            with self.soft_ramp() as ramp:
-                ramp(value)
+class Ohmic(_VoltageParameter):
+    def __init__(
+        self,
+        name,
+        source,
+        label=None,
+        unit="V",
+        limits=(-2e-3, 2e-3),
+        **kwargs,
+    ):
+        super().__init__(
+            name,
+            source,
+            label=f"{name} Bias" if label is None else label,
+            unit=unit,
+            limits=limits,
+            **kwargs,
+        )
 
 
 class GateWrapper(ChannelWrapper):
-    """
-    Channel wrapper around a gate object, allowing access of some of the underlying
-    states as parameters.
-
-    Note: The accesses for various attributes can be confusing here:
-        - self.gate - The underlying Gate object
-        - self.parent - The underlying DAC/BB channel
-    """
-
     def __init__(self, parent, name):
         if not isinstance(parent, Gate):
             raise TypeError("GateWrapper can only wrap gates")
         super().__init__(parent, name)
-
-        # Allow access to gate voltage
         self.parameters["voltage"] = parent
 
 
 class MDACGateWrapper(MDACWrapper, GateWrapper):
     def __init__(self, parent, name):
-        super().__init__(parent, name)
         if not isinstance(parent.source, MDAC.MDACChannel):
             raise TypeError("MDACGateWrapper must wrap a gate on an MDAC Channel")
+        super().__init__(parent, name)
 
 
 class BBGateWrapper(GateWrapper):
     def __init__(self, parent, name):
-        super().__init__(parent, name)
         if not isinstance(parent.source, BBChan):
-            raise TypeError("BBGateWrapper must wrap a gate on an breakout box")
-
-
-class Ohmic(Parameter):
-    def __init__(self, name, source, label=None, **kwargs):
-        # Check that the source is a valid voltage source
-        if not isinstance(source, (InstrumentBase, InstrumentChannel)):
-            raise TypeError("The source must be an instrument or instrument channel.")
-        if not hasattr(source, "voltage") or not hasattr(source.voltage, "set"):
-            del self.set_raw
-            del self.get_raw
-
-        if label is None:
-            label = name
-
-        # QCoDeS may call set_raw while applying initial_value in super().__init__.
-        self.source = source
-
-        # Initialize the parameter
-        super().__init__(
-            name=f"{name}",
-            label=f"{name} Bias",
-            unit="V",
-            vals=vals.Numbers(-2e-3, 2e-3),
-            **kwargs,
-        )
-        # Create a wrapped cache
-        self.cache = _GateCache(self)
-
-    # Overwrite snapshot so that we pass the call onto the underlying voltage
-    # parameter. Further, we'll force an update since other types of set often
-    # cause this parameter to be overwritten
-    def snapshot_base(self, update=True, params_to_skip_update=None):
-        if hasattr(self.source, "voltage"):
-            snap = self.source.voltage.snapshot_base(update, params_to_skip_update)
-            snap["full_name"] = self.full_name
-            snap["name"] = self.name
-            snap["instrument"] = repr(self.instrument)
-            snap["label"] = self.label
-            snap["value"] = self._from_raw_value_to_value(snap["value"])
-            snap["raw_value"] = snap["value"]
-            snap["scale"] = getattr(self, "scale", None)
-            return snap
-        return super().snapshot_base(update)
-
-    def get_raw(self):  # pylint: disable=method-hidden
-        return self.source.voltage()
-
-    def set_raw(self, value) -> None:  # ty: ignore[invalid-method-override]  # QCoDeS dynamic Command assignment.
-        self.source.voltage(value)
+            raise TypeError("BBGateWrapper must wrap a gate on a breakout box")
+        super().__init__(parent, name)
 
 
 class OhmicWrapper(ChannelWrapper):
@@ -266,92 +217,73 @@ class OhmicWrapper(ChannelWrapper):
         if not isinstance(parent, Ohmic):
             raise TypeError("OhmicWrapper can only wrap ohmics")
         super().__init__(parent, name)
-
-        if hasattr(parent.source, "voltage"):
-            self.parameters["voltage"] = parent
+        self.parameters["voltage"] = parent
 
 
 class MDACOhmicWrapper(MDACWrapper, OhmicWrapper):
     def __init__(self, parent, name):
-        super().__init__(parent, name)
         if not isinstance(parent.source, MDAC.MDACChannel):
-            raise TypeError("MDACGateWrapper must wrap a gate on an MDAC Channel")
+            raise TypeError("MDACOhmicWrapper must wrap an ohmic on an MDAC Channel")
+        super().__init__(parent, name)
 
 
 class BBOhmicWrapper(OhmicWrapper):
     def __init__(self, parent, name):
-        super().__init__(parent, name)
         if not isinstance(parent.source, BBChan):
-            raise TypeError("BBGateWrapperWithMDAC must wrap a gate on an breakout box")
+            raise TypeError("BBOhmicWrapper must wrap an ohmic on a breakout box")
+        super().__init__(parent, name)
 
 
-class _GateCache(_Cache):
-    """
-    Cache object for a wrapped parameter to hold its value and raw value
+class _SourceCache(_Cache):
+    """Mirror the source cache without changing the public channel-valued source.
 
-    It also implements ``set`` method for setting parameter's value without
-    invoking its ``set_cmd``, and ``get`` method that allows to retrieve the
-    cached value of the parameter without calling ``get_cmd`` might be called
-    unless the cache is invalid. This parameter is wrapped to correctly use
-    the cached value from the wrapped parameter while applying the correct
-    scaling factor.
-
-    Args:
-         parameter: instance of the parameter that this cache belongs to.
-         max_val_age: Max time (in seconds) to trust a value stored in cache.
-            If the parameter has not been set or measured more recently than
-            this, an additional measurement will be performed in order to
-            update the cached value. If it is ``None``, this behavior is
-            disabled. ``max_val_age`` should not be used for a parameter
-            that does not have a get function.
+    A normal Parameter cache becomes stale when the DAC is set directly. Digital
+    gates additionally translate physical voltage into their logical raw value.
     """
 
-    def __init__(self, parameter: Gate | Ohmic, max_val_age: float | None = None):
-        if not isinstance(parameter, (Gate, Ohmic)):
-            raise TypeError(f"GateCache can only wrap Gates or Ohmics, got {type(parameter)}")
-        self._source = parameter.source.voltage
-        super().__init__(parameter, max_val_age)
+    def __init__(self, parameter: _VoltageParameter):
+        super().__init__(parameter, parameter.cache.max_val_age)
+        self._contact = parameter
+        self._source = parameter.source.voltage.cache
 
     @property
-    def raw_value(self) -> ParamRawDataType:
-        """Raw value of the parameter"""
-        return self._source.cache.get()
+    def raw_value(self):
+        value = self._source.get(get_if_invalid=False)
+        return None if value is None else self._contact._voltage_to_raw(value)
 
     @property
     def timestamp(self) -> datetime | None:
-        """
-        Timestamp of the moment when cache was last updated
+        return self._source.timestamp
 
-        If ``None``, the cache hasn't been updated yet and shall be seen as
-        "invalid".
-        """
-        return self._source.cache.timestamp
-
-    def set(self, value: ParamDataType) -> None:
-        """
-        Set the cached value of the parameter without invoking the
-        ``set_cmd`` of the parameter (if it has one). This is forwarded
-        onto the underlying parameter
-
-        Args:
-            value: new value for the parameter
-        """
-        self._parameter.validate(value)
-        raw_value = self._parameter._from_value_to_raw_value(value)
-        self._source.cache.set(raw_value)
-
-    def get(self, get_if_invalid: bool = True) -> ParamDataType:
-        """
-        Return cached value of the underlying parameter, with correct scaling
-        applied.
-
-        Args:
-            get_if_invalid: if set to ``True``, ``get()`` on a parameter
-                will be performed in case the cached value is invalid (for
-                example, due to ``max_val_age``, or because the parameter has
-                never been captured)
-        """
-        value = self._parameter._from_raw_value_to_value(  # pylint: disable=protected-access
-            self._source.cache.get(get_if_invalid)
+    @property
+    def valid(self) -> bool:
+        if not self._source.valid:
+            return False
+        if self._max_val_age is None:
+            return True
+        return (
+            self.timestamp is not None
+            and (datetime.now(UTC) - self.timestamp).total_seconds() < self._max_val_age
         )
-        return value
+
+    def invalidate(self) -> None:
+        self._source.invalidate()
+
+    def get(self, get_if_invalid: bool = True):
+        if get_if_invalid and not self.valid:
+            return self._contact.get()
+        value = self._source.get(get_if_invalid=get_if_invalid)
+        if value is None:
+            return None
+        return self._contact._from_raw_value_to_value(self._contact._voltage_to_raw(value))
+
+    def set(self, value) -> None:
+        self._contact.validate(value)
+        self.set_from_raw_value(self._contact._from_value_to_raw_value(value))
+
+    def set_from_raw_value(self, raw_value) -> None:
+        self._source.set(self._contact._raw_to_voltage(raw_value))
+
+    def _update_with(self, *, value, raw_value, timestamp=None) -> None:
+        # The source's get/set already updated its cache.
+        pass
