@@ -25,7 +25,7 @@ class TableWidget(RPGWrappedBase):
             for j in range(nCols):
                 data.append(self.item(i, j).text())
             rowData.append(data)
-        return {title: data for title, data in zip(rowTitles, rowData)}
+        return {title: data for title, data in zip(rowTitles, rowData, strict=True)}
 
     def getHorizontalHeaders(self):
         """
@@ -60,9 +60,7 @@ class TextItem(RPGWrappedBase):
         (tl, tr, bl, br)
         """
         anchor_point = TextItem._ANCHORS[anchor]
-        self._base_inst.anchor(
-            itemPos=anchor_point, parentPos=anchor_point, offset=(0, 0)
-        )
+        self._base_inst.anchor(itemPos=anchor_point, parentPos=anchor_point, offset=(0, 0))
 
     @property
     def offset(self):

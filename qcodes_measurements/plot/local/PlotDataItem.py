@@ -1,19 +1,21 @@
-from .RemoteProcessWrapper import RPGWrappedBase, ensure_ndarray
 from .ExtendedDataItem import ExtendedDataItem
+from .RemoteProcessWrapper import RPGWrappedBase, ensure_ndarray
+
 
 class PlotDataItem(ExtendedDataItem, RPGWrappedBase):
     _base = "PlotDataItem"
+    _setpoint_x = None
 
     def __init__(self, setpoint_x, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        #self.xData = ensure_ndarray(setpoint_x)
-        self._remote_function_options['setData'] = {'callSync': 'off'}
+        self.setpoint_x = ensure_ndarray(setpoint_x)
+        self._remote_function_options["setData"] = {"callSync": "off"}
 
     def __wrap__(self, *args, **kwargs):
         setpoint_x = kwargs.pop("setpoint_x", None)
 
         super().__wrap__(*args, **kwargs)
-        self._remote_function_options['setData'] = {'callSync': 'off'}
+        self._remote_function_options["setData"] = {"callSync": "off"}
 
         if setpoint_x is not None:
             # If we know what our setpoints are, use them
@@ -25,21 +27,30 @@ class PlotDataItem(ExtendedDataItem, RPGWrappedBase):
 
         Note: The data must not contain NaN values, or the plot will not show any data.
         """
-        self.setData(x=self.setpoint_x, y=ensure_ndarray(data), *args, **kwargs)
+        self.setData(*args, x=self.setpoint_x, y=ensure_ndarray(data), **kwargs)
 
     @property
     def setpoint_x(self):
-        return self.xData
+        return self._setpoint_x
+
+    @setpoint_x.setter
+    def setpoint_x(self, val):
+        self._setpoint_x = ensure_ndarray(val)
+
     @property
     def xData(self):
-        return self._base_inst.__getattr__("xData", _returnType="value", _location="remote")
+        return self.__getattr__("xData", _returnType="value", _location="remote")
+
     @xData.setter
     def xData(self, val):
-        self._base_inst.xData = ensure_ndarray(val)
+        self.setpoint_x = ensure_ndarray(val)
+        if self.yData is not None:
+            self.setData(self.setpoint_x, self.yData)
 
     @property
     def yData(self):
         return self.__getattr__("yData", _returnType="value", _location="remote")
+
     @property
     def data(self):
         """
@@ -47,21 +58,22 @@ class PlotDataItem(ExtendedDataItem, RPGWrappedBase):
         """
         return (self.xData, self.yData)
 
+
 class ExtendedPlotDataItem(PlotDataItem):
     _base = "ExtendedPlotDataItem"
 
     def __init__(self, setpoint_x, *args, **kwargs):
         super().__init__(setpoint_x, *args, **kwargs)
         self.setpoint_x = ensure_ndarray(setpoint_x)
-        self._remote_function_options['update'] = {'callSync': 'off'}
-        self._remote_function_options['setData'] = {'callSync': 'off'}
+        self._remote_function_options["update"] = {"callSync": "off"}
+        self._remote_function_options["setData"] = {"callSync": "off"}
 
     def __wrap__(self, *args, **kwargs):
         setpoint_x = kwargs.pop("setpoint_x", None)
 
         super().__wrap__(*args, **kwargs)
-        self._remote_function_options['update'] = {'callSync': 'off'}
-        self._remote_function_options['setData'] = {'callSync': 'off'}
+        self._remote_function_options["update"] = {"callSync": "off"}
+        self._remote_function_options["setData"] = {"callSync": "off"}
 
         if setpoint_x is not None:
             # If we know what our setpoints are, use them
@@ -69,19 +81,11 @@ class ExtendedPlotDataItem(PlotDataItem):
 
     @property
     def setpoint_x(self):
-        return self._base_inst.setpoint_x
+        return self.__getattr__("setpoint_x", _returnType="value", _location="remote")
+
     @setpoint_x.setter
     def setpoint_x(self, val):
         self._base_inst.setpoint_x = ensure_ndarray(val)
-
-    @property
-    def xData(self):
-        return self.__getattr__("xData", _returnType="value", _location="remote")
-    @xData.setter
-    def xData(self, val):
-        val = ensure_ndarray(val)
-        self._base_inst.xData = val
-        self._base_inst.setpoint_x = val
 
     def update(self, data, *args, **kwargs):
         """
@@ -94,4 +98,5 @@ class ExtendedPlotDataItem(PlotDataItem):
         """
         Set the x, y in the plot, without filtering for NaN values.
         """
+        self.setpoint_x = ensure_ndarray(x)
         self.__getattr__("setData", _location="remote")(x, y, *args, **kwargs)

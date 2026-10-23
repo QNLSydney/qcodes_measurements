@@ -1,5 +1,8 @@
 from functools import partial
-from sys import exc_info
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from .PlotItem import ExtendedPlotItem
 
 from pyqtgraph import (
     GraphicsObject,
@@ -31,6 +34,8 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
         # And disable the one from PyQtGraph
         self.removeItem(self.rbScaleBox)
 
+        assert self.menu is not None
+
         # The mouse mode is not used, since we override what left clicking does anyway
         removeMenuItems = ("Mouse Mode",)
         for menuItem in removeMenuItems:
@@ -40,29 +45,27 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
                     self.menu.removeAction(action)
 
         # Extra menu actions
-        self.makeTracesDifferentAction = QtGui.QAction(
-            "Make All Traces Different", self.menu
-        )
+        self.makeTracesDifferentAction = QtGui.QAction("Make All Traces Different", self.menu)
         self.makeTracesDifferentAction.triggered.connect(self.makeTracesDifferent)
 
     def mouseClickEvent(self, ev):
-        if ev.button() & QtCore.Qt.LeftButton:
+        if ev.button() & QtCore.Qt.MouseButton.LeftButton:
             if self.scaleBox.isVisible():
                 rect = self.scaleBox.mapRectToScene(self.scaleBox.getRect())
                 pos = ev.scenePos()
-                logger.debug(f"Rect has position %r. Event has position %r.", rect, pos)
+                logger.debug("Rect has position %r. Event has position %r.", rect, pos)
                 if not rect.contains(pos):
                     ev.accept()
                     self.scaleBox.hide()
                     return True
-        if ev.button() & QtCore.Qt.RightButton:
+        if ev.button() & QtCore.Qt.MouseButton.RightButton:
             ev.accept()
-            logger.debug(f"Trying to raise context menu")
+            logger.debug("Trying to raise context menu")
             try:
                 self.raiseContextMenu(ev)
-            except Exception as e:
+            except Exception:
                 logger.exception(
-                    "Exception trying to raise context menu!", exc_info=exc_info()
+                    "Exception trying to raise context menu!",
                 )
                 raise
             return True
@@ -90,7 +93,8 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
         # If we clicked on a trace, add it to the context menu
         if event is not None and event.acceptedItem == self:
             # Add plot context meny items
-            traces = self.parentObject().listDataItems()
+            assert self.menu is not None
+            traces = cast("ExtendedPlotItem", self.parentObject()).listDataItems()
             if any(isinstance(trace, PlotDataItem) for trace in traces):
                 self.menu.addAction(self.makeTracesDifferentAction)
             else:
@@ -105,9 +109,7 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
                 return True
 
             # Get a list of the items near this event
-            itemNumbers = [
-                x for x in self.addedItems if isinstance(x, (PlotDataItem, ImageItem))
-            ]
+            itemNumbers = [x for x in self.addedItems if isinstance(x, (PlotDataItem, ImageItem))]
             itemNumbers = dict((x[1], x[0]) for x in enumerate(itemNumbers))
             items = filter(filterNear, self.scene().itemsNearEvent(event))
             self.addPlotContextMenus(items, itemNumbers, self.menu)
@@ -126,11 +128,11 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
         """
         Remove a plot item from the screen
         """
-        self.parentObject().removeItem(item)
+        cast("ExtendedPlotItem", self.parentObject()).removeItem(item)
         self.scaleBox.hide()
 
     def makeTracesDifferent(self, _checked=False, items=None):
-        self.parentObject().makeTracesDifferent(items=items)
+        cast("ExtendedPlotItem", self.parentObject()).makeTracesDifferent(items=items)
 
 
 class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
@@ -174,10 +176,10 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
         self._rect = QtCore.QRectF(0, 0, 0, 0)
         super().hide()
 
-    def paint(self, p, _options, _widget):
-        p.setPen(self.pen)
-        p.setBrush(self.brush)
-        p.drawRect(self._rect)
+    def paint(self, painter, option, widget=None):
+        painter.setPen(self.pen)
+        painter.setBrush(self.brush)
+        painter.drawRect(self._rect)
 
     # On right-click, raise the context menu
     def mouseClickEvent(self, ev):

@@ -1,2 +1,2 @@
-class ExtendedDataItem():
+class ExtendedDataItem:
     pass

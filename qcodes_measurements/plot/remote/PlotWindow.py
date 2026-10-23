@@ -1,5 +1,3 @@
-from typing import List
-
 from pyqtgraph import GraphicsLayoutWidget
 from pyqtgraph.exporters import ImageExporter, SVGExporter
 from pyqtgraph.Qt.QtWidgets import QGraphicsProxyWidget
@@ -10,7 +8,7 @@ logger = get_logger("PlotWindow")
 
 
 class ExtendedPlotWindow(GraphicsLayoutWidget):
-    _windows: List["ExtendedPlotWindow"] = []
+    _windows: list["ExtendedPlotWindow"] = []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

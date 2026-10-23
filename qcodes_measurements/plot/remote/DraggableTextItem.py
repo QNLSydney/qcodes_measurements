@@ -17,9 +17,7 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
     def __init__(self, *args, text="", offset=None):
         GraphicsWidget.__init__(self)
         GraphicsWidgetAnchor.__init__(self)
-        self.setFlag(
-            QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations
-        )
+        self.setFlag(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
         self.graphics_layout = QtWidgets.QGraphicsGridLayout()
         self.setLayout(self.graphics_layout)
         self.item_anchor = (0, 0)
@@ -49,10 +47,10 @@ class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
         parent.items.append(self)
         return ret
 
-    def paint(self, p, _options, _widget):
-        p.setPen(self.pen)
-        p.setBrush(self.brush)
-        p.drawRect(self.boundingRect())
+    def paint(self, painter, option, widget=None):
+        painter.setPen(self.pen)
+        painter.setBrush(self.brush)
+        painter.drawRect(self.boundingRect())
 
     def anchor(self, itemPos, parentPos, offset=(0, 0)):
         super().anchor(itemPos, parentPos, offset)

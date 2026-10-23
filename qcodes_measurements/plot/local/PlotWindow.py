@@ -1,4 +1,4 @@
-from typing import Sequence
+from collections.abc import Sequence
 
 from .PlotItem import PlotItem
 from .RemoteProcessWrapper import RPGWrappedBase, get_remote
@@ -93,6 +93,6 @@ class PlotWindow(BasePlotWindow):
             items = window.items
             for item in items:
                 if isinstance(item, PlotItem):
-                    if item.plot_title.endswith("(id: {})".format(wid)):
+                    if item.plot_title.endswith(f"(id: {wid})"):
                         return window
         return None

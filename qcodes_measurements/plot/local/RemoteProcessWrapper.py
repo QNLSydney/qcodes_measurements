@@ -1,12 +1,13 @@
+from __future__ import annotations
+
 import re
-import sys
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
-from PySide6 import QtGui, QtWidgets
+from PySide6 import QtWidgets
 
 from ...logging import get_logger
-from ..multiprocess import ClosedError, ObjectProxy, QtProcess
+from ..multiprocess import ObjectProxy, QtProcess
 
 
 # Get access to module level variables
@@ -61,11 +62,12 @@ def _set_defaults(remote):
 
 
 def start_remote():
-    # Check that a QApplication has been created
-    if QtWidgets.QApplication.instance() is None:
-        this.app = QtWidgets.QApplication([])
-    else:
-        this.app = QtWidgets.QApplication.instance()
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        app = QtWidgets.QApplication([])
+    if not isinstance(app, QtWidgets.QApplication):
+        raise RuntimeError("Plotting requires a QApplication, not a QCoreApplication")
+    this.app = app
 
     this.proc = QtProcess(debug=False)
     this.rpg = this.proc._import("qcodes_measurements.plot.rpyplot", timeout=20)
@@ -74,19 +76,10 @@ def start_remote():
 
 
 def restart_remote():
-    if len(QtProcess.handlers) == 0:
-        start_remote()
-    else:
-        for pid in QtProcess.handlers:
-            try:
-                proc = QtProcess.handlers[pid]
-                if isinstance(proc, QtProcess):
-                    if not proc.exited:
-                        QtProcess.handlers[pid].join()
-            except ClosedError:
-                continue
-        QtProcess.handlers.clear()
-        start_remote()
+    for proc in tuple(QtProcess.handlers.values()):
+        if isinstance(proc, QtProcess):
+            proc.join()
+    start_remote()
 
 
 def get_remote():
@@ -104,11 +97,11 @@ def remote_callable(remote_obj):
 
 class RPGWrappedBase(ObjectProxy):
     # Keep track of children so they aren't recomputed each time
-    _subclass_types: dict[str, type] = {}
+    _subclass_types: ClassVar[dict[str, type[RPGWrappedBase]]] = {}
 
     # Reserve names for local variables, so they aren't proxied.
     _base: str = ""
-    _base_inst: ObjectProxy = None
+    _base_inst: ObjectProxy
 
     # Cache remote functions, allowing proxy options for each to be set
     _remote_functions: dict = {}
@@ -129,13 +122,11 @@ class RPGWrappedBase(ObjectProxy):
             base = base(*args, **kwargs)
             self._base_inst = base
         else:
-            raise TypeError(
-                "Base instance not defined. Don't know how to create remote object."
-            )
+            raise TypeError("Base instance not defined. Don't know how to create remote object.")
 
     def __init_subclass__(cls) -> None:
         base = getattr(cls, "_base", None)
-        if base is not None:
+        if base:
             typestr = base
             RPGWrappedBase._subclass_types[typestr] = cls
         return super().__init_subclass__()
@@ -175,9 +166,7 @@ class RPGWrappedBase(ObjectProxy):
         # If we have an object proxy, wrap it if it is in the list of wrappable types
         if isinstance(inst, ObjectProxy):
             if isinstance(inst, RPGWrappedBase):
-                logger.debug(
-                    "Object already wrapped. Has types: %r.", inst.__class__.__mro__
-                )
+                logger.debug("Object already wrapped. Has types: %r.", inst.__class__.__mro__)
                 return inst
 
             # Get name of remote type
@@ -206,9 +195,7 @@ class RPGWrappedBase(ObjectProxy):
                 if typestr in RPGWrappedBase._subclass_types:
                     return RPGWrappedBase._subclass_types[typestr].wrap(inst)
         else:
-            logger.debug(
-                "Object is not an ObjectProxy. Has types: %r.", inst.__class__.__mro__
-            )
+            logger.debug("Object is not an ObjectProxy. Has types: %r.", inst.__class__.__mro__)
         # Otherwise, just return the bare instance
         return inst
 
@@ -231,9 +218,10 @@ class RPGWrappedBase(ObjectProxy):
     def wrap_getters(self, f):
         return auto_wrap(f)
 
-    def __setattr__(self, name, val, **kwargs):  # pylint: disable
+    def __setattr__(self, *args):
+        name, val = args
         for cls in self.__class__.__mro__:
-            if name in cls.__dict__:
+            if name in cls.__dict__ or name in getattr(cls, "__annotations__", {}):
                 object.__setattr__(self, name, val)
                 return
         if name in self.__dict__:
@@ -241,9 +229,10 @@ class RPGWrappedBase(ObjectProxy):
         elif name == "__dict__":
             object.__setattr__(self, name, val)
         else:
-            super().__setattr__(name, val, **kwargs)
+            super().__setattr__(name, val)
 
-    def __getattr__(self, name, **kwargs):
+    def __getattr__(self, attr, **kwargs):
+        name = attr
         # Check for ipython special methods
         if re.match("_repr_.*_", name):
             raise AttributeError("Ignoring iPython special methods")
@@ -260,7 +249,7 @@ class RPGWrappedBase(ObjectProxy):
                 if name in cls.__dict__:
                     v = cls.__dict__[name]
                     if hasattr(v, "__get__"):
-                        attr = v.__get__(None, self)
+                        attr = v.__get__(self, type(self))
                         logger.debug(
                             "Found attr %s locally in subclass %r, and is a property. Returns value: %r.",
                             name,
@@ -297,10 +286,8 @@ class RPGWrappedBase(ObjectProxy):
             logger.debug("Found attr %s remotely. Returns value %r.", name, attr)
 
         # If we didn't find the attribute in either location, raise an AttributeError
-        if attr is None:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{name}'"
-            )
+        if attr is None and search_location == "local":
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
         # Check if item is a wrappable type
         attr = self.autowrap(attr)
@@ -322,4 +309,4 @@ class RPGWrappedBase(ObjectProxy):
         return attr
 
     def __repr__(self):
-        return "<%s for %s>" % (self.__class__.__name__, super().__repr__())
+        return f"<{self.__class__.__name__} for {super().__repr__()}>"

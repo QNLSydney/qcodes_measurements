@@ -13,7 +13,6 @@
 # work.  If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 
 from math import ceil
-from typing import Dict, List, Tuple, Union
 
 # In addition, try and load extra matplotlib colormaps
 import matplotlib as mpl
@@ -1059,7 +1058,7 @@ _VIRIDIS_DATA = (
     (0.993248, 0.906157, 0.143936),
 )
 _GREY_DATA = ((0, 0, 0), (1, 1, 1))
-__data__: Dict[str, Union[List, Tuple, ndarray]] = {
+__data__: dict[str, list | tuple | ndarray] = {
     "magma": _MAGMA_DATA,
     "inferno": _INFERNO_DATA,
     "plasma": _PLASMA_DATA,
@@ -1091,15 +1090,18 @@ GRADIENTS.clear()
 for name, data in __data__.items():
     step = ceil(len(data) / 16)
     pos = linspace(0.0, 1.0, len(data[::step]))
-    data = list((int(r * 255), int(g * 255), int(b * 255)) for r, g, b in data)
+    data = list((int(r * 255), int(g * 255), int(b * 255), 255) for r, g, b in data)
     rcmap = ColorMap(pos=pos, color=data[::step])
-    GRADIENTS[name] = {"ticks": list(zip(pos, data[::step])), "mode": "rgb"}
+    GRADIENTS[name] = {
+        "ticks": list(zip((float(p) for p in pos), data[::step], strict=True)),
+        "mode": "rgb",
+    }
     COLORMAPS[name] = rcmap
     if name == "viridis":
         pos = [0.0] + list(1 / (x**1.5) for x in range(15, 0, -1))
         rcmap = ColorMap(pos=pos, color=data[::step])
         GRADIENTS[name + "_nlin"] = {
-            "ticks": list(zip(pos, data[::step])),
+            "ticks": list(zip((float(p) for p in pos), data[::step], strict=True)),
             "mode": "rgb",
         }
         COLORMAPS[name + "_nlin"] = rcmap

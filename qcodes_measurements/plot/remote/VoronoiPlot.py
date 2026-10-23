@@ -12,9 +12,7 @@ logger = get_logger("VoronoiPlot")
 
 class VoronoiPlot(ExtendedDataItem, MeshPlot):
     def __init__(self, *args, positions=None, data=None, colormap=None, **kwargs):
-        super().__init__(
-            *args, positions=positions, data=data, colormap=colormap, **kwargs
-        )
+        super().__init__(*args, positions=positions, data=data, colormap=colormap, **kwargs)
 
         # Reserve spot for voronoi
         self.voronoi = None

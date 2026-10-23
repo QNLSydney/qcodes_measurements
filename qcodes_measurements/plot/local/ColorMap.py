@@ -1,11 +1,9 @@
-from typing import Dict
-
 from .RemoteProcessWrapper import RPGWrappedBase, get_remote
 
 
 class ColorMap(RPGWrappedBase):
     _base = "ColorMap"
-    _all_colors: Dict[str, "ColorMap"] = {}
+    _all_colors: dict[str, "ColorMap"] = {}
 
     # Reserve names of local variables
     _name: str = ""
@@ -19,15 +17,16 @@ class ColorMap(RPGWrappedBase):
         # And add each of our colors to the new list
         remote_list = self.get_remote_list()
         remote_list[name] = {
-            "ticks": list(
-                zip(pos, (tuple(int(y * 255) for y in x) + (255,) for x in color))
-            ),
+            "ticks": [
+                (float(position), tuple(int(component * 255) for component in rgb) + (255,))
+                for position, rgb in zip(pos, color, strict=True)
+            ],
             "mode": "rgb",
         }
 
     @classmethod
     def get_remote_list(cls):
-        remote_list = get_remote().graphicsItems.GradientEditorItem.__getattr__(
+        remote_list = get_remote().pyqtgraph.graphicsItems.GradientEditorItem.__getattr__(
             "Gradients", _returnType="proxy"
         )
         return remote_list

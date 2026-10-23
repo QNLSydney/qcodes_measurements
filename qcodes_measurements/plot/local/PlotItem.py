@@ -1,5 +1,3 @@
-from typing import cast
-
 from qcodes.parameters import ArrayParameter, Parameter
 
 from .ImageItem import ImageItemWithHistogram
@@ -47,9 +45,7 @@ class BasePlotItem(RPGWrappedBase):
         textbox_item.setParentItem(self)
         return textbox_item
 
-    def update_axes(
-        self, param_x, param_y, param_x_setpoint=False, param_y_setpoint=False
-    ):
+    def update_axes(self, param_x, param_y, param_x_setpoint=False, param_y_setpoint=False):
         """
         Update axis labels, using param_x, param_y to pull labels
         If left or bottom axis is from an ArrayParameter, set param_x_setpoint
@@ -105,9 +101,7 @@ class BasePlotItem(RPGWrappedBase):
 
     @property
     def traces(self):
-        raise NotImplementedError(
-            "Can't get a list of traces from a non-extended plot_item"
-        )
+        raise NotImplementedError("Can't get a list of traces from a non-extended plot_item")
 
 
 class PlotItem(BasePlotItem):

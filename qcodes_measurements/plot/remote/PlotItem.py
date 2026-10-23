@@ -1,11 +1,13 @@
 import colorsys
 
-from pyqtgraph import PlotItem, ImageItem, PlotDataItem, LegendItem
+from pyqtgraph import ImageItem, PlotDataItem, PlotItem
 
-from .ViewBox import CustomViewBox
-from .PlotDataItem import ExtendedPlotDataItem
 from ...logging import get_logger
+from .PlotDataItem import ExtendedPlotDataItem
+from .ViewBox import CustomViewBox
+
 logger = get_logger("PlotItem")
+
 
 class ExtendedPlotItem(PlotItem):
     def __init__(self, *args, **kwargs):
@@ -15,9 +17,9 @@ class ExtendedPlotItem(PlotItem):
           - Keep track of images and allow proxying
           - Use a custom view box, such that we can do common tasks
         """
-        if 'viewBox' not in kwargs:
+        if "viewBox" not in kwargs:
             vb = CustomViewBox()
-            kwargs['viewBox'] = vb
+            kwargs["viewBox"] = vb
         super().__init__(*args, **kwargs)
 
         # Keep track of context menus for items in this plot
@@ -39,8 +41,8 @@ class ExtendedPlotItem(PlotItem):
             clear    - clear all plots before displaying new data
             params   - meta-parameters to associate with this data
         """
-        clear = kargs.get('clear', False)
-        params = kargs.get('params', None)
+        clear = kargs.get("clear", False)
+        params = kargs.get("params", None)
 
         if clear:
             self.clear()
@@ -63,17 +65,10 @@ class ExtendedPlotItem(PlotItem):
         ntraces = len(items)
 
         for i, trace in enumerate(items):
-            color = colorsys.hsv_to_rgb(i/ntraces, saturation, value)
-            color = tuple(int(c*255) for c in color)
+            color = colorsys.hsv_to_rgb(i / ntraces, saturation, value)
+            color = tuple(int(c * 255) for c in color)
             trace.setPen(*color)
 
-    def addLegend(self, size=None, offset=(30, 30)):
-        """
-        Reimplement addLegend to check if legend already exists.
-        The default one should do this, but doesn't
-        seem to work on our extended version for some reason?
-        """
-        if self.legend is None:
-            self.legend = LegendItem(size, offset)
-            self.legend.setParentItem(self.vb)
-        return self.legend
+    def addLegend(self, offset=(30, 30), **kwargs):
+        """Create a legend once, using the current pyqtgraph signature."""
+        return super().addLegend(offset=offset, **kwargs)

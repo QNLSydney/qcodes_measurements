@@ -1,5 +1,4 @@
 from itertools import islice
-from typing import List, Union
 
 import numpy as np
 from pyqtgraph import GraphicsObject, HistogramLUTItem, mkPen
@@ -26,17 +25,15 @@ class MeshPlot(GraphicsObject):
 
         # Initialize data structures
         self.positions = positions
-        self.data = data
-        self.rgb_data: Union[None, np.ndarray] = None
-        self.polygons: List[tuple[int, QtGui.QPolygonF]] = []
+        self.mesh_data: np.ndarray | None = data
+        self.rgb_data: None | np.ndarray = None
+        self.polygons: list[tuple[int, QtGui.QPolygonF]] = []
         self.xmin, self.xmax = 0, 0
         self.ymin, self.ymax = 0, 0
         if positions is not None and data is not None:
             self.calc_lims()
         elif not (positions is None and data is None):
-            raise ValueError(
-                "Either positions and data must both be given, or neither."
-            )
+            raise ValueError("Either positions and data must both be given, or neither.")
 
         # Initialize menus
         self.menu = None
@@ -52,7 +49,7 @@ class MeshPlot(GraphicsObject):
             self.changeColorScale(name=DEFAULT_CMAP)
 
         # And update color and polygon data
-        if self.data is not None:
+        if self.mesh_data is not None:
             self.updateRGBData()
             self.calculate_polygons()
 
@@ -63,7 +60,7 @@ class MeshPlot(GraphicsObject):
     # Function related to plot data
     def setData(self, positions, data):
         self.positions = positions
-        self.data = data
+        self.mesh_data = data
 
         # Calculate data size
         self.calc_lims()
@@ -73,7 +70,7 @@ class MeshPlot(GraphicsObject):
         self.calculate_polygons()
 
         # Update histogram and autorange
-        hist, bins = np.histogram(self.data, "auto")
+        hist, bins = np.histogram(self.mesh_data, "auto")
         newBins = np.ndarray(bins.size + 1)
         newHist = np.ndarray(hist.size + 2)
         newBins[0] = bins[0]
@@ -86,13 +83,15 @@ class MeshPlot(GraphicsObject):
         self._LUTitem.plot.getViewBox().itemBoundsChanged(self._LUTitem.plot)
 
         # Force viewport update
-        self.getViewBox().itemBoundsChanged(self)
+        view_box = self.getViewBox()
+        if view_box is not None:
+            view_box.itemBoundsChanged(self)
         self.update()
 
     ###
     # Functions relating to the size of the image
     def calc_lims(self):
-        if not self.positions:
+        if self.positions is None or len(self.positions) == 0:
             self.xmin, self.xmax = 0, 0
             self.ymin, self.ymax = 0, 0
             return
@@ -110,10 +109,10 @@ class MeshPlot(GraphicsObject):
         )
 
     def width(self):
-        return self.xmax - self.xmin
+        return float(self.xmax - self.xmin)
 
     def height(self):
-        return self.ymax - self.ymin
+        return float(self.ymax - self.ymin)
 
     def boundingRect(self):
         tl = QtCore.QPointF(self.xmin, self.ymin)
@@ -128,8 +127,9 @@ class MeshPlot(GraphicsObject):
         Hook setLevels to update histogram when the levels are changed in
         the image
         """
-        super().setLevels(levels, update)
-        self._LUTitem.setLevels(*self.levels)
+        self._LUTitem.setLevels(*levels)
+        if update:
+            self.updateRGBData()
 
     def changeColorScale(self, name=None):
         if name is None:
@@ -151,8 +151,8 @@ class MeshPlot(GraphicsObject):
     def updateRGBData(self):
         minr, maxr = self._LUTitem.getLevels()
         logger.debug("Recoloring to changed levels: (%f, %f)", minr, maxr)
-        if self.data is not None:
-            scaled = (self.data - minr) / (maxr - minr)
+        if self.mesh_data is not None:
+            scaled = (self.mesh_data - minr) / (maxr - minr)
 
             logger.debug("Calculating new colors")
             self.rgb_data = self._LUTitem.gradient.colorMap().map(scaled, mode="qcolor")
@@ -168,22 +168,22 @@ class MeshPlot(GraphicsObject):
         """
         raise NotImplementedError()
 
-    def paint(self, p, _options, _widget):
+    def paint(self, painter, option, widget=None):
         logger.debug("Starting paint")
         visible = self.parentItem().boundingRect()
         if self.polygons is not None and self.polygons and self.rgb_data is not None:
-            p.setPen(mkPen(None))
+            painter.setPen(mkPen(None))
             for poly in self.polygons:  # pylint: disable=not-an-iterable
                 if not poly[1].boundingRect().intersects(visible):
                     continue
-                p.setBrush(self.rgb_data[poly[0]])
-                p.drawPolygon(poly[1])
+                painter.setBrush(self.rgb_data[poly[0]])
+                painter.drawPolygon(poly[1])
             logger.debug("Done painting")
         else:
             logger.debug("No polygons to draw")
 
-    def parentChanged(self):
-        super().parentChanged()
+    def changeParent(self):
+        super().changeParent()
         # Add the histogram to the parent
         view_box = self.getViewBox()
         if isinstance(view_box, ExtendedPlotWindow):
@@ -191,7 +191,7 @@ class MeshPlot(GraphicsObject):
             view_box.addItem(self._LUTitem)
             self._parent = view_box
         elif view_box is None:
-            if getattr(self, "_parent", None) is not None:
+            if self._parent is not None:
                 self._parent.removeItem(self._LUTitem)
                 self._parent = None
         elif isinstance(view_box, CustomViewBox):

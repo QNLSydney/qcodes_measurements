@@ -17,18 +17,16 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
 
         # Plot color selection dialog
         self.colorDialog = QtWidgets.QColorDialog()
-        self.colorDialog.setOption(
-            QtWidgets.QColorDialog.ColorDialogOption.ShowAlphaChannel, True
-        )
+        self.colorDialog.setOption(QtWidgets.QColorDialog.ColorDialogOption.ShowAlphaChannel, True)
         self.colorDialog.setOption(
             QtWidgets.QColorDialog.ColorDialogOption.DontUseNativeDialog, True
         )
         self.colorDialog.colorSelected.connect(self.colorSelected)
 
         # Store x-setpoint, since we may add nan values back in
-        self.setpoint_x = tuple()
+        self.setpoint_x = np.asarray(self.xData) if self.xData is not None else np.empty(0)
 
-    def getContextMenus(self, *, rect=None, event=None):
+    def getContextMenus(self, event=None, *, rect=None):
         if self.menu is None:
             self.menu = QtWidgets.QMenu()
 
@@ -41,7 +39,7 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
             self.menu.addAction(qaction)
 
         if self.name() is not None:
-            self.menu.setTitle(self.name())
+            self.menu.setTitle(str(self.name()))
         else:
             self.menu.setTitle("Trace")
         return self.menu
@@ -74,10 +72,11 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
             nanind = np.where(~notnan)[0]
             dontconnect = nanind + np.cumsum(np.full_like(nanind, -1))
             connect = np.ones_like(xData, dtype=np.int32)
+            dontconnect = dontconnect[(dontconnect >= 0) & (dontconnect < connect.size)]
             connect[dontconnect] = 0
 
         # Update data
-        self.setData(x=xData, y=yData, connect=connect, *args, **kwargs)
+        self.setData(*args, x=xData, y=yData, connect=connect, **kwargs)
 
     def setName(self, name):
         self.opts["name"] = str(name)

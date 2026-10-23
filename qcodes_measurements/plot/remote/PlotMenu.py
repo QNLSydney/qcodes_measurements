@@ -1,5 +1,7 @@
+from typing import TYPE_CHECKING, Any
+
 from pyqtgraph import ImageItem, PlotCurveItem, PlotDataItem
-from PySide6 import QtCore
+from PySide6 import QtCore, QtWidgets
 
 from ...logging import get_logger
 from .DataItem import ExtendedDataItem
@@ -8,6 +10,15 @@ logger = get_logger("PlotMenu")
 
 
 class PlotMenuMixin:
+    # Both consumers are pyqtgraph graphics objects with a context menu.
+    if TYPE_CHECKING:
+        menu: QtWidgets.QMenu | None
+
+        def getContextMenus(self, event=None) -> QtWidgets.QMenu:
+            raise NotImplementedError
+
+        def scene(self) -> Any: ...
+
     def raiseContextMenu(self, ev):
         """
         Raise the context menu, removing extra separators as they are added pretty recklessly
@@ -72,31 +83,33 @@ class PlotMenuMixin:
                 name = None
             ind = itemNumbers[dataitem]
             if name is None:
-                name = f"(Trace: {ind+1})"
+                name = f"(Trace: {ind + 1})"
             else:
-                name = f"{name} (Trace: {ind+1})"
+                name = f"{name} (Trace: {ind + 1})"
 
             # Create menus for each of the items
             if isinstance(dataitem, ExtendedDataItem):
-                menu = dataitem.getContextMenus(rect=rect, event=None)
+                item_menu = dataitem.getContextMenus(rect=rect, event=None)
             else:
-                menu = dataitem.getContextMenus(event=None)
-            menu.setTitle(name)
-            itemsToAdd.append((ind, menu))
+                item_menu = dataitem.getContextMenus(event=None)
+            if item_menu is None:
+                continue
+            item_menu.setTitle(name)
+            itemsToAdd.append((ind, item_menu))
 
         # Sort the items by the index
         itemsToAdd.sort(key=lambda x: x[0])
 
         # Add each of the items in to the menu
         if itemsToAdd:
-            menuItems.append(self.menu.addSeparator())
+            menuItems.append(menu.addSeparator())
             if len(itemsToAdd) == 1:
                 for item in itemsToAdd[0][1].actions():
                     menuItems.append(item)
-                    self.menu.addAction(item)
+                    menu.addAction(item)
             else:
                 for item in itemsToAdd:
-                    menuItems.append(self.menu.addMenu(item[1]))
+                    menuItems.append(menu.addMenu(item[1]))
 
         return itemsToAdd
 

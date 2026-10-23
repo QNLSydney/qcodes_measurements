@@ -7,6 +7,7 @@ from pyqtgraph.graphicsItems import GradientEditorItem
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...logging import get_logger
+from ..axis import image_axis
 from .colors import COLORMAPS, DEFAULT_CMAP
 from .DataItem import ExtendedDataItem
 from .PlotWindow import ExtendedPlotWindow
@@ -33,14 +34,14 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
     def mouseClickEvent(self, ev):
         return False
 
-    def getContextMenus(self, *, rect=None, event=None):
+    def getContextMenus(self, event=None, *, rect=None):
         if self.menu is None:
             self.menu = QtWidgets.QMenu()
         self.menu.clear()
 
         # Add color selector
         if self.gradientSelectorMenu is None:
-            l = 80
+            gradient_width = 80
             self.gradientSelectorMenu = QtWidgets.QMenu()
             self.gradientSelectorMenu.setTitle("Color Scale")
             gradients = GradientEditorItem.Gradients
@@ -50,19 +51,14 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
                 else:
                     pos = [x[0] for x in gradients[g]["ticks"]]
                     colors = [x[1] for x in gradients[g]["ticks"]]
-                    mode = (
-                        ColorMap.RGB
-                        if gradients[g]["mode"] == "rgb"
-                        else ColorMap.HSV_POS
-                    )
-                    cmap = ColorMap(pos, colors, mode=mode)
+                    cmap = ColorMap(pos, colors)
                     COLORMAPS[g] = cmap
 
-                px = QtGui.QPixmap(l, 15)
+                px = QtGui.QPixmap(gradient_width, 15)
                 p = QtGui.QPainter(px)
-                grad = cmap.getGradient(QtCore.QPointF(0, 0), QtCore.QPointF(l, 0))
+                grad = cmap.getGradient(QtCore.QPointF(0, 0), QtCore.QPointF(gradient_width, 0))
                 brush = QtGui.QBrush(grad)
-                p.fillRect(QtCore.QRect(0, 0, l, 15), brush)
+                p.fillRect(QtCore.QRect(0, 0, gradient_width, 15), brush)
                 p.end()
                 label = QtWidgets.QLabel()
                 label.setPixmap(px)
@@ -70,7 +66,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
                 act = QtWidgets.QWidgetAction(self)
                 act.setDefaultWidget(label)
                 act.triggered.connect(partial(self.changeColorScale, name=g))
-                act.name = g
+                act.setData(g)
                 self.gradientSelectorMenu.addAction(act)
         self.menu.addMenu(self.gradientSelectorMenu)
 
@@ -80,21 +76,15 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
             yrange = rect.top(), rect.bottom()
 
             qaction = QtGui.QAction("Colour By Marquee", self.menu)
-            qaction.triggered.connect(
-                partial(self.colorByMarquee, xrange=xrange, yrange=yrange)
-            )
+            qaction.triggered.connect(partial(self.colorByMarquee, xrange=xrange, yrange=yrange))
             self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Plane Fit", self.menu)
-            qaction.triggered.connect(
-                partial(self.planeFit, xrange=xrange, yrange=yrange)
-            )
+            qaction.triggered.connect(partial(self.planeFit, xrange=xrange, yrange=yrange))
             self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Level Columns", self.menu)
-            qaction.triggered.connect(
-                partial(self.levelColumns, xrange=xrange, yrange=yrange)
-            )
+            qaction.triggered.connect(partial(self.levelColumns, xrange=xrange, yrange=yrange))
             self.menu.addAction(qaction)
 
         self.menu.setTitle("Image Item")
@@ -139,6 +129,8 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         )
 
         # Then calculate the min/max range of the array
+        if self.image is None:
+            return
         data = self.image[xmin_p:xmax_p, ymin_p:ymax_p]
         min_v, max_v = np.min(data), np.max(data)
 
@@ -162,14 +154,14 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         )
 
         # Get the coordinate grid
-        X, Y = np.meshgrid(
-            self.setpoint_x[xmin_p:xmax_p], self.setpoint_y[ymin_p:ymax_p]
-        )
+        X, Y = np.meshgrid(self.setpoint_x[xmin_p:xmax_p], self.setpoint_y[ymin_p:ymax_p])
         X = X.flatten()
         Y = Y.flatten()
         CG = np.c_[X, Y, np.ones(X.shape)]
 
         # Get the data in the correct format
+        if self.image is None:
+            return
         data = self.image[xmin_p:xmax_p, ymin_p:ymax_p]
         data = data.T.flatten()
         assert data[1] == self.image[xmin_p + 1, ymin_p]
@@ -192,21 +184,23 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
         logger.debug("Calculated limits: y: {(%d, %d)}", ymin_p, ymax_p)
 
         # Get a list of means for that column
+        if self.image is None:
+            return
         col_mean = self.image[:, ymin_p:ymax_p]
         col_mean = np.mean(col_mean, axis=1)
-        col_mean.shape = col_mean.shape + (1,)
+        col_mean = col_mean[:, None]
 
         # Subtract from that column
         image = self.image - col_mean
         self.setImage(image)
 
     def rescale(self):
-        step_x = (self.setpoint_x[-1] - self.setpoint_x[0]) / len(self.setpoint_x)
-        step_y = (self.setpoint_y[-1] - self.setpoint_y[0]) / len(self.setpoint_y)
+        origin_x, step_x = image_axis(self.setpoint_x)
+        origin_y, step_y = image_axis(self.setpoint_y)
 
         self.resetTransform()
         tr = QtGui.QTransform()
-        tr.translate(self.setpoint_x[0], self.setpoint_y[0])
+        tr.translate(origin_x, origin_y)
         tr.scale(step_x, step_y)
         self.setTransform(tr)
 
@@ -232,7 +226,8 @@ class ImageItemWithHistogram(ExtendedImageItem):
         the image
         """
         super().setLevels(levels, update)
-        self._LUTitem.setLevels(*self.levels)
+        if self.levels is not None:
+            self._LUTitem.setLevels(*np.asarray(self.levels))
 
     def changeColorScale(self, name=None):
         if name is None:
@@ -252,7 +247,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
             view_box.addItem(self._LUTitem)
             self._parent = view_box
         elif view_box is None:
-            if getattr(self, "_parent", None) is not None:
+            if self._parent is not None:
                 self._parent.removeItem(self._LUTitem)
                 self._parent = None
         elif isinstance(view_box, CustomViewBox):

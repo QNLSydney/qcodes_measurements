@@ -2,6 +2,7 @@ class ExtendedDataItem:
     """
     Base class for trace-like objects (1d or 2d plots)
     """
+
     def update(self, data, *args, **kwargs):
         """
         Define a common way of updating plots for 1D and 2D plots

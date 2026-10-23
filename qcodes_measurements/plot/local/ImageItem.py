@@ -3,6 +3,7 @@ from typing import cast
 import numpy as np
 from qcodes.parameters import ArrayParameter, Parameter
 
+from ..axis import image_axis
 from .ColorMap import ColorMap
 from .ExtendedDataItem import ExtendedDataItem
 from .RemoteProcessWrapper import RPGWrappedBase, ensure_ndarray, get_remote
@@ -40,7 +41,10 @@ class ImageItem(ExtendedDataItem, RPGWrappedBase):
     _base = "ImageItem"
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
-        super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
+        if self._base == "ImageItem":
+            super().__init__(*args, **kwargs)
+        else:
+            super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
         setpoint_x = ensure_ndarray(setpoint_x)
         setpoint_y = ensure_ndarray(setpoint_y)
         self._remote_function_options["setImage"] = {"callSync": "off"}
@@ -50,9 +54,9 @@ class ImageItem(ExtendedDataItem, RPGWrappedBase):
         if colormap is not None:
             if not isinstance(colormap, ColorMap):
                 try:
-                    colormap = get_remote().COLORMAPS["colormap"]
-                except KeyError:
-                    raise ValueError(f"Can't find colormap {colormap}.")
+                    colormap = get_remote().COLORMAPS[colormap]
+                except KeyError as exc:
+                    raise ValueError(f"Can't find colormap {colormap}.") from exc
             lut = colormap.getLookupTable(0, 1, alpha=False)
             self.setLookupTable(lut)
 
@@ -61,12 +65,12 @@ class ImageItem(ExtendedDataItem, RPGWrappedBase):
         self._remote_function_options["setImage"] = {"callSync": "off"}
 
     def _force_rescale(self, setpoint_x, setpoint_y):
-        step_x = (setpoint_x[-1] - setpoint_x[0]) / len(setpoint_x)
-        step_y = (setpoint_y[-1] - setpoint_y[0]) / len(setpoint_y)
+        origin_x, step_x = image_axis(setpoint_x)
+        origin_y, step_y = image_axis(setpoint_y)
 
         self.resetTransform()
         tr = get_remote().pyqtgraph.QtGui.QTransform()
-        tr.translate(setpoint_x[0], setpoint_y[0])
+        tr.translate(origin_x, origin_y)
         tr.scale(step_x, step_y)
         self.setTransform(tr)
 
