@@ -7,7 +7,9 @@ from qcodes.parameters import ParamSpecBase
 
 from ..logging import get_logger
 from ..plot import pyplot
+from .axis import image_axis_tolerance, is_regular_image_axis
 from .local.PlotItem import PlotItem
+from .measurement import resolve_plot_spec
 
 __all__ = ["save_figure", "append_by_id", "plot_by_id", "plot_by_run", "plot_dataset"]
 
@@ -83,6 +85,13 @@ def plot_dataset(
             continue  # This is not an item we want to plot
         param = dataset.description.interdeps[param]
         dep_params = dataset.description.interdeps.dependencies.get(param, ())
+        if dataset.description.shapes is not None and dep_params:
+            try:
+                spec = resolve_plot_spec(dataset.description, param)
+            except ValueError as exc:
+                logger.warning("%s; skipping its plot", exc)
+                continue
+            dep_params = spec.axes
 
         if len(dep_params) == 1:
             plot = None
@@ -137,8 +146,31 @@ def plot_dataset(
                 c_data = c_data.to_numpy()
             else:
                 c_data = vals[param.name]
+                shape = dataset.description.shapes.get(param.name)
+                if shape is None or c_data.size != np.prod(shape):
+                    logger.warning("Incomplete or inconsistent image shape for %s", param.name)
+                    continue
+                c_data = c_data.reshape(shape)
                 setpoint_x = vals[dep_params[0].name][:, 0]
                 setpoint_y = vals[dep_params[1].name][0, :]
+                if not np.allclose(
+                    vals[dep_params[0].name],
+                    setpoint_x[:, None],
+                    rtol=0,
+                    atol=image_axis_tolerance(setpoint_x),
+                ) or not np.allclose(
+                    vals[dep_params[1].name],
+                    setpoint_y[None, :],
+                    rtol=0,
+                    atol=image_axis_tolerance(setpoint_y),
+                ):
+                    logger.warning(
+                        "Changing or invalid image grid for %s; skipping its plot", param.name
+                    )
+                    continue
+            if not is_regular_image_axis(setpoint_x) or not is_regular_image_axis(setpoint_y):
+                logger.warning("Nonuniform image coordinates for %s; skipping its plot", param.name)
+                continue
             plot = None
             if appending:
                 plot = find_plot_by_paramspec(win, dep_params[0], dep_params[1])
@@ -170,10 +202,6 @@ def plot_dataset(
                     f"(id: {dataset.run_id})"
                 )
 
-            if np.isnan(c_data).any(axis=None):
-                # Nan in plot
-                logger.warning("2D plot has NaN's in it. Ignoring plot")
-                continue
             add_image_plot(
                 plot,
                 setpoint_x,

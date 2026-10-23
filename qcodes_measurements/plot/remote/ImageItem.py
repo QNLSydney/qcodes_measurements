@@ -206,6 +206,8 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
 
 
 class ImageItemWithHistogram(ExtendedImageItem):
+    _empty_frame = False
+
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
         # Create the attached histogram
         self._LUTitem = HistogramLUTItem()
@@ -238,10 +240,26 @@ class ImageItemWithHistogram(ExtendedImageItem):
     def getHistogramLUTItem(self):
         return self._LUTitem
 
+    def getHistogram(self, *args, **kwargs):
+        if self._empty_frame:
+            # A caller can also replace the image directly through setImage.
+            self._empty_frame = self.image is None or not np.isfinite(self.image).any()
+            if self._empty_frame:
+                return None, None
+        return super().getHistogram(*args, **kwargs)
+
     def setImageData(self, data, *, update_range=True, histogram_paused=False):
         """Update image and levels together, calculating the histogram only once."""
         if update_range:
-            levels = (np.min(data), np.max(data))
+            # fmin/fmax ignore measured NaNs without allocating a filtered
+            # image or warning on an entirely empty/non-finite frame.
+            levels = (
+                np.fmin.reduce(data, axis=None),
+                np.fmax.reduce(data, axis=None),
+            )
+            self._empty_frame = not np.isfinite(levels).all()
+            if self._empty_frame:
+                levels = self.levels if self.levels is not None else (0, 1)
             if self.image is None:
                 # Replace the histogram's initial deferred levels before the
                 # first image is installed; pyqtgraph reapplies them afterwards.
@@ -252,6 +270,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
                 # are disconnected by pause_update().
                 self._LUTitem.imageChanged()
         else:
+            self._empty_frame = not np.isfinite(data).any()
             self.setImage(data, autoDownsample=True)
 
     def changeParent(self):
