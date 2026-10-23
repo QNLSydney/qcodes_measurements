@@ -10,11 +10,7 @@ from qcodes.instrument.instrument_base import InstrumentBaseKWArgs
 from qcodes.parameters import ParameterBase
 from qcodes.validators import Bool, Enum, MultiType, Numbers
 
-try:
-    import MDAC  # type: ignore
-except ModuleNotFoundError:
-    from ..drivers import MDAC
-
+from ..drivers import MDAC
 from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
 from .device import Device

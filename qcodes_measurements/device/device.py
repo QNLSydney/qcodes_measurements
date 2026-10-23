@@ -4,6 +4,8 @@ from qcodes.instrument import ChannelList, InstrumentBase
 from qcodes.instrument.instrument_base import InstrumentBaseKWArgs, TParameter
 from qcodes.parameters import ParameterBase
 
+from ..drivers import MDAC
+from .bb import BBChan
 from .gate import (
     BBGateWrapper,
     BBOhmicWrapper,
@@ -14,13 +16,6 @@ from .gate import (
     Ohmic,
     OhmicWrapper,
 )
-
-try:
-    import MDAC  # type: ignore
-except ModuleNotFoundError:
-    from ..drivers import MDAC
-
-from .bb import BBChan
 
 
 class Device(InstrumentBase):

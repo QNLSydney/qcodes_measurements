@@ -9,11 +9,7 @@ from qcodes.instrument import InstrumentBase, InstrumentChannel
 from qcodes.parameters import Parameter
 from qcodes.parameters.cache import _Cache
 
-try:
-    import MDAC  # type: ignore
-except ModuleNotFoundError:
-    from ..drivers import MDAC
-
+from ..drivers import MDAC
 from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
 from .mdac_wrappers import MDACWrapper

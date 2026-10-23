@@ -39,8 +39,8 @@ saving. `sweep_time` accepts a positive `delay` and an optional `until` duration
 seconds; omit `until` to measure until interrupted.
 
 To plot an existing dataset, use `qcodes_measurements.plot.plot_dataset(dataset)`.
-The bundled MDAC driver is available as `qcodes_measurements.drivers.MDAC`;
-device wrappers also support an existing top-level `MDAC` installation.
+The bundled MDAC driver is available as `qcodes_measurements.drivers.MDAC` and
+is used by all device wrappers.
 
 `Device.add_parameter` follows QCoDeS's generic API: it accepts any
 `ParameterBase` subclass and returns that subclass, including `Gate`, `Ohmic`,
@@ -85,8 +85,8 @@ configuration entry point, for example a new `init.contacts` constructor argumen
 containing the contact definitions. It would need to resolve source paths against
 an explicitly supplied station or QCoDeS's instrument registry, select the
 parameter class, and call `add_gate`, `add_ohmic`, or `add_digital_gate`. Sources
-would have to be loaded first. Connection states and digital IO modes should be
-applied before initial voltages, as those helper methods already do. Such an
+would have to be loaded first. The configuration layer would also need to preserve
+safe ordering of connection states, digital IO modes, and initial voltages. Such an
 `init.contacts` argument is a proposed extension and is not implemented here.
 Supporting the original `add_parameters` layout would instead require extending
 QCoDeS's station loader and schema, because source resolution happens before
