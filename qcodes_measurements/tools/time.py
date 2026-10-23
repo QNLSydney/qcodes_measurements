@@ -1,14 +1,12 @@
 import time
-import numpy as np
-from inspect import signature
 from collections import namedtuple
+from inspect import signature
 
-from qcodes.validators import Arrays
-from qcodes.parameters import ParameterWithSetpoints
+import numpy as np
 from qcodes.dataset.measurements import Measurement
 
-from .doNd import _live_plot
 from ..logging import get_logger
+from .doNd import _live_plot
 
 logger = get_logger("tools.time")
 
@@ -34,9 +32,7 @@ def _run_function(function, param_vals=None):
             if param_vals is not None:
                 function(param_vals)
             else:
-                raise RuntimeError(
-                    "Function expects parameter values but none were provided"
-                )
+                raise RuntimeError("Function expects parameter values but none were provided")
         else:
             function()
     else:
@@ -57,10 +53,8 @@ def _run_functions(functions, param_vals=None, err_name="functions"):
                         _run_function(func, param_vals)
                 else:
                     raise TypeError()
-            except TypeError:
-                raise TypeError(
-                    "{} must be a function or a list of functions".format(err_name)
-                )
+            except TypeError as exc:
+                raise TypeError(f"{err_name} must be a function or a list of functions") from exc
 
 
 @_live_plot
@@ -106,28 +100,20 @@ def sweep_time(
         (iw, win): ID is the trace id of the saved wave, win is a handle to the plot window that was created
         for the purposes of liveplotting.
     """
+    if delay <= 0:
+        raise ValueError("delay must be positive")
+    if until is not None and until < 0:
+        raise ValueError("until must be non-negative")
+
     # Register setpoints
     m = Measurement()
     m.register_custom_parameter("time", label="Time", unit="s")
 
     _run_functions(atstart)
 
-    # Set up parameters
-    shapes = {}
-    if until is not None:
-        estimated_points: int = int(until // delay)
-    else:
-        estimated_points = 10
+    # Time sweeps have no fixed length. Leave shapes unset so the cache can grow.
     for param in param_meas:
         m.register_parameter(param, setpoints=("time",))
-        if isinstance(param, ParameterWithSetpoints):
-            assert isinstance(param.vals, Arrays) and param.vals.shape is not None
-            shapes[param.full_name] = (estimated_points,) + param.vals.shape
-        elif isinstance(param.vals, Arrays) and param.vals.shape is not None:
-            shapes[param.full_name] = (estimated_points,) + param.vals.shape
-        else:
-            shapes[param.full_name] = (estimated_points,)
-        m.set_shapes(shapes)
 
     start_time = 0
     curr_point = 0
@@ -140,9 +126,7 @@ def sweep_time(
                 curr_time = time.monotonic() - start_time
                 data = [("time", curr_time)]
 
-                _run_functions(
-                    ateach, param_vals=(Setpoint("time", curr_point, curr_time))
-                )
+                _run_functions(ateach, param_vals=(Setpoint("time", curr_point, curr_time)))
 
                 if until is not None and curr_time > until:
                     break
@@ -160,14 +144,14 @@ def sweep_time(
                 # took for equipment to respond
                 next_time = start_time + delay * curr_point
                 while time.monotonic() < next_time:
-                    sleep_time = max(0, min(0.01, time.monotonic() - next_time))
+                    sleep_time = max(0, min(0.01, next_time - time.monotonic()))
                     _interruptible_sleep(sleep_time)
     except KeyboardInterrupt:
-        print(f"Trace cancelled with Ctrl-C")
+        print("Trace cancelled with Ctrl-C")
         print(f"Ending plot at time {time.monotonic() - start_time}.")
     finally:
         _run_functions(atend)
 
     if datasaver:
-        return datasaver.dataset, None, None
+        return datasaver.dataset, [None], [None]
     return None

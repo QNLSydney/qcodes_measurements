@@ -7,8 +7,9 @@ import functools
 import inspect
 import itertools
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional, Sequence, Tuple, Union
+from typing import Any
 
 import numpy as np
 import qcodes.dataset
@@ -107,17 +108,17 @@ def _reduce_ids(ids: Sequence[int]):
             if i - 1 == r:
                 strings.append(f"{ids[r]}")
             else:
-                strings.append(f"{ids[r]}-{ids[i-1]}")
+                strings.append(f"{ids[r]}-{ids[i - 1]}")
             r = i
             i += 1
     if i - 1 == r:
         strings.append(f"{ids[r]}")
     else:
-        strings.append(f"{ids[r]}-{ids[i-1]}")
+        strings.append(f"{ids[r]}-{ids[i - 1]}")
     return strings
 
 
-def _parse_title(title) -> Tuple[str, Tuple[str, ...], Tuple[int, ...]]:
+def _parse_title(title) -> tuple[str, tuple[str, ...], tuple[int, ...]]:
     match = _plot_title_re.fullmatch(title)
     if not match:
         # Might be a single title re
@@ -133,8 +134,8 @@ def _parse_title(title) -> Tuple[str, Tuple[str, ...], Tuple[int, ...]]:
 
 
 def _compatible_plot_item(
-    win: PlotWindow, p_bot: ParamSpecBase, p_left: Optional[ParamSpecBase] = None
-) -> Optional[PlotItem]:
+    win: PlotWindow, p_bot: ParamSpecBase, p_left: ParamSpecBase | None = None
+) -> PlotItem | None:
     """
     Returns a compatible plot item if found
     """
@@ -172,16 +173,16 @@ def _register_subscriber():
 # Tuple for live plotting
 @dataclass(frozen=False)
 class LivePlotWindow:
-    plot_window: Optional[PlotWindow]
+    plot_window: PlotWindow | None
     stack: bool = False
     append: bool = False
-    dataset: Optional[DataSet] = None
+    dataset: DataSet | None = None
     datacount: dict[str, int] = field(default_factory=dict)
-    table_items: Optional[dict[str, list[str]]] = None
-    plot_items: dict[str, Union[PlotDataItem, ImageItem]] = field(default_factory=dict)
-    plot_params: Optional[list[ParameterBase]] = None
-    plot_param_names: Optional[set[str]] = None
-    annotation: Optional[str] = None
+    table_items: dict[str, list[str]] | None = None
+    plot_items: dict[str, PlotDataItem | ImageItem] = field(default_factory=dict)
+    plot_params: list[ParameterBase] | None = None
+    plot_param_names: set[str] | None = None
+    annotation: str | None = None
 
 
 def do_nothing(new_data, data_len, state):
@@ -224,7 +225,11 @@ def update_plots(new_data=None, data_len=None, state=None, *, live=None):
         if param not in write_count:
             continue
         param_write_count = write_count[param]
-        if param_write_count is None:
+        if (
+            param_write_count is None
+            or shapes is None
+            or data_cache[param][param].shape != shapes[param]
+        ):
             param_write_count = data_cache[param][param].size
         if param_write_count == 0:
             continue
@@ -260,8 +265,8 @@ def update_plots(new_data=None, data_len=None, state=None, *, live=None):
 
             # Check if we are in the first column or if we need to clear nans
             if np.isnan(data[-1, -1]) or param_write_count < shape[1]:
-                meanval = data.flat[: param_write_count].mean()
-                data.flat[param_write_count :] = meanval
+                meanval = data.flat[:param_write_count].mean()
+                data.flat[param_write_count:] = meanval
 
             # Update axis scales as data comes in
             if plotitem.no_xscale:
@@ -339,7 +344,7 @@ def subscriber(dataset, **kwargs):
     # First, check if we actually want to do anything. If not, we return
     # a blank function
     if current is None or current.plot_window is None:
-        logger.info(f"Live plotting disabled for {dataset.run_id}.")
+        logger.info("Live plotting disabled for %s.", dataset.run_id)
         return do_nothing
 
     # Update the plot title
@@ -361,9 +366,7 @@ def subscriber(dataset, **kwargs):
     if current.plot_params is None:
         current.plot_param_names = set(params.names)
     else:
-        current.plot_param_names = set(
-            p.full_name for p in current.plot_params
-        )
+        current.plot_param_names = set(p.full_name for p in current.plot_params)
 
     for param in itertools.chain(params.dependencies, params.standalones):
         name = param.name
@@ -397,24 +400,25 @@ def subscriber(dataset, **kwargs):
                 current.table_items[name] = [""] * nVals
             win.table.setHorizontalHeaderLabels(list(str(s) for s in window_run_ids))
         elif len(params.dependencies[param]) == 1:
-            logger.info("Adding 1D parameter %s with shape %r", name, shapes[name] if shapes is not None else None)
+            logger.info(
+                "Adding 1D parameter %s with shape %r",
+                name,
+                shapes[name] if shapes is not None else None,
+            )
             bot_axis = params.dependencies[param][0]
 
             # If we need to stack or append, find the right plot
             plotitem = None
             if current.stack:
                 try:
-                    plotitem = next(
-                        iter(i for i in win.items if isinstance(i, PlotItem))
-                    )
+                    plotitem = next(iter(i for i in win.items if isinstance(i, PlotItem)))
                 except StopIteration:
                     pass
             elif current.append:
                 plotitem = _compatible_plot_item(win, bot_axis, param)
                 if plotitem is None:
                     logger.warning(
-                        "Append requested but appropriate plotitem not found."
-                        " Making a new one."
+                        "Append requested but appropriate plotitem not found. Making a new one."
                     )
 
             # Couldn't find an appropriate plotitem - make a new one
@@ -437,21 +441,22 @@ def subscriber(dataset, **kwargs):
             plotdata = plotitem.plot(setpoint_x=[], pen=(255, 0, 0), name=param.name)
             current.plot_items[param.name] = plotdata
         elif len(params.dependencies[param]) == 2 and shapes is not None:
-            logger.info("Adding 2D parameter %s with shape %r", name, shapes[name] if shapes is not None else None)
+            logger.info(
+                "Adding 2D parameter %s with shape %r",
+                name,
+                shapes[name] if shapes is not None else None,
+            )
             bot_axis = params.dependencies[param][0]
             left_axis = params.dependencies[param][1]
 
             plotitem = None
             if current.stack:
-                logger.warning(
-                    "Can't stack 2D param %r. Will create a new plot instead.", name
-                )
+                logger.warning("Can't stack 2D param %r. Will create a new plot instead.", name)
             if current.append:
                 plotitem = _compatible_plot_item(win, bot_axis, left_axis)
                 if plotitem is None:
                     logger.warning(
-                        "Append requested but appropriate plotitem not found."
-                        " Making a new one."
+                        "Append requested but appropriate plotitem not found. Making a new one."
                     )
 
             # Couldn't find an appropriate plotitem - make a new one
@@ -512,9 +517,9 @@ def _live_plot(wrapped):
     def wrapped_function(
         *args: Any,
         plot: bool = True,
-        plot_params: Optional[list[ParameterBase]] = None,
-        append: Optional[Union[bool, PlotWindow]] = False,
-        annotation: Optional[str] = None,
+        plot_params: list[ParameterBase] | None = None,
+        append: bool | PlotWindow | None = False,
+        annotation: str | None = None,
         save: bool = True,
         stack: bool = False,
         **kwargs: Any,
@@ -548,7 +553,8 @@ def _live_plot(wrapped):
             this.current = previous
             try:
                 update_plots(live=current)
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
+                # Plot failures must not hide a measurement exception.
                 logger.exception("Failed to update final live plot")
             # Try and save the plot if save was requested. If the run failed, we still try
             # to pull a run ID out of the window in order to save.
@@ -560,7 +566,8 @@ def _live_plot(wrapped):
                 if run_id is not None:
                     try:
                         save_figure(win, run_id)
-                    except Exception:
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        # Export failures must not hide a measurement exception.
                         logger.exception("Failed to save figure %s", run_id)
                 else:
                     logger.warning("Couldn't find run id for sweep. Not saved!")
