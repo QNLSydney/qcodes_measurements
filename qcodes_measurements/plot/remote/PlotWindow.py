@@ -28,7 +28,9 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
         del exporter
 
     def closeEvent(self, event):
-        self._windows.remove(self)
+        # Cleanup can deliver another close event after a user has closed the window.
+        if self in self._windows:
+            self._windows.remove(self)
         event.accept()
 
     def getLayoutItems(self):
