@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "qcodes-measurements"
 version = "0.1.0"
@@ -19,6 +23,10 @@ dependencies = [
     "tqdm>4.67",
     "requests>=2.32",
     "pyside6>=6.12",
+    "pyserial>=3.5",
+    "pyzmq>=27.2.0",
+    "python-dateutil>=3.0.0",
+    "packaging>=26.3",
 ]
 
 [dependency-groups]

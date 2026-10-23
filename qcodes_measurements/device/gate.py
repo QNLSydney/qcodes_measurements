@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from math import isclose
 from time import sleep
-from typing import Any, Optional, Union
+from typing import Any
 
 import qcodes.validators as vals
 from qcodes.instrument import InstrumentBase, InstrumentChannel
@@ -12,12 +12,8 @@ from qcodes.parameters.cache import _Cache
 try:
     import MDAC  # type: ignore
 except ModuleNotFoundError:
+    from ..drivers import MDAC
 
-    class _Blank:
-        MDACChannel = type(None)
-        MDAC = type(None)
-
-    MDAC = _Blank()
 from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
 from .mdac_wrappers import MDACWrapper
@@ -148,7 +144,7 @@ class Gate(Parameter):
         """
         return self.source.voltage()
 
-    def set_raw(self, value):  # pylint: disable=method-hidden
+    def set_raw(self, value) -> None:  # ty: ignore[invalid-method-override]  # QCoDeS dynamic Command assignment.
         """
         Set the voltage to the selected value, ramping if the step is
         larger than max_step.
@@ -172,9 +168,7 @@ class Gate(Parameter):
                         sleep(0.005)
             else:
                 self.source.ramp(value, self.rate)
-                while not isclose(
-                    value, self._from_value_to_raw_value(self.get()), abs_tol=1e-4
-                ):
+                while not isclose(value, self._from_value_to_raw_value(self.get()), abs_tol=1e-4):
                     sleep(0.005)
         else:
             # set up a soft ramp and ramp with that instead
@@ -259,8 +253,8 @@ class Ohmic(Parameter):
     def get_raw(self):  # pylint: disable=method-hidden
         return self.source.voltage()
 
-    def set_raw(self, value):  # pylint: disable=method-hidden
-        return self.source.voltage(value)
+    def set_raw(self, value) -> None:  # ty: ignore[invalid-method-override]  # QCoDeS dynamic Command assignment.
+        self.source.voltage(value)
 
 
 class OhmicWrapper(ChannelWrapper):
@@ -308,13 +302,9 @@ class _GateCache(_Cache):
             that does not have a get function.
     """
 
-    def __init__(
-        self, parameter: Union[Gate, Ohmic], max_val_age: Optional[float] = None
-    ):
+    def __init__(self, parameter: Gate | Ohmic, max_val_age: float | None = None):
         if not isinstance(parameter, (Gate, Ohmic)):
-            raise TypeError(
-                f"GateCache can only wrap Gates or Ohmics, got {type(parameter)}"
-            )
+            raise TypeError(f"GateCache can only wrap Gates or Ohmics, got {type(parameter)}")
         self._source = parameter.source.voltage
         super().__init__(parameter, max_val_age)
 
@@ -324,7 +314,7 @@ class _GateCache(_Cache):
         return self._source.cache.get()
 
     @property
-    def timestamp(self) -> Optional[datetime]:
+    def timestamp(self) -> datetime | None:
         """
         Timestamp of the moment when cache was last updated
 

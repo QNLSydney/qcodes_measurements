@@ -10,12 +10,8 @@ from qcodes.validators import Bool, Enum, MultiType, Numbers
 try:
     import MDAC  # type: ignore
 except ModuleNotFoundError:
+    from ..drivers import MDAC
 
-    class _Blank:
-        MDACChannel = type(None)
-        MDAC = type(None)
-
-    MDAC = _Blank()
 from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
 from .device import Device
@@ -280,13 +276,9 @@ class DigitalDevice(Device):
     def store_new_param(self, new_param):
         if isinstance(new_param, DigitalGate):
             if isinstance(new_param.source, MDAC.MDACChannel):
-                self.digital_gates.append(
-                    MDACDigitalGateWrapper(new_param, new_param.name)
-                )
+                self.digital_gates.append(MDACDigitalGateWrapper(new_param, new_param.name))
             elif isinstance(new_param.source, BBChan):
-                self.digital_gates.append(
-                    BBDigitalGateWrapper(new_param, new_param.name)
-                )
+                self.digital_gates.append(BBDigitalGateWrapper(new_param, new_param.name))
             else:
                 self.digital_gates.append(DigitalGateWrapper(new_param, new_param.name))
         else:

@@ -1,5 +1,4 @@
 from qcodes.instrument import ChannelList, InstrumentBase
-from qcodes.instrument.instrument_base import TParameter
 from qcodes.parameters import Parameter
 
 from .gate import (
@@ -16,12 +15,8 @@ from .gate import (
 try:
     import MDAC  # type: ignore
 except ModuleNotFoundError:
+    from ..drivers import MDAC
 
-    class _Blank:
-        MDACChannel = type(None)
-        MDAC = type(None)
-
-    MDAC = _Blank()
 from .bb import BBChan
 
 
@@ -59,16 +54,14 @@ class Device(InstrumentBase):
             assert isinstance(gate, OhmicWrapper)
             gate.state(state)
 
-    def add_parameter(  # type: ignore
+    def add_parameter(
         self, name, parameter_class: type[Parameter] | None = Parameter, **kwargs
     ) -> Parameter:
         """
         Add a new parameter to the instrument and store it in an appropriate list, if
         we are keeping track of gates/ohmics.
         """
-        new_param = super().add_parameter(
-            name, parameter_class=parameter_class, **kwargs
-        )
+        new_param = super().add_parameter(name, parameter_class=parameter_class, **kwargs)
         self.store_new_param(new_param)
         return new_param
 
