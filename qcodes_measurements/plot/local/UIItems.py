@@ -14,29 +14,13 @@ class TableWidget(RPGWrappedBase):
         """
         Get the data from the table.
         """
-        nRows = self.rowCount()
-        nCols = self.columnCount()
-        assert isinstance(nRows, int) and isinstance(nCols, int)
-        rowTitles = []
-        rowData = []
-        for i in range(nRows):
-            rowTitles.append(self.verticalHeaderItem(i).text())
-            data = []
-            for j in range(nCols):
-                data.append(self.item(i, j).text())
-            rowData.append(data)
-        return {title: data for title, data in zip(rowTitles, rowData, strict=True)}
+        return self.__getattr__("getData", _location="remote")()
 
     def getHorizontalHeaders(self):
         """
         Get the headers from the table.
         """
-        nCols = self.columnCount()
-        assert isinstance(nCols, int)
-        colTitles = []
-        for i in range(nCols):
-            colTitles.append(self.horizontalHeaderItem(i).text())
-        return colTitles
+        return self.__getattr__("getHorizontalHeaders", _location="remote")()
 
 
 class LegendItem(RPGWrappedBase):
@@ -121,7 +105,6 @@ class PlotAxis(RPGWrappedBase):
         return True
 
     def setParamspec(self, paramspec: ParamSpecBase):
-        self.label = paramspec.label
-        self.unit = paramspec.unit
+        self.setLabel(text=paramspec.label, units=paramspec.unit)
 
     paramspec = property(None, setParamspec)

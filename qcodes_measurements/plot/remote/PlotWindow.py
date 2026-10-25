@@ -1,6 +1,8 @@
+from functools import partial
+
 from pyqtgraph import GraphicsLayoutWidget
 from pyqtgraph.exporters import ImageExporter, SVGExporter
-from pyqtgraph.Qt.QtWidgets import QGraphicsProxyWidget
+from pyqtgraph.Qt.QtWidgets import QGraphicsProxyWidget, QWidget
 
 from ...logging import get_logger
 
@@ -12,7 +14,24 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._windows.append(self)
+        self._plot_closed = False
+        if self not in self._windows:
+            self._windows.append(self)
+        self.destroyed.connect(partial(type(self)._forget_window, id(self)))
+
+    @classmethod
+    def _forget_window(cls, identity, *args):
+        cls._windows[:] = [window for window in cls._windows if id(window) != identity]
+
+    def showEvent(self, event):
+        self._plot_closed = False
+        if self not in self._windows:
+            self._windows.append(self)
+        super().showEvent(event)
+
+    def close(self):
+        """Hide a reusable window, matching a native window-manager close."""
+        return QWidget.close(self)
 
     def export(self, fname, export_type="image"):
         """
@@ -28,9 +47,8 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
         del exporter
 
     def closeEvent(self, event):
-        # Cleanup can deliver another close event after a user has closed the window.
-        if self in self._windows:
-            self._windows.remove(self)
+        self._plot_closed = True
+        self._forget_window(id(self))
         event.accept()
 
     def getLayoutItems(self):
@@ -43,4 +61,16 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
 
     @classmethod
     def getWindows(cls):
-        return cls._windows
+        return list(cls._windows)
+
+    @classmethod
+    def find_by_id(cls, wid):
+        from .PlotItem import ExtendedPlotItem
+
+        for window in cls._windows:
+            for item in window.getLayoutItems():
+                if isinstance(item, ExtendedPlotItem) and item.titleLabel.text.endswith(
+                    f"(id: {wid})"
+                ):
+                    return window
+        return None

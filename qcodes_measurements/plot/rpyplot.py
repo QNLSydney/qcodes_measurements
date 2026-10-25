@@ -9,7 +9,6 @@ from pyqtgraph import (
     LegendItem,
     PlotDataItem,
     PlotItem,
-    TableWidget,
     getConfigOption,
     mkBrush,
     mkPen,
@@ -19,6 +18,7 @@ from pyqtgraph import (
 
 from ..logging import get_logger, set_log_level
 from . import remote
+from .remote import _proxy as _proxy_helpers
 from .remote.ColorMesh import ColorMesh
 from .remote.colors import COLORMAPS, DEFAULT_CMAP
 from .remote.DraggableTextItem import DraggableTextItem
@@ -26,6 +26,7 @@ from .remote.ImageItem import ExtendedImageItem, ImageItemWithHistogram
 from .remote.PlotDataItem import ExtendedPlotDataItem
 from .remote.PlotItem import ExtendedPlotItem
 from .remote.PlotWindow import ExtendedPlotWindow
+from .remote.TableWidget import TableWidget
 from .remote.VoronoiPlot import VoronoiPlot
 
 __all__ = [

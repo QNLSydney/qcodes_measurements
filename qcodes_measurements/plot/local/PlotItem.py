@@ -81,7 +81,7 @@ class BasePlotItem(RPGWrappedBase):
 
     @property
     def plot_title(self):
-        return self.titleLabel.text
+        return self._base_inst._deferredAttr("titleLabel").text
 
     @plot_title.setter
     def plot_title(self, title):

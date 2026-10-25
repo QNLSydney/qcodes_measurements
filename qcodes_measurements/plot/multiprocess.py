@@ -3,7 +3,9 @@ import atexit
 import multiprocessing
 import os
 import sys
+import threading
 import time
+from typing import Any
 
 # Import the binding before pyqtgraph chooses one, including in spawned children.
 from PySide6 import QtCore, QtWidgets
@@ -24,6 +26,8 @@ else:
     os.environ["QCM_REMOTE"] = PREV_REMOTE
 
 __all__ = ["Process", "QtProcess", "ClosedError", "NoResultError", "ObjectProxy"]
+
+_spawn_lock = threading.RLock()
 
 
 class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
@@ -47,6 +51,29 @@ class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
         Use the logger for debugging instead
         """
         self.logger.debug(msg.strip("\r\n"), *args)
+
+    def processRequests(self, max_time=None):
+        """Drain requests, optionally yielding so Qt can paint and handle input."""
+        deadline = None if max_time is None else time.monotonic() + max_time
+        with self.processLock:
+            if self.exited:
+                raise ClosedError()
+            count = 0
+            try:
+                while self.conn.poll():
+                    try:
+                        self.handleRequest()
+                    except ClosedError:
+                        raise
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        self.logger.exception("Error processing remote request")
+                    count += 1
+                    if deadline is not None and time.monotonic() >= deadline:
+                        break
+            except (ClosedError, OSError, EOFError) as exc:
+                self.exited = True
+                raise ClosedError() from exc
+            return count
 
 
 class Process(RemoteEventHandler):
@@ -111,25 +138,31 @@ class Process(RemoteEventHandler):
         )
 
         # Start the process. We'll set the file that multiprocessing loads to this file
-        old_main = getattr(sys.modules["__main__"], "__file__", None)
-        sys.modules["__main__"].__file__ = __file__
-        previous_remote = os.environ.get("QCM_REMOTE")
-        os.environ["QCM_REMOTE"] = name
         try:
-            self.proc = multiprocessing.get_context("spawn").Process(target=target, kwargs=data)
-            self.proc.start()
+            with _spawn_lock:
+                old_main = getattr(sys.modules["__main__"], "__file__", None)
+                previous_remote = os.environ.get("QCM_REMOTE")
+                sys.modules["__main__"].__file__ = __file__
+                os.environ["QCM_REMOTE"] = name
+                try:
+                    self.proc = multiprocessing.get_context("spawn").Process(
+                        target=target, kwargs=data
+                    )
+                    self.proc.start()
+                finally:
+                    if previous_remote is None:
+                        os.environ.pop("QCM_REMOTE", None)
+                    else:
+                        os.environ["QCM_REMOTE"] = previous_remote
+                    if old_main is None:
+                        del sys.modules["__main__"].__file__
+                    else:
+                        sys.modules["__main__"].__file__ = old_main
+        except BaseException:
+            self.conn.close()
+            raise
         finally:
-            if previous_remote is None:
-                os.environ.pop("QCM_REMOTE", None)
-            else:
-                os.environ["QCM_REMOTE"] = previous_remote
-            if old_main is None:
-                del sys.modules["__main__"].__file__
-            else:
-                sys.modules["__main__"].__file__ = old_main
-
-        ## Close one end of pipe to ensure there is only one writer per pipe
-        child_conn.close()
+            child_conn.close()
 
         ## Connect the child process event handler to self.conn
         RemoteEventHandler.__init__(
@@ -140,19 +173,45 @@ class Process(RemoteEventHandler):
         atexit.register(self.join)
 
     def join(self, timeout=10):
-        self.logger.debug("Joining child process..")
+        """Request shutdown; terminate an unresponsive child and always release IPC."""
+        try:
+            if self.proc.is_alive():
+                # A full pipe or another sender holding sendLock must not prevent
+                # the shutdown timeout from taking effect.
+                closer = threading.Thread(target=self._request_close, daemon=True)
+                closer.start()
+                deadline = None if timeout is None else time.monotonic() + timeout
+                while self.proc.is_alive():
+                    if deadline is not None and time.monotonic() >= deadline:
+                        break
+                    try:
+                        RemoteEventHandler.processRequests(self, max_time=0.005)
+                    except ClosedError:
+                        pass
+                    self.proc.join(0.01)
+                if self.proc.is_alive():
+                    self.proc.terminate()
+                    self.proc.join(1)
+                    if self.proc.is_alive():
+                        self.proc.kill()
+                        self.proc.join(1)
+                    raise TimeoutError("Terminated unresponsive remote process during shutdown")
+            else:
+                self.proc.join()
+        finally:
+            self.exited = True
+            self.conn.close()
+            if self.handlers.get(self.proc.pid) is self:
+                self.handlers.pop(self.proc.pid)
+            atexit.unregister(self.join)
 
-        if self.proc.is_alive():
-            self.close()
-            start = time.time()
-            while self.proc.is_alive():
-                if timeout is not None and time.time() - start > timeout:
-                    raise TimeoutError("Timed out waiting for remote process to end.")
-                self.proc.join(0.05)
-            self.logger.info("Child process exited with exit code: %d", self.proc.exitcode)
-        self.conn.close()
-        self.handlers.pop(self.proc.pid, None)
-        atexit.unregister(self.join)
+    def _request_close(self):
+        try:
+            # Keep receiving until the child exits: it may be completing a
+            # callback to the parent before it can consume the close request.
+            self.send(request="close", callSync="off")
+        except (ClosedError, OSError):
+            pass
 
 
 def startEventLoop(name, conn, ppid, debug=False):
@@ -181,22 +240,103 @@ def startEventLoop(name, conn, ppid, debug=False):
 ##Special set of subclasses that implement a Qt event loop instead.
 
 
+class _RequestPump(QtCore.QObject):
+    """Wake on pipe activity on POSIX; retain a timer fallback for Windows."""
+
+    stopRequested = QtCore.Signal()
+
+    def __init__(self, connection, callback):
+        app = QtCore.QCoreApplication.instance()
+        if app is None:
+            raise RuntimeError("Qt request processing requires an application")
+        super().__init__(app)
+        self._app = app
+        self.callback = callback
+        self.running = False
+        self.timer = QtCore.QTimer(self)
+        self.timer.timeout.connect(self._process)
+        self.notifier = None
+        if os.name != "nt":
+            self.notifier = QtCore.QSocketNotifier(
+                connection.fileno(), QtCore.QSocketNotifier.Type.Read, self
+            )
+            self.notifier.setEnabled(False)
+            self.notifier.activated.connect(self._process)
+        self.stopRequested.connect(self.stop)
+        app.aboutToQuit.connect(self.stop)
+
+    def _check_thread(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            raise RuntimeError("Control Qt request processing from its owning thread")
+
+    def start(self, interval=0.01):
+        self._check_thread()
+        self.running = True
+        if self.notifier is not None:
+            self.notifier.setEnabled(True)
+        else:
+            self.timer.start(max(1, int(interval * 1000)))
+
+    @QtCore.Slot()
+    def stop(self):
+        self._check_thread()
+        self.running = False
+        self.timer.stop()
+        if self.notifier is not None:
+            self.notifier.setEnabled(False)
+
+    def request_stop(self):
+        if QtCore.QThread.currentThread() == self.thread():
+            self.stop()
+        else:
+            self.stopRequested.emit()
+
+    def close(self):
+        if self._app is None:
+            return
+        if QtCore.QCoreApplication.instance() is not self._app:
+            # The host may already have destroyed the C++ QObject tree.
+            self.running = False
+            self.callback = None
+            self._app = None
+            return
+        self.stop()
+        self._app.aboutToQuit.disconnect(self.stop)
+        self._app = None
+        self.callback = None
+        self.setParent(None)
+
+    def _process(self, *args):
+        if not self.running:
+            return
+        if self.notifier is not None:
+            self.notifier.setEnabled(False)
+        try:
+            if self.callback is not None:
+                self.callback()
+        finally:
+            if self.running and self.notifier is not None:
+                self.notifier.setEnabled(True)
+
+
 class RemoteQtEventHandler(RemoteEventHandler):
-    def __init__(self, *args, **kwds):
-        RemoteEventHandler.__init__(self, *args, **kwds)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pump = None
         self.timer = None
 
     def startEventTimer(self):
-        self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.processRequests)
-        self.timer.start(1)
+        if self._pump is None:
+            self._pump = _RequestPump(self.conn, self.processRequests)
+            self.timer = self._pump.timer
+        self._pump.start(interval=0.001)
 
-    def processRequests(self):
+    def processRequests(self, max_time=0.005):
         try:
-            return RemoteEventHandler.processRequests(self)
-        except (ClosedError, BrokenPipeError):
-            if self.timer is not None:
-                self.timer.stop()
+            return super().processRequests(max_time=max_time)
+        except ClosedError:
+            if self._pump is not None:
+                self._pump.request_stop()
             instance = QtWidgets.QApplication.instance()
             if instance is not None:
                 instance.quit()
@@ -204,69 +344,64 @@ class RemoteQtEventHandler(RemoteEventHandler):
 
 
 class QtProcess(Process):
+    """A spawned Qt GUI with optional parent callbacks.
+
+    The child always runs its own event loop. Parent callbacks are dispatched
+    by the host's Qt event loop, which must already be integrated by the host.
+    With processRequests=False, no QApplication or event pump is needed in
+    the parent; synchronous RPCs still process incoming requests while waiting.
     """
-    QtProcess is essentially the same as Process, with two major differences:
 
-    - The remote process starts by running startQtEventLoop() which creates a
-      QApplication in the remote process and uses a QTimer to trigger
-      remote event processing. This allows the remote process to have its own
-      GUI.
-    - A QTimer is also started on the parent process which polls for requests
-      from the child process. This allows Qt signals emitted within the child
-      process to invoke slots on the parent process and vice-versa. This can
-      be disabled using processRequests=False in the constructor.
-
-    Example::
-
-        proc = QtProcess()
-        rQtWidgets = proc._import('PySide6.QtWidgets')
-        btn = rQtWidgets.QPushButton('button on child process')
-        btn.show()
-
-        def slot():
-            print('slot invoked on parent process')
-        btn.clicked.connect(proxy(slot))   # be sure to send a proxy of the slot
-    """
+    _qcm_proxy_helpers: Any
 
     def __init__(self, **kwds):
-        if "target" not in kwds:
-            kwds["target"] = startQtEventLoop
-
+        kwds.setdefault("target", startQtEventLoop)
         self._processRequests = kwds.pop("processRequests", True)
-        if self._processRequests and QtWidgets.QApplication.instance() is None:
-            raise RuntimeError(
-                "Must create QApplication before starting QtProcess, "
-                "or use QtProcess(processRequests=False)"
-            )
-
+        self._pump = None
+        if self._processRequests:
+            app = QtWidgets.QApplication.instance()
+            if not isinstance(app, QtWidgets.QApplication):
+                raise RuntimeError(
+                    "Create QApplication before QtProcess, or use processRequests=False"
+                )
+            if QtCore.QThread.currentThread() != app.thread():
+                raise RuntimeError("Create QtProcess with parent callbacks in the Qt main thread")
         super().__init__(**kwds)
-        self.startEventTimer()
+        try:
+            self.startEventTimer()
+        except BaseException:
+            super().join(timeout=1)
+            raise
 
     def join(self, timeout=10):
-        if hasattr(self, "timer"):
-            self.timer.stop()
+        if self._pump is not None:
+            self._pump.close()
         super().join(timeout)
 
     def startEventTimer(self):
-        self.timer = QtCore.QTimer()
-        if self._processRequests:
+        if self._processRequests and self._pump is None:
+            self._pump = _RequestPump(self.conn, self.processRequests)
+            self.timer = self._pump.timer
             self.startRequestProcessing()
 
     def startRequestProcessing(self, interval=0.01):
-        """Start listening for requests coming from the child process.
-        This allows signals to be connected from the child process to the parent.
-        """
-        self.timer.timeout.connect(self.processRequests)
-        self.timer.start(max(1, int(interval * 1000)))
+        """Enable the existing connection once, without accumulating slots."""
+        if self.exited:
+            raise ClosedError()
+        if self._pump is None:
+            raise RuntimeError("Parent callbacks were disabled for this QtProcess")
+        self._pump.start(interval)
 
     def stopRequestProcessing(self):
-        self.timer.stop()
+        if self._pump is not None:
+            self._pump.stop()
 
-    def processRequests(self):
+    def processRequests(self, max_time=0.005):
         try:
-            return Process.processRequests(self)
+            return super().processRequests(max_time=max_time)
         except ClosedError:
-            self.timer.stop()
+            if self._pump is not None:
+                self._pump.request_stop()
             return 0
 
 
@@ -285,9 +420,10 @@ def startQtEventLoop(name, conn, ppid, debug=False):
     app = QtWidgets.QApplication.instance()
     if app is None:
         app = QtWidgets.QApplication([])
-        ## generally we want the event loop to stay open
-        ## until it is explicitly closed by the parent process.
-        app.setQuitOnLastWindowClosed(False)
+    if not isinstance(app, QtWidgets.QApplication):
+        raise RuntimeError("The plotting process requires a QApplication")
+    # Keep the child available when all plot windows are closed.
+    app.setQuitOnLastWindowClosed(False)
 
     handler = RemoteQtEventHandler(conn, name, ppid, logger=logger)
     handler.startEventTimer()

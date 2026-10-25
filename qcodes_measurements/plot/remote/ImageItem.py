@@ -207,6 +207,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
 
 class ImageItemWithHistogram(ExtendedImageItem):
     _empty_frame = False
+    _histogram_paused = False
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
         # Create the attached histogram
@@ -240,6 +241,16 @@ class ImageItemWithHistogram(ExtendedImageItem):
     def getHistogramLUTItem(self):
         return self._LUTitem
 
+    def pause_update(self):
+        if not self._histogram_paused:
+            self.sigImageChanged.disconnect(self._LUTitem.imageChanged)
+            self._histogram_paused = True
+
+    def resume_update(self):
+        if self._histogram_paused:
+            self.sigImageChanged.connect(self._LUTitem.imageChanged)
+            self._histogram_paused = False
+
     def getHistogram(self, *args, **kwargs):
         if self._empty_frame:
             # A caller can also replace the image directly through setImage.
@@ -248,8 +259,10 @@ class ImageItemWithHistogram(ExtendedImageItem):
                 return None, None
         return super().getHistogram(*args, **kwargs)
 
-    def setImageData(self, data, *, update_range=True, histogram_paused=False):
+    def setImageData(self, data, *, update_range=True):
         """Update image and levels together, calculating the histogram only once."""
+        if not self._updates_enabled():
+            return
         if update_range:
             # fmin/fmax ignore measured NaNs without allocating a filtered
             # image or warning on an entirely empty/non-finite frame.
@@ -265,7 +278,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
                 # first image is installed; pyqtgraph reapplies them afterwards.
                 self.setLevels(levels)
             self.setImage(data, autoLevels=False, levels=levels, autoDownsample=True)
-            if histogram_paused:
+            if self._histogram_paused:
                 # Preserve explicitly requested refreshes while automatic updates
                 # are disconnected by pause_update().
                 self._LUTitem.imageChanged()

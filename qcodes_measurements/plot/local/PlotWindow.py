@@ -31,8 +31,7 @@ class BasePlotWindow(RPGWrappedBase):
 
     @property
     def size(self):
-        rsize = self._base_inst.size()
-        return (rsize.width(), rsize.height())
+        return self._call_helper("window_size", self._base_inst, _handler=self._base_inst._handler)
 
     def addPlot(self, row=None, col=None, rowspan=1, colspan=1, **kargs):
         """
@@ -79,20 +78,14 @@ class PlotWindow(BasePlotWindow):
 
     @classmethod
     def getWindows(cls):
-        windows = get_remote().ExtendedPlotWindow.getWindows(_returnType="proxy")
-        num_windows = len(windows)
-        local_windows = []
-        for i in range(num_windows):
-            local_windows.append(RPGWrappedBase.autowrap(windows[i]))
-        return local_windows
+        windows = (
+            get_remote()
+            ._deferredAttr("ExtendedPlotWindow")
+            ._deferredAttr("getWindows")(_returnType="proxy")
+        )
+        return list(RPGWrappedBase.autowrap(windows))
 
     @classmethod
     def find_by_id(cls, wid):
-        windows = cls.getWindows()
-        for window in windows:
-            items = window.items
-            for item in items:
-                if isinstance(item, PlotItem):
-                    if item.plot_title.endswith(f"(id: {wid})"):
-                        return window
-        return None
+        window = get_remote()._deferredAttr("ExtendedPlotWindow")._deferredAttr("find_by_id")(wid)
+        return RPGWrappedBase.autowrap(window)

@@ -5,7 +5,7 @@ from .local.MeshPlots import ColorMesh, VoronoiPlot
 from .local.PlotDataItem import ExtendedPlotDataItem, PlotDataItem
 from .local.PlotItem import PlotItem
 from .local.PlotWindow import PlotWindow
-from .local.RemoteProcessWrapper import get_remote, restart_remote, start_remote
+from .local.RemoteProcessWrapper import get_remote, restart_remote, start_remote, stop_remote
 from .local.UIItems import LegendItem, PlotAxis, TableWidget, TextItem
 
 __all__ = [
@@ -26,5 +26,6 @@ __all__ = [
     "ColorMesh",
     "start_remote",
     "restart_remote",
+    "stop_remote",
     "get_remote",
 ]

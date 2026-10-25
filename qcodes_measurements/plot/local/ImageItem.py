@@ -43,12 +43,12 @@ class ImageItem(ExtendedDataItem, RPGWrappedBase):
     no_yscale = False
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
+        setpoint_x = ensure_ndarray(setpoint_x)
+        setpoint_y = ensure_ndarray(setpoint_y)
         if self._base == "ImageItem":
             super().__init__(*args, **kwargs)
         else:
             super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
-        setpoint_x = ensure_ndarray(setpoint_x)
-        setpoint_y = ensure_ndarray(setpoint_y)
         self._remote_function_options["setImage"] = {"callSync": "off"}
         # Set axis scales correctly
         self._force_rescale(setpoint_x, setpoint_y)
@@ -102,11 +102,6 @@ class ExtendedImageItem(ImageItem):
 
     _base = "ExtendedImageItem"
 
-    def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
-        super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
-        self.setpoint_x = setpoint_x
-        self.setpoint_y = setpoint_y
-
     def _force_rescale(self, setpoint_x, setpoint_y):
         """
         This is handled on the server side...
@@ -134,7 +129,6 @@ class ImageItemWithHistogram(ExtendedImageItem):
 
     # Local Variables
     _histogram: None | HistogramLUTItem = None
-    _histogram_paused = False
 
     def __init__(self, setpoint_x, setpoint_y, *args, colormap=None, **kwargs):
         super().__init__(setpoint_x, setpoint_y, *args, colormap=colormap, **kwargs)
@@ -150,25 +144,18 @@ class ImageItemWithHistogram(ExtendedImageItem):
         """
         Pause histogram autoupdates while a sweep is running.
         """
-        try:
-            self._base_inst.sigImageChanged.disconnect()
-            self._histogram_paused = True
-        except AttributeError:
-            pass
+        self.__getattr__("pause_update", _location="remote")()
 
     def resume_update(self):
         """
         Resume histogram autoupdate
         """
-        # Pass the remote slot, rather than a local autowrap closure, to Qt.
-        self._base_inst.sigImageChanged.connect(self.histogram._base_inst.imageChanged)
-        self._histogram_paused = False
+        self.__getattr__("resume_update", _location="remote")()
 
     def update(self, data, *args, **kwargs):
         self.__getattr__("setImageData", _location="remote")(
             ensure_ndarray(data),
             update_range=kwargs.get("update_range", True),
-            histogram_paused=self._histogram_paused,
         )
 
     def update_histogram_axis(self, param_z):

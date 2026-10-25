@@ -1,28 +1,66 @@
 from __future__ import annotations
 
 import re
+import threading
 from typing import Any, ClassVar
+from weakref import WeakValueDictionary
 
 import numpy as np
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from ...logging import get_logger
 from ..multiprocess import ObjectProxy, QtProcess
 
 
 # Get access to module level variables
-class _Globals:
-    app: QtWidgets.QApplication
-    proc: QtProcess
-    rpg: Any
-    rbuiltins: Any
+class _RemoteSession:
+    """Own one plotting process without owning the host application's event loop."""
+
+    app: QtCore.QCoreApplication | None = None
+    proc: QtProcess | None = None
+    rpg: Any = None
+    rbuiltins: Any = None
+
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.process_requests = True
+
+    def is_alive(self):
+        return (
+            self.proc is not None
+            and not self.proc.exited
+            and not self.proc.conn.closed
+            and self.proc.proc.is_alive()
+        )
+
+    def close(self, timeout=10):
+        with self.lock:
+            if self.proc is None:
+                return
+            _require_main_thread()
+            proc = self.proc
+            try:
+                proc.join(timeout)
+            finally:
+                if self.app is not None and QtCore.QCoreApplication.instance() is self.app:
+                    self.app.aboutToQuit.disconnect(self.close)
+                self.proc = self.rpg = self.rbuiltins = None
+                with RPGWrappedBase._wrapper_lock:
+                    for key in tuple(RPGWrappedBase._wrappers):
+                        if key[0] is proc:
+                            RPGWrappedBase._wrappers.pop(key, None)
+                from .ColorMap import ColorMap
+
+                for name, cmap in tuple(ColorMap._all_colors.items()):
+                    if cmap._base_inst._handler is proc:
+                        del ColorMap._all_colors[name]
 
 
-this = _Globals()
+this = _RemoteSession()
 rpg = None
 logger = get_logger("RPGWrapper")
 
-__all__ = ["ensure_ndarray", "auto_wrap", "RPGWrappedBase", "get_remote"]
+__all__ = ["ensure_ndarray", "auto_wrap", "RPGWrappedBase", "get_remote", "stop_remote"]
 
 
 def ensure_ndarray(array):
@@ -54,35 +92,75 @@ def _set_defaults(remote):
     """
     Set up the default state of the plot windows. Add any other global config options here.
     """
-    remote.setConfigOption("background", "w")
-    remote.setConfigOption("foreground", "k")
-    remote.setConfigOption("leftButtonPan", False)
-    remote.setConfigOption("antialias", True)
+    remote._deferredAttr("setConfigOptions")(
+        background="w", foreground="k", leftButtonPan=False, antialias=True
+    )
     remote._setProxyOptions(deferGetattr=False)
 
 
-def start_remote():
-    app = QtWidgets.QApplication.instance()
-    if app is None:
-        app = QtWidgets.QApplication([])
-    if not isinstance(app, QtWidgets.QApplication):
-        raise RuntimeError("Plotting requires a QApplication, not a QCoreApplication")
-    this.app = app
+def _require_main_thread():
+    app = QtCore.QCoreApplication.instance()
+    if threading.current_thread() is not threading.main_thread() or (
+        app is not None and QtCore.QThread.currentThread() != app.thread()
+    ):
+        raise RuntimeError("Start, stop, and restart plotting from the Qt main thread")
 
-    this.proc = QtProcess(debug=False)
-    this.rpg = this.proc._import("qcodes_measurements.plot.rpyplot", timeout=20)
-    this.rbuiltins = this.proc._import("builtins")
-    _set_defaults(this.rpg)
+
+def start_remote(*, process_requests=True):
+    """Start plotting once. Parent callbacks require the host's Qt event loop.
+
+    Set process_requests=False for scripts that only send plotting commands;
+    these do not need a QApplication in the parent. This function never enters
+    or replaces a host application's event loop.
+    """
+    with this.lock:
+        if this.is_alive():
+            return
+        _require_main_thread()
+        this.close()
+        app = QtWidgets.QApplication.instance()
+        if process_requests:
+            if app is None:
+                app = QtWidgets.QApplication([])
+            if not isinstance(app, QtWidgets.QApplication):
+                raise RuntimeError("Parent Qt callbacks require a QApplication")
+        this.app = app
+        proc = QtProcess(debug=False, processRequests=process_requests)
+        try:
+            remote = proc._import("qcodes_measurements.plot.rpyplot", timeout=20)
+            proc._qcm_proxy_helpers = remote._deferredAttr("_proxy_helpers")
+            builtins = proc._import("builtins")
+            _set_defaults(remote)
+        except BaseException:
+            try:
+                proc.join(timeout=1)
+            except TimeoutError:
+                logger.warning("Terminated plotting process after failed startup")
+            raise
+        this.proc, this.rpg, this.rbuiltins = proc, remote, builtins
+        this.process_requests = process_requests
+        if app is not None:
+            app.aboutToQuit.connect(this.close)
+
+
+def stop_remote(timeout=10):
+    """Close the owned plotting session, leaving the host application running."""
+    this.close(timeout)
 
 
 def restart_remote():
-    for proc in tuple(QtProcess.handlers.values()):
-        if isinstance(proc, QtProcess):
-            proc.join()
-    start_remote()
+    _require_main_thread()
+    with this.lock:
+        try:
+            this.close()
+        except TimeoutError:
+            logger.warning("Terminated unresponsive plotting process before restart")
+        start_remote(process_requests=this.process_requests)
 
 
 def get_remote():
+    if not this.is_alive():
+        start_remote(process_requests=this.process_requests)
     return this.rpg
 
 
@@ -91,13 +169,14 @@ def remote_callable(remote_obj):
     if not isinstance(remote_obj, ObjectProxy):
         return callable(remote_obj)
 
-    # Call callable on the remote
-    return this.rbuiltins.callable(remote_obj)
+    return RPGWrappedBase._call_helper("describe", remote_obj, _handler=remote_obj._handler)[2]
 
 
 class RPGWrappedBase(ObjectProxy):
     # Keep track of children so they aren't recomputed each time
     _subclass_types: ClassVar[dict[str, type[RPGWrappedBase]]] = {}
+    _wrappers: ClassVar[WeakValueDictionary] = WeakValueDictionary()
+    _wrapper_lock: ClassVar = threading.RLock()
 
     # Reserve names for local variables, so they aren't proxied.
     _base: str = ""
@@ -112,15 +191,15 @@ class RPGWrappedBase(ObjectProxy):
         self._remote_function_options = {}
 
         # Check that the remote process has been started, and is still alive
-        if getattr(this, "rpg", None) is None:
-            start_remote()
-        if this.rpg._handler.proc.is_alive() is False:
-            restart_remote()
+        remote = get_remote()
 
         if "_base" in self.__class__.__dict__:
-            base = getattr(this.rpg, self.__class__._base)
-            base = base(*args, **kwargs)
+            base, info = self._call_helper(
+                "create", remote._deferredAttr(self.__class__._base), *args, **kwargs
+            )
             self._base_inst = base
+            with self._wrapper_lock:
+                self._wrappers[(base._handler, info[1])] = self
         else:
             raise TypeError("Base instance not defined. Don't know how to create remote object.")
 
@@ -160,7 +239,16 @@ class RPGWrappedBase(ObjectProxy):
         return base_inst
 
     @staticmethod
-    def autowrap(inst):
+    def _call_helper(name, /, *args, _handler=None, **kwargs):
+        handler = _handler if _handler is not None else this.proc
+        if handler is None:
+            raise RuntimeError("No plotting session is running")
+        kwargs.setdefault("_returnType", "value")
+        kwargs.setdefault("_callSync", "sync")
+        return handler._qcm_proxy_helpers._deferredAttr(name)(*args, **kwargs)
+
+    @staticmethod
+    def autowrap(inst, info=None):
         logger.debug("Trying to autowrap %r.", inst)
 
         # If we have an object proxy, wrap it if it is in the list of wrappable types
@@ -170,18 +258,28 @@ class RPGWrappedBase(ObjectProxy):
                 return inst
 
             # Get name of remote type
-            remote_type = inst._getSpecialAttr("__class__").__name__
+            if info is None:
+                info = RPGWrappedBase._call_helper("describe", inst, _handler=inst._handler)
+            remote_type, remote_id, _ = info
 
             # Check if we have a list of objects:
             if remote_type in ("tuple", "list"):
                 logger.debug("Wrapping remote list.")
-                # Need to iterate over things in a dumb way to suppress warnings
-                return tuple(RPGWrappedBase.autowrap(inst[i]) for i in range(len(inst)))
+                values = RPGWrappedBase._call_helper(
+                    "describe_sequence", inst, _handler=inst._handler
+                )
+                return tuple(RPGWrappedBase.autowrap(value, meta) for value, meta in values)
 
             # Try to match the remote type
             logger.debug("Extracted remote type: %s.", remote_type)
             if remote_type in RPGWrappedBase._subclass_types:
-                return RPGWrappedBase._subclass_types[remote_type].wrap(inst)
+                key = (inst._handler, remote_id)
+                with RPGWrappedBase._wrapper_lock:
+                    wrapped = RPGWrappedBase._wrappers.get(key)
+                    if wrapped is None:
+                        wrapped = RPGWrappedBase._subclass_types[remote_type].wrap(inst)
+                        RPGWrappedBase._wrappers[key] = wrapped
+                return wrapped
 
             # Otherwise look to see if we have an extended type
             logger.debug("Fallback matching %s", inst._typeStr)
@@ -233,80 +331,46 @@ class RPGWrappedBase(ObjectProxy):
 
     def __getattr__(self, attr, **kwargs):
         name = attr
-        # Check for ipython special methods
-        if re.match("_repr_.*_", name):
-            raise AttributeError("Ignoring iPython special methods")
-        if re.match("_ipython_.*_", name):
-            raise AttributeError("Ignoring iPython special methods")
+        if re.match(r"_(repr|ipython)_.*_", name):
+            raise AttributeError("Ignoring IPython special methods")
+        location = kwargs.pop("_location", "both")
+        if location not in ("local", "remote", "both"):
+            raise ValueError(f"Unknown attribute location: {location}")
+        if location != "remote":
+            try:
+                return object.__getattribute__(self, name)
+            except AttributeError:
+                base = object.__getattribute__(self, "_base_inst")
+                if name in base.__dict__:
+                    return base.__dict__[name]
+                if location == "local":
+                    raise AttributeError(name) from None
 
-        # Figure out where we should look for the attribute ("remote", "local" or "both")
-        search_location = kwargs.pop("_location", "both")
-        attr = None
-        # Get attribute from object proxy, checking if it exists locally first
-        if search_location in ("local", "both"):
-            logger.debug("Looking for attr %s locally.", name)
-            for cls in self.__class__.__mro__:
-                if name in cls.__dict__:
-                    v = cls.__dict__[name]
-                    if hasattr(v, "__get__"):
-                        attr = v.__get__(self, type(self))
-                        logger.debug(
-                            "Found attr %s locally in subclass %r, and is a property. Returns value: %r.",
-                            name,
-                            cls,
-                            attr,
-                        )
-                    else:
-                        attr = v
-                        logger.debug(
-                            "Found attr %s locally in subclass %r. Returns value: %r.",
-                            name,
-                            cls,
-                            attr,
-                        )
-                    break
-            else:
-                if name in self._base_inst.__dict__:
-                    attr = self._base_inst.__dict__[name]
-                    logger.debug(
-                        "Found attr %s locally in base_inst (%r). Returns value: %r",
-                        name,
-                        self._base_inst,
-                        attr,
-                    )
-        # Otherwise check whether the attribute exists on the remote
-        if search_location in ("remote", "both") and attr is None:
-            logger.debug("Looking for attr %s remotely.", name)
-            # Check whether this function has been cached
-            if name in self._remote_functions:
-                logger.debug("Found cached value for %s.", name)
-                return self._remote_functions[name]
-            # Otherwise look for it on the remote
-            attr = self._base_inst.__getattr__(name, **kwargs)
-            logger.debug("Found attr %s remotely. Returns value %r.", name, attr)
-
-        # If we didn't find the attribute in either location, raise an AttributeError
-        if attr is None and search_location == "local":
-            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
-        # Check if item is a wrappable type
-        attr = self.autowrap(attr)
-
-        # Wrap adders and getters
-        if name.startswith("add") and remote_callable(attr):
-            return self.wrap_adders(attr)
-        elif name.startswith("get") and remote_callable(attr):
-            return self.wrap_getters(attr)
-
-        # Save a cached copy, if we have a function with specific options
-        if remote_callable(attr) and name in self._remote_function_options:
-            attr._setProxyOptions(**self._remote_function_options[name])
-            self._remote_functions[name] = self.wrap_getters(attr)
+        if not kwargs and name in self._remote_functions:
             return self._remote_functions[name]
-        if remote_callable(attr):
-            return self.wrap_getters(attr)
+        base = self._base_inst
+        if kwargs.keys() - {"_returnType"}:
+            return self.autowrap(base.__getattr__(name, **kwargs))
+        attr, info = self._call_helper(
+            "get_attribute",
+            base,
+            name,
+            kwargs.get("_returnType", base._getProxyOption("returnType")),
+            _handler=base._handler,
+        )
+        if not info[2]:
+            return self.autowrap(attr, info)
 
-        return attr
+        # Cache only callables. Mutable attributes are always read remotely.
+        def invoke(*args, **call_kwargs):
+            for option, value in self._remote_function_options.get(name, {}).items():
+                call_kwargs.setdefault("_" + option, value)
+            return attr(*args, **call_kwargs)
+
+        call = self.wrap_adders(invoke) if name.startswith("add") else self.wrap_getters(invoke)
+        if not kwargs:
+            self._remote_functions[name] = call
+        return call
 
     def __repr__(self):
         return f"<{self.__class__.__name__} for {super().__repr__()}>"

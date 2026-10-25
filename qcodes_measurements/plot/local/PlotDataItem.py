@@ -43,9 +43,16 @@ class PlotDataItem(ExtendedDataItem, RPGWrappedBase):
 
     @xData.setter
     def xData(self, val):
-        self.setpoint_x = ensure_ndarray(val)
-        if self.yData is not None:
-            self.setData(self.setpoint_x, self.yData)
+        val = ensure_ndarray(val)
+        if self._base == "PlotDataItem":
+            self._setpoint_x = val
+        self._call_helper(
+            "set_trace_x",
+            self._base_inst,
+            val,
+            _handler=self._base_inst._handler,
+            _callSync="off",
+        )
 
     @property
     def yData(self):
@@ -56,7 +63,12 @@ class PlotDataItem(ExtendedDataItem, RPGWrappedBase):
         """
         Return the data underlying this trace
         """
-        return (self.xData, self.yData)
+        return self._call_helper(
+            "trace_data",
+            self._base_inst,
+            _handler=self._base_inst._handler,
+            _returnType="value",
+        )
 
 
 class ExtendedPlotDataItem(PlotDataItem):
@@ -64,7 +76,6 @@ class ExtendedPlotDataItem(PlotDataItem):
 
     def __init__(self, setpoint_x, *args, **kwargs):
         super().__init__(setpoint_x, *args, **kwargs)
-        self.setpoint_x = ensure_ndarray(setpoint_x)
         self._remote_function_options["update"] = {"callSync": "off"}
         self._remote_function_options["setData"] = {"callSync": "off"}
         self._remote_function_options["setTraceData"] = {"callSync": "off"}
