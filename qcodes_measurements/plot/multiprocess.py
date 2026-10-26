@@ -28,6 +28,38 @@ else:
 __all__ = ["Process", "QtProcess", "ClosedError", "NoResultError", "ObjectProxy"]
 
 _spawn_lock = threading.RLock()
+_DEFAULT_TIMEOUT = object()
+
+
+class Request(pyqtgraph.multiprocess.remoteproxy.Request):
+    """A remote request with monotonic, optional timeout handling."""
+
+    def result(self, block=True, timeout: Any = _DEFAULT_TIMEOUT):
+        """Return the result, raising NoResultError if the wait expires.
+
+        Omitting timeout uses the request's configured timeout. Explicit None or
+        a negative value disables the timeout. With block=False, check once
+        without waiting. A timeout does not cancel the remote request, so this
+        method can be called again to retrieve its eventual result.
+        """
+        if self.gotResult:
+            return self._result
+        if not block:
+            return super().result(block=False)
+        if timeout is _DEFAULT_TIMEOUT:
+            timeout = self.timeout
+        deadline = None if timeout is None or timeout < 0 else time.monotonic() + timeout
+        while not self.hasResult():
+            if self.proc.exited:
+                raise ClosedError()
+            delay = 0.005
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise NoResultError(f"Timed out waiting for remote request {self.reqId}")
+                delay = min(delay, remaining)
+            time.sleep(delay)
+        return self._result
 
 
 class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
@@ -51,6 +83,33 @@ class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
         Use the logger for debugging instead
         """
         self.logger.debug(msg.strip("\r\n"), *args)
+
+    def send(
+        self,
+        request,
+        opts=None,
+        reqId=None,
+        callSync="sync",
+        timeout=10,
+        returnType=None,
+        byteData=None,
+        **kwds,
+    ):
+        """Use local Request timeouts while retaining upstream packet transport."""
+        pending = super().send(
+            request,
+            opts=opts,
+            reqId=reqId,
+            callSync="async" if callSync == "sync" else callSync,
+            timeout=timeout,
+            returnType=returnType,
+            byteData=byteData,
+            **kwds,
+        )
+        if callSync == "off":
+            return None
+        pending = Request(self, pending.reqId, description=pending.description, timeout=timeout)
+        return pending.result() if callSync == "sync" else pending
 
     def callObj(self, obj, args, kwds, **opts):
         """Proxy arguments together before upstream packs arrays for transport."""
