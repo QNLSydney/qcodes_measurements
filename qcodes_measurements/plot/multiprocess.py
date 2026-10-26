@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import time
+from collections import deque
 from typing import Any
 
 # Import the binding before pyqtgraph chooses one, including in spawned children.
@@ -69,6 +70,7 @@ class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
     """
 
     def __init__(self, connection, name, pid, debug=False, logger=None):
+        self._pending_proxy_deletes = deque()
         super().__init__(connection, name, pid, debug=False)
         del self.debug
 
@@ -84,6 +86,31 @@ class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
         """
         self.logger.debug(msg.strip("\r\n"), *args)
 
+    def deleteProxy(self, ref):
+        """Queue cleanup without doing pipe I/O from a weakref callback."""
+        with self.proxyLock:
+            proxy_id = self.proxies.pop(ref)
+            if not self.exited:
+                self._pending_proxy_deletes.append(proxy_id)
+
+    def _flush_proxy_deletes(self):
+        # Upstream sends an array request as a header plus separate byte messages.
+        # Its RLock permits a GC weakref callback to re-enter send() between them,
+        # inserting a deletion packet where the receiver expects array bytes.
+        # Receiving must remain possible while another thread is sending (or
+        # blocked on a full pipe), including during the bounded shutdown loop.
+        if not self.sendLock.acquire(blocking=False):
+            return
+        try:
+            while True:
+                with self.proxyLock:
+                    if not self._pending_proxy_deletes:
+                        return
+                    proxy_id = self._pending_proxy_deletes.popleft()
+                super().send(request="del", opts=dict(proxyId=proxy_id), callSync="off")
+        finally:
+            self.sendLock.release()
+
     def send(
         self,
         request,
@@ -96,6 +123,7 @@ class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
         **kwds,
     ):
         """Use local Request timeouts while retaining upstream packet transport."""
+        self._flush_proxy_deletes()
         pending = super().send(
             request,
             opts=opts,
@@ -135,6 +163,7 @@ class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
                 raise ClosedError()
             count = 0
             try:
+                self._flush_proxy_deletes()
                 while self.conn.poll():
                     try:
                         self.handleRequest()
