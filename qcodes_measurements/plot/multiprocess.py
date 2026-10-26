@@ -52,6 +52,22 @@ class RemoteEventHandler(pyqtgraph.multiprocess.remoteproxy.RemoteEventHandler):
         """
         self.logger.debug(msg.strip("\r\n"), *args)
 
+    def callObj(self, obj, args, kwds, **opts):
+        """Proxy arguments together before upstream packs arrays for transport."""
+        with self.optsLock:
+            auto_proxy = opts.get("autoProxy", self.proxyOptions["autoProxy"])
+            no_proxy_types = opts.get("noProxyTypes")
+            if no_proxy_types is None:
+                no_proxy_types = self.proxyOptions["noProxyTypes"]
+
+        if auto_proxy is True:
+            args = [self.autoProxy(value, no_proxy_types) for value in args]
+            kwds = {key: self.autoProxy(value, no_proxy_types) for key, value in kwds.items()}
+            # pyqtgraph 0.14 puts proxied keyword arguments into its send options.
+            # Disable that conversion now that both argument forms are handled.
+            opts["autoProxy"] = False
+        return super().callObj(obj, args, kwds, **opts)
+
     def processRequests(self, max_time=None):
         """Drain requests, optionally yielding so Qt can paint and handle input."""
         deadline = None if max_time is None else time.monotonic() + max_time
