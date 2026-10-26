@@ -90,9 +90,12 @@ class CustomViewBox(PlotMenuMixin, ViewBox):
         get collapsed down.
         """
 
-        # If we clicked on a trace, add it to the context menu
-        if event is not None and event.acceptedItem == self:
-            # Add plot context meny items
+        # Only contribute this menu for clicks handled by the ViewBox itself.
+        # Child items such as the scale box have their own context menus.
+        if event is not None:
+            if event.acceptedItem is not self:
+                return None
+            # Add plot context menu items
             assert self.menu is not None
             traces = cast("ExtendedPlotItem", self.parentObject()).listDataItems()
             if any(isinstance(trace, PlotDataItem) for trace in traces):

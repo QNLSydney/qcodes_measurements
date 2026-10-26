@@ -37,12 +37,18 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
     def getContextMenus(self, event=None, *, rect=None):
         if self.menu is None:
             self.menu = QtWidgets.QMenu()
-        self.menu.clear()
+        # These actions can also be installed in the ViewBox or scale-box menu.
+        # Detach them without invalidating the shared colour-scale submenu, and
+        # defer deletion of the temporary actions owned by this image menu.
+        for action in self.menu.actions():
+            self.menu.removeAction(action)
+            if action.parent() is self.menu:
+                action.deleteLater()
 
         # Add color selector
         if self.gradientSelectorMenu is None:
             gradient_width = 80
-            self.gradientSelectorMenu = QtWidgets.QMenu()
+            self.gradientSelectorMenu = QtWidgets.QMenu(self.menu)
             self.gradientSelectorMenu.setTitle("Color Scale")
             gradients = GradientEditorItem.Gradients
             for g in gradients:
@@ -63,7 +69,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
                 label = QtWidgets.QLabel()
                 label.setPixmap(px)
                 label.setContentsMargins(1, 1, 1, 1)
-                act = QtWidgets.QWidgetAction(self)
+                act = QtWidgets.QWidgetAction(self.gradientSelectorMenu)
                 act.setDefaultWidget(label)
                 act.triggered.connect(partial(self.changeColorScale, name=g))
                 act.setData(g)

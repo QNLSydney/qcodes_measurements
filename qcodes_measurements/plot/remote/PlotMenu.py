@@ -14,7 +14,7 @@ class PlotMenuMixin:
     if TYPE_CHECKING:
         menu: QtWidgets.QMenu | None
 
-        def getContextMenus(self, event=None) -> QtWidgets.QMenu:
+        def getContextMenus(self, event=None) -> QtWidgets.QMenu | None:
             raise NotImplementedError
 
         def scene(self) -> Any: ...
@@ -24,6 +24,8 @@ class PlotMenuMixin:
         Raise the context menu, removing extra separators as they are added pretty recklessly
         """
         menu = self.getContextMenus(ev)
+        if menu is None:
+            return False
         # Let the scene add on to the end of our context menu
         # (this is optional)
         menu = self.scene().addParentContextMenus(self, menu, ev)
@@ -56,8 +58,11 @@ class PlotMenuMixin:
         # If there are added items, remove them all
         menuItems = getattr(self, "addedMenuItems", None)
         if menuItems is not None:
-            for item in menuItems:
-                menu.removeAction(item)
+            # Image menus rebuild their actions. Cached wrappers may therefore
+            # outlive the C++ actions; only detach actions still in this menu.
+            for action in menu.actions():
+                if any(action is item for item in menuItems):
+                    menu.removeAction(action)
             menuItems.clear()
         else:
             menuItems = []
