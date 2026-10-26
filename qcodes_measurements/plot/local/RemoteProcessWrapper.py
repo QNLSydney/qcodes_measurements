@@ -127,7 +127,7 @@ def start_remote(*, process_requests=True):
         this.app = app
         proc = QtProcess(debug=False, processRequests=process_requests)
         try:
-            remote = proc._import("qcodes_measurements.plot.rpyplot", timeout=20)
+            remote = proc._import("qcodes_measurements.plot.rpyplot", timeout=60)
             proc._qcm_proxy_helpers = remote._deferredAttr("_proxy_helpers")
             builtins = proc._import("builtins")
             _set_defaults(remote)
