@@ -1,5 +1,3 @@
-from functools import partial
-
 import numpy as np
 from pyqtgraph import PlotDataItem, mkColor
 from PySide6 import QtGui, QtWidgets
@@ -35,7 +33,7 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
             self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Remove Item", self.menu)
-            qaction.triggered.connect(partial(self.getViewBox().removePlotItem, self))
+            qaction.triggered.connect(self._remove_from_plot)
             self.menu.addAction(qaction)
 
         if self.name() is not None:
@@ -43,6 +41,11 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
         else:
             self.menu.setTitle("Trace")
         return self.menu
+
+    def _remove_from_plot(self):
+        view = self.getViewBox()
+        if view is not None:
+            view.removePlotItem(self)
 
     def selectColor(self):
         color = self.opts["pen"]

@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Any
+from weakref import ref
 
 from pyqtgraph import ImageItem, PlotCurveItem, PlotDataItem
 from PySide6 import QtCore, QtWidgets
@@ -7,6 +8,18 @@ from ...logging import get_logger
 from .DataItem import ExtendedDataItem
 
 logger = get_logger("PlotMenu")
+
+
+def menu_callback(item, method_name, **kwargs):
+    """Bind action arguments without letting a Qt signal own the plot item."""
+    item_ref = ref(item)
+
+    def invoke():
+        owner = item_ref()
+        if owner is not None:
+            getattr(owner, method_name)(**kwargs)
+
+    return invoke
 
 
 class PlotMenuMixin:

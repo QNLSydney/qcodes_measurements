@@ -361,9 +361,12 @@ class RPGWrappedBase(ObjectProxy):
         if not info[2]:
             return self.autowrap(attr, info)
 
-        # Cache only callables. Mutable attributes are always read remotely.
+        # Cache only callables. Capture their options without retaining the wrapper
+        # so dropping a plot handle can release its remote proxies immediately.
+        function_options = self._remote_function_options
+
         def invoke(*args, **call_kwargs):
-            for option, value in self._remote_function_options.get(name, {}).items():
+            for option, value in function_options.get(name, {}).items():
                 call_kwargs.setdefault("_" + option, value)
             return attr(*args, **call_kwargs)
 

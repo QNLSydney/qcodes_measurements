@@ -47,6 +47,12 @@ class ExtendedPlotWindow(GraphicsLayoutWidget):
         del exporter
 
     def closeEvent(self, event):
+        # PySide's widget() transfers ownership from Python to Qt for widgets
+        # embedded by scene().addWidget(). Do this before the scene can be freed.
+        if (scene := self.scene()) is not None:
+            for item in scene.items():
+                if isinstance(item, QGraphicsProxyWidget):
+                    item.widget()
         self._plot_closed = True
         self._forget_window(id(self))
         event.accept()

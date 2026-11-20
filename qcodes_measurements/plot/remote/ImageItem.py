@@ -1,4 +1,4 @@
-from functools import partial
+from weakref import ref
 
 import numpy as np
 import scipy.linalg
@@ -10,6 +10,7 @@ from ...logging import get_logger
 from ..axis import image_axis
 from .colors import COLORMAPS, DEFAULT_CMAP
 from .DataItem import ExtendedDataItem
+from .PlotMenu import menu_callback
 from .PlotWindow import ExtendedPlotWindow
 from .ViewBox import CustomViewBox
 
@@ -71,7 +72,7 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
                 label.setContentsMargins(1, 1, 1, 1)
                 act = QtWidgets.QWidgetAction(self.gradientSelectorMenu)
                 act.setDefaultWidget(label)
-                act.triggered.connect(partial(self.changeColorScale, name=g))
+                act.triggered.connect(menu_callback(self, "changeColorScale", name=g))
                 act.setData(g)
                 self.gradientSelectorMenu.addAction(act)
         self.menu.addMenu(self.gradientSelectorMenu)
@@ -82,15 +83,19 @@ class ExtendedImageItem(ExtendedDataItem, ImageItem):
             yrange = rect.top(), rect.bottom()
 
             qaction = QtGui.QAction("Colour By Marquee", self.menu)
-            qaction.triggered.connect(partial(self.colorByMarquee, xrange=xrange, yrange=yrange))
+            qaction.triggered.connect(
+                menu_callback(self, "colorByMarquee", xrange=xrange, yrange=yrange)
+            )
             self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Plane Fit", self.menu)
-            qaction.triggered.connect(partial(self.planeFit, xrange=xrange, yrange=yrange))
+            qaction.triggered.connect(menu_callback(self, "planeFit", xrange=xrange, yrange=yrange))
             self.menu.addAction(qaction)
 
             qaction = QtGui.QAction("Level Columns", self.menu)
-            qaction.triggered.connect(partial(self.levelColumns, xrange=xrange, yrange=yrange))
+            qaction.triggered.connect(
+                menu_callback(self, "levelColumns", xrange=xrange, yrange=yrange)
+            )
             self.menu.addAction(qaction)
 
         self.menu.setTitle("Image Item")
@@ -226,8 +231,7 @@ class ImageItemWithHistogram(ExtendedImageItem):
         self._LUTitem.setImageItem(self)
         self._LUTitem.autoHistogramRange()  # enable autoscaling
 
-        # Attach a signal handler on parent changed
-        self._parent = None
+        self._histogram_window = None
 
     def setLevels(self, levels, update=True):
         """
@@ -299,11 +303,12 @@ class ImageItemWithHistogram(ExtendedImageItem):
         if isinstance(view_box, ExtendedPlotWindow):
             logger.debug("Adding _LUTitem to parent %r.", view_box)
             view_box.addItem(self._LUTitem)
-            self._parent = view_box
-        elif view_box is None:
-            if self._parent is not None:
-                self._parent.removeItem(self._LUTitem)
-                self._parent = None
+            self._histogram_window = ref(view_box)
+        elif view_box is None and self._histogram_window is not None:
+            window = self._histogram_window()
+            self._histogram_window = None
+            if window is not None:
+                window.removeItem(self._LUTitem)
         elif isinstance(view_box, CustomViewBox):
             # This second call always seems to occur... Ignore it, since we've added
             # ourselves to the plot window.

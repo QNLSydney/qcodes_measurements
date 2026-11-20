@@ -1,4 +1,3 @@
-from functools import partial
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -17,7 +16,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from ...logging import get_logger
 from .DataItem import ExtendedDataItem
-from .PlotMenu import PlotMenuMixin
+from .PlotMenu import PlotMenuMixin, menu_callback
 
 logger = get_logger("ViewBox")
 
@@ -199,14 +198,9 @@ class DraggableScaleBox(PlotMenuMixin, GraphicsObject):
             self.menu.setTitle("Scale Box")
 
             # Add scale items
-            rbActions = (
-                ("Expand", partial(self.expand, axis="XY")),
-                ("Expand X", partial(self.expand, axis="X")),
-                ("Expand Y", partial(self.expand, axis="Y")),
-            )
-            for action in rbActions:
-                qaction = QtGui.QAction(action[0], self.menu)
-                qaction.triggered.connect(action[1])
+            for label, axis in (("Expand", "XY"), ("Expand X", "X"), ("Expand Y", "Y")):
+                qaction = QtGui.QAction(label, self.menu)
+                qaction.triggered.connect(menu_callback(self, "expand", axis=axis))
                 self.menu.addAction(qaction)
 
         # Add plot items to the menu. First get a list of items in the view
