@@ -50,6 +50,17 @@ Use `do0d` for a single measurement or `do2d` for a two-dimensional sweep. Pass
 `plot=False` to disable plotting or `save=False` to skip saving figures. Plot an
 existing dataset with `qcodes_measurements.plot.plot_dataset(dataset)`.
 
+To overlap the remote plotting process's startup with instrument setup, call this
+from the main thread near the start of your session:
+
+```python
+from qcodes_measurements.plot import start_remote
+
+start_remote(background=True)
+```
+
+The first live plot waits for the remote imports and setup to finish if needed.
+
 ## Devices
 
 Define named gates and ohmic contacts in `device.yaml`:

@@ -9,7 +9,7 @@ import numpy as np
 from PySide6 import QtCore, QtWidgets
 
 from ...logging import get_logger
-from ..multiprocess import ObjectProxy, QtProcess
+from ..multiprocess import ObjectProxy, QtProcess, Request
 
 
 # Get access to module level variables
@@ -23,6 +23,7 @@ class _RemoteSession:
 
     def __init__(self):
         self.lock = threading.RLock()
+        self.pending_import: Request | None = None
         self.process_requests = True
 
     def is_alive(self):
@@ -45,6 +46,7 @@ class _RemoteSession:
                 if self.app is not None and QtCore.QCoreApplication.instance() is self.app:
                     self.app.aboutToQuit.disconnect(self.close)
                 self.proc = self.rpg = self.rbuiltins = None
+                self.pending_import = None
                 with RPGWrappedBase._wrapper_lock:
                     for key in tuple(RPGWrappedBase._wrappers):
                         if key[0] is proc:
@@ -106,41 +108,59 @@ def _require_main_thread():
         raise RuntimeError("Start, stop, and restart plotting from the Qt main thread")
 
 
-def start_remote(*, process_requests=True):
+def start_remote(*, process_requests=True, background=False):
     """Start plotting once. Parent callbacks require the host's Qt event loop.
+
+    With background=True, launch the child and queue its plotting imports before
+    returning. The first plot or synchronous start_remote() on the main thread
+    waits for those imports and completes setup.
 
     Set process_requests=False for scripts that only send plotting commands;
     these do not need a QApplication in the parent. This function never enters
     or replaces a host application's event loop.
     """
     with this.lock:
-        if this.is_alive():
+        if this.rpg is not None and this.is_alive():
             return
         _require_main_thread()
-        this.close()
-        app = QtWidgets.QApplication.instance()
-        if process_requests:
-            if app is None:
-                app = QtWidgets.QApplication([])
-            if not isinstance(app, QtWidgets.QApplication):
-                raise RuntimeError("Parent Qt callbacks require a QApplication")
-        this.app = app
-        proc = QtProcess(debug=False, processRequests=process_requests)
+        if this.pending_import is None:
+            this.close()
+            app = QtWidgets.QApplication.instance()
+            if process_requests:
+                if app is None:
+                    app = QtWidgets.QApplication([])
+                if not isinstance(app, QtWidgets.QApplication):
+                    raise RuntimeError("Parent Qt callbacks require a QApplication")
+            this.proc = QtProcess(debug=False, processRequests=process_requests)
+            this.app = app
+            this.process_requests = process_requests
+            if app is not None:
+                app.aboutToQuit.connect(this.close)
+
+        proc = this.proc
+        assert proc is not None
         try:
-            remote = proc._import("qcodes_measurements.plot.rpyplot", timeout=60)
+            if this.pending_import is None:
+                this.pending_import = proc.send(
+                    request="import",
+                    opts={"module": "qcodes_measurements.plot.rpyplot"},
+                    callSync="async",
+                    timeout=60,
+                )
+            if background:
+                return
+            remote = this.pending_import.result()
             proc._qcm_proxy_helpers = remote._deferredAttr("_proxy_helpers")
             builtins = proc._import("builtins")
             _set_defaults(remote)
         except BaseException:
             try:
-                proc.join(timeout=1)
+                this.close(timeout=1)
             except TimeoutError:
                 logger.warning("Terminated plotting process after failed startup")
             raise
-        this.proc, this.rpg, this.rbuiltins = proc, remote, builtins
-        this.process_requests = process_requests
-        if app is not None:
-            app.aboutToQuit.connect(this.close)
+        this.rpg, this.rbuiltins = remote, builtins
+        this.pending_import = None
 
 
 def stop_remote(timeout=10):
@@ -159,9 +179,10 @@ def restart_remote():
 
 
 def get_remote():
-    if not this.is_alive():
-        start_remote(process_requests=this.process_requests)
-    return this.rpg
+    with this.lock:
+        if this.rpg is None or not this.is_alive():
+            start_remote(process_requests=this.process_requests)
+        return this.rpg
 
 
 def remote_callable(remote_obj):

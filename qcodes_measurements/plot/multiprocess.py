@@ -16,15 +16,7 @@ from PySide6 import QtCore, QtWidgets
 import pyqtgraph.multiprocess.remoteproxy
 from pyqtgraph.multiprocess.remoteproxy import ClosedError, NoResultError, ObjectProxy
 
-# Allow a speedy import of logging from qcodes_measurements
-PREV_REMOTE = os.environ.get("QCM_REMOTE", None)
-os.environ["QCM_REMOTE"] = "IMP_LOGGING"
-from qcodes_measurements.logging import LoggingStream, get_logger  # noqa: E402
-
-if PREV_REMOTE is None:
-    del os.environ["QCM_REMOTE"]
-else:
-    os.environ["QCM_REMOTE"] = PREV_REMOTE
+from qcodes_measurements.logging import LoggingStream, get_logger
 
 __all__ = ["Process", "QtProcess", "ClosedError", "NoResultError", "ObjectProxy"]
 
