@@ -23,7 +23,7 @@ class CombinedParameter(Parameter):
         """
         return self._parameters[0]()
 
-    def set_raw(self, value) -> None:  # ty: ignore[invalid-method-override]  # QCoDeS dynamic Command assignment.
+    def set_raw(self, value) -> None:  # ty: ignore[incompatible-method-override]  # QCoDeS dynamic Command assignment.
         """
         Set each parameter to val
         """

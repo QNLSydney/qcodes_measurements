@@ -66,7 +66,8 @@ class ExtendedPlotDataItem(ExtendedDataItem, PlotDataItem):
         self.setpoint_x = x
         self.setData(x, y, *args, **kwargs)
 
-    def update(self, yData, *args, **kwargs):
+    # The local proxy uses this method to send new y-data to the remote trace.
+    def update(self, yData, *args, **kwargs):  # ty: ignore[incompatible-method-override]
         if not self._updates_enabled():
             return
         # Filter out nan values, due to https://github.com/pyqtgraph/pyqtgraph/issues/1057

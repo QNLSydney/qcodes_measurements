@@ -120,7 +120,7 @@ class _VoltageParameter(Parameter):
             self.source.voltage.step = old_step
             self.source.voltage.inter_delay = old_delay
 
-    def set_raw(self, value) -> None:  # ty: ignore[invalid-method-override]  # QCoDeS dynamic Command assignment.
+    def set_raw(self, value) -> None:  # ty: ignore[incompatible-method-override]  # QCoDeS dynamic Command assignment.
         self._set_voltage(value)
 
     def _set_voltage(self, value) -> None:

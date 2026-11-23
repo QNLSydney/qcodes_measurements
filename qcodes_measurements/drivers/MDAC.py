@@ -46,7 +46,7 @@ try:
     # work properly. Since we are only using it for error
     # reporting we will write the drivers such that we only
     # optionally depend on it.
-    import win32api  # ty: ignore[unresolved-import]  # Optional Windows error reporting.
+    import win32api  # ty: ignore[import-not-found]  # Optional Windows error reporting.
 
     has_win32api = True
 except ImportError:
