@@ -13,7 +13,7 @@ from ...logging import get_logger
 logger = get_logger("DraggableTextItem")
 
 
-class DraggableTextItem(GraphicsWidget, GraphicsWidgetAnchor):
+class DraggableTextItem(GraphicsWidgetAnchor, GraphicsWidget):
     def __init__(self, *args, text="", offset=None):
         GraphicsWidget.__init__(self)
         GraphicsWidgetAnchor.__init__(self)

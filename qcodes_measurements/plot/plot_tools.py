@@ -1,8 +1,9 @@
-import os
 import re
+from pathlib import Path
 
 import numpy as np
 from qcodes.dataset import DataSetProtocol, load_by_id
+from qcodes.dataset.export_config import _expand_export_path
 from qcodes.parameters import ParamSpecBase
 
 from ..logging import get_logger
@@ -21,19 +22,19 @@ ID_STR = re.compile(r"(id: [0-9-]+)")
 logger = get_logger("plot.plot_tools")
 
 
-def save_figure(plot, fname, fig_folder=None):
-    """
-    Save the figure on screen to the given directory, or by default, figures
+def save_figure(plot, fname, fig_folder=None, *, db_path: str | None = None):
+    """Save a PNG in fig_folder or the figures subdirectory of the database export folder.
+
+    db_path is the dataset's SQLite file. If omitted, use the database in QCoDeS config.
     """
     if fig_folder is None:
-        fig_folder = os.path.join(os.getcwd(), "figures")
+        fig_folder = Path(_expand_export_path("{db_location}", db_path)) / "figures"
 
-    if not os.path.exists(fig_folder):
-        os.makedirs(fig_folder)
-
-    path = os.path.join(fig_folder, f"{fname}.png")
+    folder = Path(fig_folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{fname}.png"
     print(f"Saving to: {path}")
-    plot.export(path)
+    plot.export(str(path))
 
 
 def find_plot_by_paramspec(win: pyplot.PlotWindow, x: ParamSpecBase, y: ParamSpecBase):
@@ -292,7 +293,7 @@ def plot_by_id(did, params=None, save_fig=False, fig_folder=None):
 
     # Save the figure by id if requested
     if save_fig:
-        save_figure(win, did, fig_folder)
+        save_figure(win, ds.run_id, fig_folder, db_path=ds.path_to_db)
 
     return win
 
@@ -307,12 +308,12 @@ def append_by_id(win, did, params=None, save_fig=False, fig_folder=None):
         save_fig[Bool]: Save figure after plotting
         fig_folder[Optional[str]]: Location to save figure
     """
-    d = load_by_id(did)
-    plot_dataset(d, win, params=params)
+    ds = load_by_id(did)
+    plot_dataset(ds, win, params=params)
 
     # Save the figure by id if requested
     if save_fig:
-        save_figure(win, did, fig_folder)
+        save_figure(win, ds.run_id, fig_folder, db_path=ds.path_to_db)
 
 
 def plot_by_run(exp, kt, params=None, save_fig=False, fig_folder=None):
@@ -324,7 +325,7 @@ def plot_by_run(exp, kt, params=None, save_fig=False, fig_folder=None):
 
     # Save the figure by id if requested
     if save_fig:
-        save_figure(win, ds.run_id, fig_folder)
+        save_figure(win, ds.run_id, fig_folder, db_path=ds.path_to_db)
 
     return win
 
@@ -333,8 +334,11 @@ def add_gate_label(plots, did):
     """
     Add gate labels to a plot
     """
-    ds = load_by_id(did)
-    json_meta = ds.snapshot
+    _add_gate_label(plots, load_by_id(did))
+
+
+def _add_gate_label(plots, dataset: DataSetProtocol):
+    json_meta = dataset.snapshot
     if json_meta is None:
         raise ValueError("Measurement contains no snapshot")
     sub_dict = json_meta["station"]["instruments"]["mdac"]["submodules"]
@@ -367,12 +371,13 @@ def plot_Wtext(did, save_fig=False, fig_folder=None):
     """
     Plot a dataset by id, appending gate labels automatically
     """
-    win = plot_by_id(did, save_fig=False)
+    ds = load_by_id(did)
+    win = plot_dataset(ds)
 
     # Add gate label and save if requested
-    add_gate_label(win, did)
+    _add_gate_label(win, ds)
     if save_fig:
-        save_figure(win, did, fig_folder)
+        save_figure(win, ds.run_id, fig_folder, db_path=ds.path_to_db)
 
     return win
 
@@ -385,8 +390,8 @@ def plot_Wtext_by_run(exp, kt, save_fig=False, fig_folder=None):
     win = plot_dataset(ds)
 
     # Add gate label and save if requested
-    add_gate_label(win, ds.run_id)
+    _add_gate_label(win, ds)
     if save_fig:
-        save_figure(win, ds.run_id, fig_folder)
+        save_figure(win, ds.run_id, fig_folder, db_path=ds.path_to_db)
 
     return win

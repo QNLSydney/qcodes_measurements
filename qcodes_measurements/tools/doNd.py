@@ -668,21 +668,17 @@ def _live_plot(wrapped):
             except Exception:  # pylint: disable=broad-exception-caught
                 # Plot failures must not hide a measurement exception.
                 logger.exception("Failed to update final live plot")
-            # Try and save the plot if save was requested. If the run failed, we still try
-            # to pull a run ID out of the window in order to save.
+            # On failure, use the dataset captured by the live subscriber.
             if win is not None and save:
-                if ret_val is not None:
-                    run_id = ret_val[0].run_id
-                else:
-                    run_id = getattr(win, "run_id", None)
-                if run_id is not None:
+                dataset = ret_val[0] if ret_val is not None else current.dataset
+                if dataset is not None:
                     try:
-                        save_figure(win, run_id)
+                        save_figure(win, dataset.run_id, db_path=dataset.path_to_db)
                     except Exception:  # pylint: disable=broad-exception-caught
                         # Export failures must not hide a measurement exception.
-                        logger.exception("Failed to save figure %s", run_id)
+                        logger.exception("Failed to save figure %s", dataset.run_id)
                 else:
-                    logger.warning("Couldn't find run id for sweep. Not saved!")
+                    logger.warning("No dataset available to save the figure")
 
             # QCoDeS returns tuples of matplotlib axes; older callers may use lists.
             if win is not None and ret_val is not None:
@@ -710,7 +706,7 @@ def _live_plot(wrapped):
         stack (Optional[bool]): Stack the plots on a single axis, rather than creating a
         new plot for each item.
 
-        save (Optional[bool]): Whether or not the figure should be saved.
+        save (Optional[bool]): Save the figure to the database export folder under figures/.
 
     Original Docstring
     ------------------
