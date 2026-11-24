@@ -10,7 +10,7 @@ from qcodes.parameters import Parameter
 from qcodes.parameters.cache import _Cache
 from qcodes.validators import Numbers, Validator
 
-from ..drivers import MDAC
+from ..drivers._mdac import require_mdac
 from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
 from .mdac_wrappers import MDACWrapper
@@ -200,7 +200,7 @@ class GateWrapper(ChannelWrapper):
 
 class MDACGateWrapper(MDACWrapper, GateWrapper):
     def __init__(self, parent, name):
-        if not isinstance(parent.source, MDAC.MDACChannel):
+        if not isinstance(parent.source, require_mdac().MDACChannel):
             raise TypeError("MDACGateWrapper must wrap a gate on an MDAC Channel")
         super().__init__(parent, name)
 
@@ -222,7 +222,7 @@ class OhmicWrapper(ChannelWrapper):
 
 class MDACOhmicWrapper(MDACWrapper, OhmicWrapper):
     def __init__(self, parent, name):
-        if not isinstance(parent.source, MDAC.MDACChannel):
+        if not isinstance(parent.source, require_mdac().MDACChannel):
             raise TypeError("MDACOhmicWrapper must wrap an ohmic on an MDAC Channel")
         super().__init__(parent, name)
 

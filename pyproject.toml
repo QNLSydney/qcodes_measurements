@@ -29,6 +29,9 @@ dependencies = [
     "packaging>=26.3",
 ]
 
+[project.urls]
+"Internal drivers" = "https://github.com/emergencequantum/drivers.git"
+
 [project.scripts]
 yoko-mirror = "qcodes_measurements.scripts.yoko_mirror:main"
 

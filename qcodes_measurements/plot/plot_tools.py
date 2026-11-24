@@ -338,18 +338,20 @@ def add_gate_label(plots, did):
 
 
 def _add_gate_label(plots, dataset: DataSetProtocol):
-    json_meta = dataset.snapshot
-    if json_meta is None:
-        raise ValueError("Measurement contains no snapshot")
-    sub_dict = json_meta["station"]["instruments"]["mdac"]["submodules"]
+    snapshot = dataset.snapshot or {}
+    instruments = snapshot.get("station", {}).get("instruments", {})
+    channels = instruments.get("mdac", {}).get("submodules", {})
 
     label_txt = []
     for ch in range(1, 65):
         ch_str = f"ch{ch:02d}"
-        label = sub_dict[ch_str]["parameters"]["voltage"]["label"]
-        v_value = sub_dict[ch_str]["parameters"]["voltage"]["value"]
-        if abs(v_value) > 1e-6:
+        voltage = channels.get(ch_str, {}).get("parameters", {}).get("voltage", {})
+        v_value = voltage.get("value")
+        if isinstance(v_value, (int, float)) and abs(v_value) > 1e-6:
+            label = voltage.get("label", ch_str)
             label_txt.append(f"{label}: {v_value:+.4f}")
+    if not label_txt:
+        return
 
     if isinstance(plots, pyplot.PlotWindow):
         plots = plots.items

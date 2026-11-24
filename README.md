@@ -63,7 +63,8 @@ The first live plot waits for the remote imports and setup to finish if needed.
 
 ## Devices
 
-Define named gates and ohmic contacts in `device.yaml`:
+Define named gates and ohmic contacts in `device.yaml`. Each source can be any
+QCoDeS instrument or channel with a readable, writable `voltage` parameter.
 
 ```yaml
 instruments:
@@ -74,23 +75,24 @@ instruments:
       default_ohmic_limit: [-0.002, 0.002]
       gates:
         G1:
-          source: mdac.ch01
+          source: dac.ch01
           label: Gate 1
           limits: [-1.5, 0]
       ohmics:
         S:
-          source: mdac.ch02
+          source: dac.ch02
           label: Source bias
           scale: 100  # 100:1 voltage divider on the ohmic source
 ```
 
-Combine this with your instrument definitions in `instrument.yaml`:
+Combine this with a `dac` instrument defined in `instrument.yaml`, then load the
+voltage source before the device.
 
 ```python
 from qcodes.station import Station
 
 station = Station(config_file=["instrument.yaml", "device.yaml"])
-mdac = station.load_mdac()
+dac = station.load_dac()
 device = station.load_device()
 
 # And set voltages on gates
@@ -99,8 +101,9 @@ device.G1(-0.1)
 
 ## Instrument mirrors
 
-Run each mirror in its own terminal. Connect to an MDAC on `COM4` and a Yoko at
-`192.168.1.50`:
+The MDAC driver provides `mdac-mirror`, and `qcodes-measurements` provides
+`yoko-mirror`. Run each mirror in its own terminal. This example connects to an
+MDAC on `COM4` and a Yoko at `192.168.1.50`.
 
 ```sh
 uv run mdac-mirror COM4 --listen-host 127.0.0.1 --listen-port 5000
@@ -117,7 +120,7 @@ MDAC and a Yokogawa GS200:
 ```yaml
 instruments:
   mdac:
-    type: qcodes_measurements.drivers.MDAC.MDAC
+    type: mdac.MDAC
     address: "ZMQ::tcp://127.0.0.1:5000"
   yoko:
     type: qcodes.instrument_drivers.yokogawa.YokogawaGS200

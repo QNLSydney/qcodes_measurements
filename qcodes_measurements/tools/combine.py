@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 from collections import defaultdict
 from math import isclose
 from time import perf_counter
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from qcodes.parameters import Parameter
 
 from ..device.gate import Gate
-from ..drivers.MDAC import MDAC, MDACBasicChannel
+from ..drivers._mdac import is_mdac_channel
+
+if TYPE_CHECKING:
+    from mdac.MDAC import MDAC, MDACBasicChannel  # ty: ignore[unresolved-import]
 
 _MDAC_RAMP_TIMEOUT_GRACE = 1.0  # seconds
 
@@ -19,9 +24,11 @@ def _mdac_channel(parameter: Parameter) -> MDACBasicChannel | None:
         ):
             return None
         parameter = parameter.source.voltage
-    channel = parameter.instrument
-    if isinstance(channel, MDACBasicChannel) and parameter is channel.voltage:
-        return channel
+    source = parameter.instrument
+    if is_mdac_channel(source, basic=True):
+        channel = cast("MDACBasicChannel", source)
+        if parameter is channel.voltage:
+            return channel
     return None
 
 
@@ -86,7 +93,7 @@ class CombinedParameter(Parameter):
         gate_targets: dict[MDACBasicChannel, float] = {}
         for parameter, channel in zip(self._parameters, self._mdac_channels, strict=True):
             # The sense channel (0) is outside the driver's bulk ramp status query.
-            wait_group = cast(MDAC, channel.parent), channel.channel_number() == 0
+            wait_group = cast("MDAC", channel.parent), channel.channel_number() == 0
             if isinstance(parameter, Gate):
                 target = parameter._from_value_to_raw_value(value)
                 current = channel.voltage()

@@ -5,7 +5,7 @@ from qcodes.instrument import ChannelList, Instrument, InstrumentBase
 from qcodes.instrument.instrument_base import InstrumentBaseKWArgs, TParameter
 from qcodes.parameters import ParameterBase
 
-from ..drivers import MDAC
+from ..drivers._mdac import is_mdac_channel
 from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
 from .gate import (
@@ -173,7 +173,7 @@ class Device(Instrument):
 
     def store_new_param(self, new_param: ParameterBase) -> None:
         if isinstance(new_param, Gate):
-            if isinstance(new_param.source, MDAC.MDACChannel):
+            if is_mdac_channel(new_param.source):
                 wrapper = MDACGateWrapper
             elif isinstance(new_param.source, BBChan):
                 wrapper = BBGateWrapper
@@ -181,7 +181,7 @@ class Device(Instrument):
                 wrapper = GateWrapper
             self.gates.append(wrapper(new_param, new_param.name))
         elif isinstance(new_param, Ohmic):
-            if isinstance(new_param.source, MDAC.MDACChannel):
+            if is_mdac_channel(new_param.source):
                 wrapper = MDACOhmicWrapper
             elif isinstance(new_param.source, BBChan):
                 wrapper = BBOhmicWrapper

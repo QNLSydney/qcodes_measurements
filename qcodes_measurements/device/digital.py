@@ -11,7 +11,7 @@ from qcodes.instrument.instrument_base import InstrumentBaseKWArgs, TParameter
 from qcodes.parameters import ParameterBase
 from qcodes.validators import Bool, Enum, MultiType, Numbers
 
-from ..drivers import MDAC
+from ..drivers._mdac import is_mdac_channel
 from .bb import BBChan
 from .channel_wrapper import ChannelWrapper
 from .device import ContactDefinitions, Device
@@ -347,7 +347,7 @@ class DigitalDevice(Device):
 
     def store_new_param(self, new_param: ParameterBase) -> None:
         if isinstance(new_param, DigitalGate):
-            if isinstance(new_param.source, MDAC.MDACChannel):
+            if is_mdac_channel(new_param.source):
                 self.digital_gates.append(MDACDigitalGateWrapper(new_param, new_param.name))
             elif isinstance(new_param.source, BBChan):
                 self.digital_gates.append(BBDigitalGateWrapper(new_param, new_param.name))
