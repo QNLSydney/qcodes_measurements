@@ -30,7 +30,6 @@ dependencies = [
 ]
 
 [project.scripts]
-mdac-mirror = "qcodes_measurements.scripts.mdac_mirror:main"
 yoko-mirror = "qcodes_measurements.scripts.yoko_mirror:main"
 
 [dependency-groups]
